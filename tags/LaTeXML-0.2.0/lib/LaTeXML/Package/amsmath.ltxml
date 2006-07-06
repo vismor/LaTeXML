@@ -1,0 +1,125 @@
+# -*- CPERL -*-
+# /=====================================================================\ #
+# |  amsmath                                                            | #
+# | Implementation for LaTeXML                                          | #
+# |=====================================================================| #
+# | Part of LaTeXML:                                                    | #
+# |  Public domain software, produced as part of work done by the       | #
+# |  United States Government & not subject to copyright in the US.     | #
+# |---------------------------------------------------------------------| #
+# | Bruce Miller <bruce.miller@nist.gov>                        #_#     | #
+# | http://dlmf.nist.gov/LaTeXML/                              (o o)    | #
+# \=========================================================ooo==U==ooo=/ #
+
+#**********************************************************************
+# Currently only a random collection of things I need for DLMF chapters.
+# Eventually, go through the doc and implement it all.
+#**********************************************************************
+package LaTeXML::Package::Pool;
+use strict;
+use LaTeXML::Package;
+
+#**********************************************************************
+
+DefMacro('\eqref{semiverb}', '(\@REF{#1}{\@VALUE{LABEL@#1}})');
+
+#**********************************************************************
+# Fractions
+DefMath('\dfrac{}{}','/', style=>'display', name=>"/", operator_role=>'MULOP',
+	beforeDigest=>sub { $STOMACH->bgroup; $STOMACH->setMathStyle('text'); },
+	afterDigest =>sub { $STOMACH->egroup; });
+DefMath('\tfrac{}{}','/', style=>'text',    name=>"/", operator_role=>'MULOP',
+	beforeDigest=>sub { $STOMACH->bgroup; $STOMACH->setMathStyle('script'); },
+	afterDigest =>sub { $STOMACH->egroup; });
+DefMath('\ifrac{}{}','/', style=>'inline',  name=>"/", operator_role=>'MULOP');
+
+#**********************************************************************
+# Is \cfracstyle my own invention? (I know I've redefined \cfrac in DLMFmath)
+DefConstructor('\cfrac{}{}',
+	       "<XMApp><XMTok>cfrac</XMTok><XMArg>#1</XMArg><XMArg>#2</XMArg></XMApp>");
+# This should get incorporated into any \cfrac's that are constructed in scope.
+DefConstructor('\cfracstyle{}',''); # "<XMHint name='cfracstyle'/>");
+
+#**********************************************************************
+# Integrals
+DefMath('\iint', "\x{222C}", name=>'DoubleIntegral', role=>'INTOP'); # DOUBLE INTEGRAL
+DefMath('\iiint',"\x{222D}", name=>'TripleIntegral', role=>'INTOP'); # TRIPLE INTEGRAL
+
+#**********************************************************************
+# Accents
+DefMath('\dddot{}', "\x{02D9}\x{02D9}\x{02D9}",         operator_role=>'OVERACCENT'); # DOT ABOVE
+DefMath('\ddddot{}',"\x{02D9}\x{02D9}\x{02D9}\x{02d9}", operator_role=>'OVERACCENT'); # DOT ABOVE
+
+#**********************************************************************
+# This is intended to be a modifier for \sum or \prod
+# NOTE that there can be at most one subscript in each of the pre & post, ditto for superscript.
+# Thus, our representation is: sideset(presub,presup,postsub,postsup,object)
+# Note, also, that this is quite ugly, but since it is a rather peculiar special case.... ?
+DefConstructor('\sideset{}{}{}', sub {
+  my($whatsit,$pre,$post,$ob)=@_;
+  my @scripts = (undef,undef,undef,undef);
+
+  my $node=$INTESTINE->openElement('XMApp');
+  my $phase=0;
+  foreach my $group ($pre,$post){
+    $INTESTINE->absorb($group);
+    foreach my $p ($node->childNodes){
+      my $role = $p->getAttribute('role')||'';
+      if   ($role eq 'POSTSUBSCRIPT'  ){ $scripts[$phase+0] = $p->firstChild; }
+      elsif($role eq 'POSTSUPERSCRIPT'){ $scripts[$phase+1] = $p->firstChild; }
+      else { warn("Non sub/superscript in \\sideset: $p"); }
+      $node->removeChild($p); }
+    $phase +=2;  }
+
+  # And finally build it.
+  $INTESTINE->insertElement('XMTok',undef,name=>'sideset');
+  foreach my $script (@scripts){
+    if($script){
+      $node->insert($script); }
+    else {
+      $INTESTINE->insertElement('XMTok',undef,name=>'Empty'); }}
+  $INTESTINE->insertElement('XMArg',$ob);
+  $INTESTINE->closeElement('XMApp');
+});
+
+#**********************************************************************
+DefEnvironment('{cases}',
+	       sub { matharray('',$_[1], 'Cases','Case','Cell');},
+	       beforeDigest=>\&matharray_defs, afterDigest=>\&matharray_end);
+
+DefEnvironment('{matrix}',
+	       sub { matharray('',$_[1], 'Matrix','Row','Cell');},
+	       beforeDigest=>\&matharray_defs, afterDigest=>\&matharray_end);
+
+DefEnvironment('{pmatrix}',
+	       sub { matharray('',$_[1], 'Matrix','Row','Cell',open=>'(',close=>')');},
+	       beforeDigest=>\&matharray_defs, afterDigest=>\&matharray_end);
+DefEnvironment('{bmatrix}',
+	       sub { matharray('',$_[1], 'Matrix','Row','Cell',open=>'[',close=>']');},
+	       beforeDigest=>\&matharray_defs, afterDigest=>\&matharray_end);
+DefEnvironment('{Bmatrix}',
+	       sub { matharray('',$_[1], 'Matrix','Row','Cell',open=>'{',close=>'}');},
+	       beforeDigest=>\&matharray_defs, afterDigest=>\&matharray_end);
+DefEnvironment('{vmatrix}',
+	       sub { matharray('',$_[1], 'Matrix','Row','Cell',open=>'|',close=>'|');},
+	       beforeDigest=>\&matharray_defs, afterDigest=>\&matharray_end);
+DefEnvironment('{Vmatrix}',
+	       sub { matharray('',$_[1], 'Matrix','Row','Cell',open=>"\x{2225}",close=>"\x{2225}");},
+	       beforeDigest=>\&matharray_defs, afterDigest=>\&matharray_end);
+
+
+# ?? Of course, I have to figure out how to represent them....
+#DefConstructor('\gather',   "<XMTok name='gather'>", environment=>'gather');
+#DefConstructor('\endgather',"<XMTok ?? />", end_environment=>'gather');
+DefEnvironment('{gather}',
+	       "<XMApp><XMTok name='gather'/>#body</XMApp>");
+
+DefConstructor('\boldsymbol{}', '#1',
+	       beforeDigest=>sub { requireMath; $STOMACH->bgroup; $STOMACH->setFont(forcebold=>1); },
+	       afterDigest =>sub { $STOMACH->egroup; });
+
+# Actually in amsfonts (but obsolete??)
+DefMacro('\bold{}','\mathbf{#1}');
+#**********************************************************************
+1;
+

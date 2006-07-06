@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE document PUBLIC "-//NIST LaTeXML//LaTeXML article" "LaTeXML.dtd">
+<?latexml class="article"?>
+<document xmlns="http://dlmf.nist.gov/LaTeXML">
+  <section refnum="1">
+    <title>Testing</title>
+    <p>Expecting (beep) : (beep)
+</p>
+    <p>Expecting (foo) : (foo)</p>
+    <p>Expecting (Bar): (Bar)</p>
+    <p>Expecting (BAR): BAR
+</p>
+    <p>Expecting (Bar): (Bar)</p>
+    <p>Expecting (BAR): BAR
+</p>
+    <p>Expecting (BAR): BAR</p>
+  </section>
+</document>
