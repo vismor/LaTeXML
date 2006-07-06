@@ -1,0 +1,1743 @@
+# -*- CPERL -*-
+# /=====================================================================\ #
+# |  TeX                                                                | #
+# | Core TeX Implementation for LaTeXML                                 | #
+# |=====================================================================| #
+# | Part of LaTeXML:                                                    | #
+# |  Public domain software, produced as part of work done by the       | #
+# |  United States Government & not subject to copyright in the US.     | #
+# |---------------------------------------------------------------------| #
+# | Bruce Miller <bruce.miller@nist.gov>                        #_#     | #
+# | http://dlmf.nist.gov/LaTeXML/                              (o o)    | #
+# \=========================================================ooo==U==ooo=/ #
+package LaTeXML::Package::Pool;
+use strict;
+use LaTeXML::Package;
+use Unicode::Normalize;
+no warnings 'redefine';
+
+#**********************************************************************
+# Expandable Primitives
+# See The TeXBook, Ch. 20, Definitions (also called Macros) pp. 212--215
+#**********************************************************************
+
+#======================================================================
+# Conditionals
+#   Expand enough to determine true/false, then maybe skip
+#   record a flag somewhere so that \else or \fi is recognized
+#   (otherwise, they should signal an error)
+
+sub skipConditionalBody {
+  my($toelse)=@_;
+  my $fi   = T_CS('\fi')->getDefinition;
+  my $else = T_CS('\else')->getDefinition;
+  my $level=1;
+  my $t;
+  my $n = 0;
+  while(defined($t=$GULLET->readToken)){
+    $n++;
+    if(defined(my $defn = $t->getDefinition)){
+      if($defn->isExpandable && $defn->isConditional){
+	$level++; }
+      elsif($defn eq $else){
+	last if $toelse && $level == 1; }
+      elsif($defn eq $fi){ 
+	last unless --$level; }}}
+  Fatal("Conditional fell off end") unless $t; }
+
+sub ifHandler   { skipConditionalBody(1) unless $_[0]; return; }
+sub elseHandler { skipConditionalBody(0); return; };
+#======================================================================
+# Should complain if we aren't actually evaluating an \if
+DefExpandable('\else', \&elseHandler);
+DefExpandable('\fi',  sub {});
+
+sub compare {
+  my($a,$rel,$b)=@_;
+  if   ($rel->equals(T_OTHER('<'))){ $a < $b; }
+  elsif($rel->equals(T_OTHER('='))){ $a = $b; }
+  elsif($rel->equals(T_OTHER('>'))){ $a > $b; }
+  else { Fatal("Non-relation token: ".Stringify($rel)." in comparison conditional"); }}
+
+DefExpandable('\ifnum Number Token Number', 
+	      sub { ifHandler(compare($_[1]->getValue,$_[2],$_[3]->getValue)); },
+	     isConditional=>1);
+DefExpandable('\ifdim Dimension Token Dimension',
+	      sub { ifHandler(compare($_[1]->getValue,$_[2],$_[3]->getValue)); },
+	      isConditional=>1);
+DefExpandable('\ifodd Number',
+	      sub { ifHandler($_[1]->getValue % 2); },
+	     isConditional=>1);
+
+# \ifvmode
+# \ifhmode
+DefExpandable('\ifmmode',sub { ifHandler($STOMACH->inMath); }, isConditional=>1);
+
+# \ifinner
+DefExpandable('\if XToken XToken',
+	      sub { ifHandler($_[1]->getCharcode == $_[2]->getCharcode); },
+	      isConditional=>1);
+DefExpandable('\ifcat XToken XToken', 
+	      sub { ifHandler($_[1]->getCatcode  == $_[2]->getCatcode); },
+	      isConditional=>1);
+
+# !! ????
+DefExpandable('\ifx Token Token', sub {
+  my($self,$token1,$token2)=@_;
+  my $def1=$STOMACH->lookupMeaning($token1);
+  my $def2=$STOMACH->lookupMeaning($token2);
+  my $bool=0;
+  if(defined $def1 != defined $def2){	       # Don't both have defs or not have defs
+    $bool=0; }
+  elsif(!defined $def1 && !defined $def2){	# Neither have defs
+    $bool = $_[1]->equals($_[2]); }		# compare the tokens themselves.
+  elsif($def1->equals($def2)){	# Same defn (hopefully covers same primitives ???)
+    $bool = 1; }		# But what about same \chardefs, etc....
+  ifHandler($bool); },
+	      isConditional=>1);
+
+# Testing boxes ???
+# \ifvoid
+# \ifhbox
+# \ifvbox
+
+# \ifeof
+
+DefExpandable('\iftrue', sub { ifHandler(1); }, isConditional=>1);
+DefExpandable('\iffalse',sub { ifHandler(0); }, isConditional=>1);
+
+# \ifcase !!!!!
+
+#======================================================================
+
+DefPrimitive('\relax',undef);
+DefExpandable('\number Number',       sub { Explode($_[1]->getValue); });
+
+#======================================================================
+
+DefExpandable('\romannumeral Number', sub { roman($_[1]->getValue); });
+DefExpandable('\string Token ',        sub { Explode($_[1]->getString); });
+DefExpandable('\jobname',Tokens()); # Set to the filename by initialization
+
+DefExpandable('\fontname', sub { Explode("fontname not implemented"); });
+
+DefExpandable('\meaning Token',sub {
+  my($self,$tok)=@_;
+  my $meaning = $STOMACH->lookupMeaning($tok);
+  Explode(defined $meaning ? $meaning : 'undefined'); });
+
+DefExpandable('\csname',sub {
+  my ($token,@toks)=();
+  while(($token = $GULLET->readXToken()) && ($token->getString ne '\endcsname')){
+    push(@toks,$token); }
+  $token = T_CS("\\".Tokens(@toks)->toString);
+  $STOMACH->assignMeaning($token, T_CS('\relax')->getDefinition)
+    unless defined $STOMACH->lookupMeaning($token);
+  $token;  });
+
+DefPrimitive('\endcsname', sub { Fatal("Extra \csname"); });
+
+DefExpandable('\expandafter Token Token',sub {
+  my($self,$tok,$xtok)=@_;
+  my $defn;
+  if(defined($defn=$xtok->getDefinition) && $defn->isExpandable){
+    ($tok,$defn->invoke); } # Expand $xtok ONCE ONLY!
+  else {
+    ($tok,$xtok); }});
+
+# Insert magic token that Gullet knows not to expand the next one.
+DefExpandable('\noexpand',sub { Token('',CC_NOTEXPANDED); });
+
+DefExpandable('\topmark',        sub { $STOMACH->mark_register('topmark'); return; });
+DefExpandable('\firstmark',      sub { $STOMACH->mark_register('firstmark'); return;});
+DefExpandable('\botmark',        sub { $STOMACH->mark_register('botmark'); return;});
+DefExpandable('\splitfirstmark', sub { $STOMACH->mark_register('splitfirstmark'); return;});
+DefExpandable('\splitbotmark',   sub { $STOMACH->mark_register('splitbotmark'); return;});
+
+DefExpandable('\input',sub {
+  my ($token,@tokens)=();
+  while(($token=$GULLET->readXToken()) && ($token->getCatcode != CC_SPACE)){
+    push(@tokens,$token); }
+  $GULLET->unread($token);
+  $STOMACH->input(Tokens(@tokens));
+  return; });
+
+DefExpandable('\endinput',sub { $STOMACH->closeMouth(1); return; });
+
+# \the<internal quantity>
+DefExpandable('\the',sub {
+  my $defn = readVariable();
+  my $type = $defn->isRegister;
+  if(!$type){ Fatal("You can't use ".$defn->getCS->untex." after \\the"); }
+  my $value = $defn->getValue($defn->readArguments);
+  my @tokens = ($type eq 'any' ? $value->unlist : Explode($value->toString));
+  if($LaTeXML::NOEXPAND_THE){
+    $GULLET->neutralizeTokens(@tokens); }
+  else {
+    @tokens; }});
+
+#**********************************************************************
+# Primitives
+# See The TeXBook, Chapter 24, Summary of Vertical Mode
+#  and Chapter 25, Summary of Horizontal Mode.
+# Parsing of basic types (pp.268--271) is (mostly) handled in Gullet.pm
+#**********************************************************************
+
+DefPrimitive('\bye',sub {
+  $GULLET->flush;
+  return; });
+#======================================================================
+# Registers & Parameters
+# See Chapter 24, Summary of Vertical Mode
+# Define a whole mess of useless registers here ...
+#======================================================================
+
+#======================================================================
+# Integer registers; TeXBook p. 272-273
+our %iparms= (pretolerance=>0, tolerance=>0, hbadness=>0, vbadness=>0, linepenalty=>0,
+	      hypenpenalty=>0, exhyphenpenalty=>0, binoppenalty=>0, relpenalty=>0, 
+	      clubpenalty=>0, widowpenalty=>0, displaywidowpenalty=>0, brokenpenalty=>0, 
+	      predisplaypenalty=>0, postdisplaypenalty=>0, interlinepenalty=>0, 
+	      floatingpenalty=>0, outputpenalty=>0, doublehyphendemerits=>0,
+	      finalhyphendemerits=>0, adjdemerits=>0, looseness=>0, pausing=>0, 
+	      holdinginserts=>0, tracingonline=>0, tracingmacros=>0, tracingstats=>0, 
+	      tracingparagraphs=>0, tracingpages=>0, tracingoutput=>0, tracinglostchars=>0, 
+	      tracingcommands=>0, tracingrestores=>0, language=>0, uchyph=>0, lefthyphenmin=>0, 
+	      righthyphenmin=>0, globaldefs=>0, defaulthyphenchar=>0, defaultskewchar=>0, 
+	      escapechar=>0, endlinechar=>0, newlinechar=>0, maxdeadcycles=>0, hangafter=>0, 
+	      fam=>0, mag=>1000, delimiterfactor=>0, time=>0, day=>0, month=>0, year=>0,
+	      showboxbreadth=>0, showboxdepth=>0, errorcontextlines=>0);
+foreach my $p (keys %iparms){
+  DefRegister("\\$p",Number($iparms{$p})); }
+
+{  my ($sec,$min,$hour,$mday,$mon,$year)=localtime();
+   $STOMACH->assignValue('\day'  =>Number($mday));
+   $STOMACH->assignValue('\month'=>Number($mon+1));
+   $STOMACH->assignValue('\year' =>Number(1900+$year)); }
+
+# Read-only Integer registers
+our %ro_iparms=(lastpenalty=>0, inputlineno=>0, badness=>0);
+foreach my $p (keys %ro_iparms){
+  DefRegister("\\$p",Number($ro_iparms{$p}),readonly=>1); }
+
+# Special integer registers (?)
+# <special integer> = \spacefactor | \prevgraf | \deadcycles | \insertpenalties
+our %sp_iparms=(spacefactor=>0, prevgraf=>0, deadcycles=>0, insertpenalties=>0);
+foreach my $p (keys %sp_iparms){
+  DefRegister("\\$p",Number($sp_iparms{$p})); }
+
+#======================================================================
+# Dimen registers; TeXBook p. 274
+our %dparms=(hfuzz=>'1pt', vfuzz=>'1pt', overfullrule=>0, emergencystretch=>0, 
+	     hsize=>'6in', vsize=>'9in',
+	     maxdepth=>0, splitmaxdepth=>0, boxmaxdepth=>0, lineskiplimit=>0, 
+	     delimitershortfall=>0, nulldelimiterspace=>0, scriptspace=>0, mathsurround=>0, 
+	     predisplaysize=>0, displaywidth=>0, displayindent=>0, parindent=>0, 
+	     hangindent=>0, hoffset=>0, voffset=>0,);
+foreach my $p (keys %dparms){
+  DefRegister("\\$p",Dimension($dparms{$p})); }
+
+# Read-only dimension registers.
+our %ro_dparms=(lastkern=>0);
+foreach my $p (keys %ro_dparms){
+  DefRegister("\\$p",Dimension($ro_dparms{$p}), readonly=>1); }
+
+
+# Special dimension registers (?)
+# <special dimen> = \prevdepth | \pagegoal | \pagetotal | \pagestretch | \pagefilstretch
+#    | \pagefillstretch | \pagefilllstretch | pageshrink | \pagedepth
+our %sp_dparms=(prevdepth=>0, pagegoal=>0, pagetotal=>0, pagestretch=>0, pagefilstretch=>0,
+		pagefillstretch=>0, pagefilllstretch=>0, pageshrink=>0, pagedepth=>0);
+foreach my $p (keys %sp_dparms){
+  DefRegister("\\$p",Dimension($sp_dparms{$p})); }
+
+#======================================================================
+# Glue registers; TeXBook p.274
+our %gparms=(baselineskip=>0, lineskip=>0, parskip=>0, abovedisplayskip=>0, 
+	     abovedisplayshortskip=>0, leftskip=>0, rightskip=>0, topskip=>0, splittopskip=>0,
+	     tabskip=>0, spaceskip=>0, xspaceskip=>0, parfillskip=>0);
+foreach my $p (keys %gparms){
+  DefRegister("\\$p",Glue($gparms{$p})); }
+
+#======================================================================
+# MuGlue registers; TeXBook p.274
+our %mparms=(thinmuskip=>0, medmuskip=>0, thickmuskip=>0);
+foreach my $p (keys %mparms){
+  DefRegister("\\$p",Glue($mparms{$p})); }
+
+#======================================================================
+# Token registers; TeXBook p.275
+our @tparms= qw(output everypar everymath everydisplay everyhbox everyvbox
+		everyjob everycr everyhelp);
+#======================================================================
+
+# Are these from plain ?
+DefConstructor('\smallskip',"");
+DefConstructor('\medskip',"");
+DefConstructor('\bigskip',"");
+
+DefConstructor('\thinspace',"?IfMath(<XMHint name='thinspace'/>)( )");
+DefConstructor('\thickspace',"?IfMath(<XMHint name='thickspace'/>)( )");
+#======================================================================
+# Assignment, TeXBook Ch.24, p.275
+#======================================================================
+# <assignment> = <non-macro assignment> | <macro assignment>
+
+#======================================================================
+# Macros
+# See Chapter 24, p.275-276
+# <macro assignment> = <definition> | <prefix><macro assignment>
+# <definition> = <def><control sequence><definition text>
+# <def> = \def | \gdef | \edef | \xdef
+# <definition text> = <register text><left brace><balanced text><right brace>
+
+# Convert the register list to the internal form.
+sub readDefParameterList {
+  my($cs)=@_;
+
+  # Read tokens until a '{'
+  my ($token,@tokens)=();
+  while(defined ($token=$GULLET->readToken()) && ($token->getCatcode != CC_BEGIN)){
+    push(@tokens,$token); }
+  $GULLET->unread($token);
+
+  # Now, recognize parameters and delimiters.
+  my @copy = @tokens;
+  my @params=();
+  my $n=0;
+  while(@tokens){
+    my $t=shift(@tokens);
+    if($t->getCatcode == CC_PARAM){
+      $n++; $t=shift(@tokens); 
+      Fatal("Parameters for \"$cs\" not in order in ".join('',@copy))
+	unless $n == (ord($t->getString)-ord('0'));
+      my @delim=();
+      while(@tokens && ($tokens[0]->getCatcode != CC_PARAM)){
+	push(@delim,shift(@tokens)); }
+      if(@delim){ 
+	my $expected=Tokens(@delim);
+	push(@params, LaTeXML::Parameter->new(spec=>'Until:'.$expected->toString, after=>$expected)); }
+      else {
+	push(@params, LaTeXML::Parameter->new(spec=>'{}', before=>'{', after=>'}')); }}
+    else {
+      my @lit=($t);
+      while(@tokens && ($tokens[0]->getCatcode != CC_PARAM)){
+	push(@lit,shift(@tokens)); }
+      my $expected = Tokens(@lit);
+      push(@params,LaTeXML::Parameter->new(spec=>'Literal:'.$expected->toString, 
+					   type=>'Match', matches=>[$expected], novalue=>1)); }
+  }
+  LaTeXML::Parameters->new(@params); }
+
+# On these, we'll parse the arguments ourselves!!
+sub do_def {
+  my($globally, $expanded)=@_;
+  my $cs     = $GULLET->readNonSpace;
+  my $params = readDefParameterList($cs);
+  my $body   = $GULLET->readArg();
+  if($expanded){
+    local $LaTeXML::NOEXPAND_THE = 1;
+    $body = $GULLET->expandTokens($body); }
+  $STOMACH->installDefinition(LaTeXML::Expandable->new($cs,$params,$body),globally=>$globally);
+  return; }
+
+DefPrimitive('\def',  sub { do_def(0,0); });
+DefPrimitive('\gdef', sub { do_def(1,0); });
+DefPrimitive('\edef', sub { do_def(0,1); });
+DefPrimitive('\xdef', sub { do_def(1,1); });
+
+# <prefix> = \global | \long | \outer
+# See Stomach.pm & Stomach.pm
+DefPrimitive('\global',sub { $STOMACH->setPrefix('global');},isPrefix=>1);
+DefPrimitive('\long',  sub { $STOMACH->setPrefix('long');},  isPrefix=>1);
+DefPrimitive('\outer', sub { $STOMACH->setPrefix('outer');}, isPrefix=>1);
+
+#======================================================================
+# Non-Macro assignments; TeXBook Ch.24, pp 276--277
+# <non-macro assignment> = <simple assignment> | \global <non-macro assignment>
+
+# <filler> = <optional spaces> | <filler>\relax<optional spaces>
+# <general text> = <filler>{<balanced text><right brace>
+
+# <simple assignment> = <variable assignment> | <arithmetic>
+#    | <code assignment> | <let assignment> | <shorthand definition>
+#    | <fontdef token> | <family assignment> | <shape assignment>
+#    | \read <number> to <optional spaces><control sequence>
+#    | \setbox<8bit><equals><filler><box>
+#    | \font <control sequence><equals><file name><at clause>
+#    | <global assignment>
+# <variable assignment> = <integer variable><equals><number>
+#    | <dimen variable><equals><dimen>
+#    | <glue variable><equals><dimen>
+#    | <muglue variable><equals><muglue>
+#    | <token variable><equals><general text>
+#    | <token variable><equals><token variable>
+# <at clause> = at <dimen> | scaled <number> | <optional spaces>
+# <code assignment> = <codename><8bit><equals><number>
+
+DefRegister('\count Number',Number(0));
+DefRegister('\dimen Number',Dimension(0));
+DefRegister('\skip Number',Glue(0));
+DefRegister('\muskip Number',MuGlue(0));
+DefRegister('\toks Number',Tokens());
+
+# <integer variable> = <integer parameter> | <countdef token> | \count<8bit>
+# <dimen var> = <dimen parameter> | <dimendef token> | \dimen<8bit>
+# <glue variable> = <glue parameter> | <skipdef token> | \skip<8bit>
+# <muglue variable> = <muglue parameter> | <muskipdef token> | \muskip<8bit>
+
+# <arithmetic> = \advance <integer variable><optional by><number>
+#    | \advance <dimen variable><optional by><dimen>
+#    | \advance <glue variable><optional by><glue>
+#    | \advance <muglue variable><optional by><muglue>
+#    | \multiply <numeric variable><optional by><number>
+#    | \divide <numeric variable><optional by><number>
+
+sub readVariable {
+  my ($var,$type);
+  my $token = $GULLET->readXToken;
+  Fatal("Missing variable") unless defined $token;
+  my $defn = $token->getDefinition;
+  if((defined $defn) && $defn->isRegister && !$defn->isReadonly){
+    $defn; }
+  else {
+    $GULLET->unread($token); 
+    Fatal("Missing variable"); }}
+
+DefPrimitive('\advance',sub {
+  my $defn = readVariable();
+  my @args = $defn->readArguments;
+  $GULLET->readKeyword('by');
+  $defn->setValue($defn->getValue(@args)->add($GULLET->readValue($defn->isRegister)),@args); });
+
+DefPrimitive('\multiply',sub {
+  my $defn = readVariable();
+  my @args = $defn->readArguments;
+  $GULLET->readKeyword('by');
+  $defn->setValue($defn->getValue(@args)->multiply($GULLET->readNumber->getValue),@args); });
+
+
+DefPrimitive('\divide',sub {
+  my $defn = readVariable();
+  my @args = $defn->readArguments;
+  $GULLET->readKeyword('by');
+  $defn->setValue($defn->getValue(@args)->multiply(1/$GULLET->readNumber->getValue),@args); });
+
+# <let assignment> = \futurelet <control sequence><token><token> 
+#   | \let<control sequence><equals><one optional space><token>
+# DefPrimitive('\futurelet','<token><token><token>', sub { ... });
+DefPrimitive('\let Token Ignore:= Token', sub {
+  my($self,$token1,$token2)=@_;
+  $STOMACH->assignMeaning($token1, $STOMACH->lookupMeaning($token2));
+  return;  });
+
+DefExpandable('\futurelet Token Token Token',sub{
+  my($self,$cs,$token1,$token2)=@_;
+  $STOMACH->assignMeaning($cs, $STOMACH->lookupMeaning($token2));
+  ($token1,$token2); });
+
+# <shorthand definition> = \chardef<control sequence><equals><8bit>
+#    | \mathchardef <control sequence><equals><15bit>
+#    | <registerdef><control sequence><equals><8bit>
+# <registerdef> = \countdef | \dimendef | \skipdef | \muskipdef | toksdef
+
+# As defining a register ??
+DefPrimitive('\chardef Token Ignore:= Number', sub {
+  my($self,$newcs,$code)=@_;
+  $STOMACH->assignValue($newcs->getString,Number($code));	# For when used as an integer getValue
+  my $ch = chr($code->getValue);
+  $STOMACH->instalDefinition(LaTeXML::Primitive->new($newcs,"",
+						    sub { $STOMACH->digest(T_OTHER($ch)); },
+						    registerType=>'Number', readonly=>1));
+  return; });
+# \mathchardef ?
+
+DefPrimitive('\countdef Token Ignore:= Number',sub {
+  my($self,$cs,$num)=@_;
+  my $count = '\count'.$num->getValue;
+  DefRegister($cs->getString, Number(0),
+	       getter=>sub { $STOMACH->lookupValue($count); },
+	       setter=>sub { $STOMACH->assignValue($count,$_[0]); });
+  return; });
+
+DefPrimitive('\dimendef Token Ignore:= Number',sub {
+  my($self,$cs,$num)=@_;
+  my $dimen = '\dimen'.$num->getValue;
+  DefRegister($cs->getString, Dimension(0),
+	       getter=>sub { $STOMACH->lookupValue($dimen); },
+	       setter=>sub { $STOMACH->assignValue($dimen,$_[0]); });
+  return; });
+
+DefPrimitive('\skipdef Token Ignore:= Number',sub {
+  my($self,$cs,$num)=@_;
+  my $glue = '\skip'.$num->getValue;
+  DefRegister($cs->getString, Glue(0),
+	       getter=>sub { $STOMACH->lookupValue($glue); },
+	       setter=>sub { $STOMACH->assignValue($glue,$_[0]); });
+  return; });
+
+DefPrimitive('\muskipdef Token Ignore:= Number',sub {
+  my($self,$cs,$num)=@_;
+  my $muglue = '\muskip'.$num->getValue;
+  DefRegister($cs->getString, MuGlue(0),
+	       getter=>sub { $STOMACH->lookupValue($muglue); },
+	       setter=>sub { $STOMACH->assignValue($muglue,$_[0]); });
+
+ return; });
+
+DefPrimitive('\toksdef Token Ignore:= Number',sub {
+  my($self,$cs,$num)=@_;
+  my $toks = '\toks'.$num->getValue;
+  DefRegister($cs->getString, Tokens(),
+	       getter=>sub { $STOMACH->lookupValue($toks); },
+	       setter=>sub { $STOMACH->assignValue($toks,$_[0]); });
+  return; });
+
+
+# NOTE: Get all these handled as registers
+# <internal integer> = <integer parameter> | <special integer> | \lastpenalty
+#   | <countdef token> | \count<8bit> | <codename><8bit>
+#   | <chardef token> | <mathchardef token> | \parshape | \inputlineno
+#   | \hyphenchar<font> | \skewchar<font> | \badness
+
+# <codename> = \catcode | \mathcode | \lccode | \uccode | \sfcode | \delcode
+
+DefRegister('\catcode Number',Number(0),
+	     getter=>sub { Number($STOMACH->lookupCatcode(chr($_[0]->getValue))); },
+	     setter=>sub { $STOMACH->assignCatcode($_[0]->getValue, chr($_[1]->getValue)); });
+# \mathcode
+# \lccode
+# \uccode
+# \sfcode
+# \delcode
+DefRegister('\hyphenchar{}',Number(ord('-')));
+# \parshape !?!??
+#DefRegister('\inputlineno',Number(0),
+#            readonly=>1,
+#	     getter=>{ Number($GULLET->getMouth????? ->lineno); });
+# \skewchar
+
+DefMacro('\hyphenation{}',''); # Well, what ?
+
+
+# <font> = <fontdef token> | \font | <family member>
+# <family member> | <font range><4bit>
+# <font range> = \textfont | \scriptfont | \scriptscriptfont
+
+# <internal dimen> = <dimen parameter> | <special dimen> | \lastkern
+#    | <dimendef token> | \dimen<8bit> | <box dimension><8bit> | \fontdimen<number><font>
+# <box dimension> = \ht | \wd | \dp
+
+# Need some clever getter & setters!
+DefRegister('\ht Number',Dimension(0));
+DefRegister('\wd Number',Dimension(0));
+DefRegister('\dp Number',Dimension(0));
+
+#   Could be handled by setting dimensions whenever the box itself is set?
+
+# <internal glue> = <glue parameter> | \lastskip | <skipdef token> | \skip<8bit>
+
+# <internal muglue> = <muglue parameter> | \lastskip | <muskipdef token> | \muskip<8bit>
+
+# <family assignment> = <family member><equals><font>
+# <shape assignment> = \parshape<equals><number><shape dimensions>
+#  <shape dimensions> is 2n <dimen>
+
+# <global assignment> = <font assignment> | <hyphenation assignment>
+#   | <box size assignment> | <interaction mode assignment>
+#   | <intimate assignment>
+# <font assignment> = \fontdimen <number><font><equals><dimen>
+#   | \hyphenchar<font><equals><number> | \skewchar<font><equals><number>
+# <hyphenation assignment> = \hyphenation<general text>
+#   | \patterns<general text>
+# <box size assignment> = <box dimension><8bit><equals><dimen>
+# <interaction mode assignment> = \errorstopmode | \scrollmode | \nonstopmode | \batchmode
+# <intimate assignment> = <special integer><equals><number>
+#   | <special dimension><equals><dimen>
+
+DefPrimitive('\char Number', sub { $STOMACH->digest(T_OTHER(chr($_[1]->getValue))); });
+# <box> = \box <8bit> | \copy <8bit> | \lastbox | \vsplit <8bit> to <dimen>
+#   | \hbox <box specification>{<horizontal mode material>}
+#   | \vbox <box specification>{<vertical mode material>}
+#   | \vtop <box specification>{<vertical mode material>}
+# <box specification> = to <dimen><filler> | spread <dimen><filler> | <filler>
+
+# \setbox<number>=\hbox to <dimen>{<horizontal mode material>}
+
+DefPrimitive('\setbox Number Ignore:= {}', sub { $STOMACH->assignValue('box'.$_[1]->getValue,$_[2]); });
+# Is this the same ??
+DefPrimitive('\sbox Number Ignore:= {}', sub { $STOMACH->assignValue('box'.$_[1]->getValue,$_[2]); });
+
+DefPrimitive('\hbox{Keyword:to|spread} Dimension {}', sub { $STOMACH->digest($_[3]); });
+DefPrimitive('\vbox{Keyword:to|spread} Dimension {}', sub { $STOMACH->digest($_[3]); });
+DefPrimitive('\vtop{Keyword:to|spread} Dimension {}', sub { $STOMACH->digest($_[3]); });
+
+# Ignore, but leave the box!
+DefPrimitive('\lower Dimension', undef);
+DefPrimitive('\raise Dimension', undef);
+#======================================================================
+# Remaining Mode independent primitives in Ch.24, pp.279-280
+# \relax was done as expandable (isn't that right?)
+# }
+# Note, we don't bother making sure begingroup is ended by endgroup.
+
+# These define the handler for { } (or anything of catcode BEGIN, END)
+
+# These are actually TeX primitives, but we treat them as a Whatsit so they
+# remain in the constructed tree.
+DefConstructor('{','#body', 
+	       beforeDigest=> sub { $STOMACH->bgroup; }, captureBody=>1);
+DefConstructor('}',  '',
+	       beforeDigest => sub { $STOMACH->egroup; });
+Let('\bgroup',T_BEGIN);
+Let('\egroup',T_END);
+DefPrimitive('\begingroup',sub { $STOMACH->bgroup(1); });
+DefPrimitive('\endgroup',  sub { $STOMACH->egroup(1); });
+
+# \show, \showbox<8bit>, \showlists, \showthe<internal quantity>
+# \shipout<box>
+DefPrimitive('\ignorespaces',sub { $GULLET->skipSpaces; return; });
+# \afterassignment<token>
+# \aftergroup<token>
+# \uppercase<general text>, \lowercase<general text>
+# \message<general text>
+# \openin<4bit>, \closein<4bit>
+# \immediate\openout<4bit><equals><filename>
+# \immediate\closeout<4bit>
+# \immediate\write<number><general text>
+
+DefPrimitive('\aftergroup Token', sub { $STOMACH->pushAfterGroup($_[1]); });
+
+#======================================================================
+# Remaining semi- Vertical Mode primitives in Ch.24, pp.280--281
+# \openout<4bit><equals><filename>
+# \special<general text>
+# \penalty<number>
+# \kern<dimen>, \mkern<mudimen>
+# \unpenalty, \unkern, \unskip
+# \mark{general text}
+# \insert<8bit><filler>{<vertical mode material>}
+# \vadjust<filler>{<vertical mode material>}
+
+DefPrimitive('\penalty Number',undef);
+DefPrimitive('\kern Dimension',undef);
+DefPrimitive('\mkern MuGlue',undef);
+DefPrimitive('\unpenalty',undef);
+
+#======================================================================
+# Remaining Vertical Mode primitives in Ch.24, pp.281--283
+# \vskip<glue>, \vfil, \vfill, \vss, \vfilneg
+# <leaders> = \leaders | \cleaders | \xleaders
+# <box or rule> = <box> | <vertical rule> | <horizontal rule>
+# <vertical rule> = \vrule<rule specification>
+# <horizontal rule> = \hrule<rule specification>
+# <rule specification> = <optional spaces> | <rule dimension><rule specification>
+# <rule dimension> = width <dimen> | height <dimen> | depth <dimen>
+
+# Stuff to ignore for now...
+foreach my $op ('\vskip Glue', '\vfil', '\vfill', '\vss', '\vfilneg',
+		'\leaders', '\cleaders', '\xleaders'){
+  DefPrimitive($op,undef); }
+
+# \moveleft<dimen><box>, \moveright<dimen><box>
+# \unvbox<8bit>, \unvcopy<8bit>
+# \halign<box specification>{<alignment material>}
+DefConstructor('\noindent', "");
+DefConstructor('\indent', "");
+
+# Remember; \par closes, not opens, paragraphs!
+DefConstructor('\par', sub { $INTESTINE->maybeCloseElement('p'); }, untex=>"\\par\n");
+Tag('p', autoClose=>1, autoOpen=>1);
+
+# {
+
+# The following cause tex to start a new paragraph -- they switch to horizontal mode.
+# <horizontal command> = <letter> | <other> | \char | <chardef token>
+#    | \noboundary | \unhbox | \unhcopy | \valign | \vrule 
+#    | \hskip | \hfil | \hfill | \hss | \hfilneg 
+#    | \accent | \discretionary | \- | \<space> | $
+
+DefPrimitive('\hskip Glue',undef);
+
+DefConstructor('\hfil',"?IfMath(<XMHint name='hfil'/>)( )");
+DefConstructor('\hfill',"?IfMath(<XMHint name='hfill'/>)( )");
+# \end
+# \dump
+
+#**********************************************************************
+DefConstructor("~","?IfMath(<XMHint name='nobreakspace'/>)(\x{00A0})"); # NO-BREAK SPACE
+
+DefPrimitive('\nobreak',undef);
+
+#**********************************************************************
+DefConstructor('\vspace{}',"");
+DefPrimitive('\leavevmode',undef);
+DefConstructor('\centerline{}',"<centering>#1</centering>");
+
+# Well, what else?
+DefMacro('\newpage','');
+#**********************************************************************
+# Math mode stuff
+# See TeXBook Ch.26
+#**********************************************************************
+# Decide whether we're going into or out of math, inline or display.
+
+DefPrimitive('$', sub {
+  my $mode = $STOMACH->getMode;
+  my $op = '\@@BEGININLINEMATH';
+  if($mode eq 'display_math'){
+    Fatal("Missing \$") unless $GULLET->ifNext(undef,CC_MATH);
+    $op = '\@@ENDDISPLAYMATH'; }
+  elsif($mode eq 'inline_math'){
+    $op = '\@@ENDINLINEMATH'; }
+  elsif($GULLET->ifNext(undef,CC_MATH)){
+    $op = '\@@BEGINDISPLAYMATH'; }
+  $GULLET->unread(T_CS($op));
+  return; });
+
+# Effectively these are the math hooks, redefine these to do what you want with math?
+DefConstructor('\@@BEGINDISPLAYMATH',
+	       "<equation><Math mode='display'><XMath>#body</XMath></Math></equation>",
+	       untex=>'$$', alias=>'$$',
+	       beforeDigest=> sub{ $STOMACH->beginMode('display_math'); },
+	       captureBody=>1);
+DefConstructor('\@@ENDDISPLAYMATH'  , "", untex=>'$$', alias=>'$$',
+	       beforeDigest=> sub{ $STOMACH->endMode('display_math'); });
+
+DefConstructor('\@@BEGININLINEMATH', 
+	       "<Math mode='inline'><XMath>#body</XMath></Math>", untex=>'$', alias=>'$',
+	       beforeDigest=> sub{ $STOMACH->beginMode('inline_math'); },
+	      captureBody=>1);
+DefConstructor('\@@ENDINLINEMATH'   ,"", untex=>'$', alias=>'$',
+	       beforeDigest=> sub{ $STOMACH->endMode('inline_math');});
+
+# Add the TeX code from the object that created this node,
+# unless it has already been recorded on another node.
+# NOTE: This one isn't used anymore (?)
+sub add_TeX {
+  my($node,$thing)=@_;
+  if($thing && (ref $thing eq 'LaTeXML::Whatsit') && !$thing->getProperty('_added_tex')){
+    local $LaTeXML::DUAL_BRANCH = 'presentation';
+    my $tex = $thing->untex;
+    $LaTeXML::DUAL_BRANCH = 'content';
+    my $ctex = $thing->untex;
+    $node->setAttribute('tex',$tex);
+    $node->setAttribute('content-tex',$ctex) if $ctex ne $tex;
+    $thing->setProperty('_added_tex',1); }}
+
+sub cleanup_TeX {
+  my($node)=@_;
+  my($x,$y);
+  if((defined ($x=$node->getAttribute('tex'))) && (defined ($y = $node->textContent)) && ($y eq $x)){
+    $node->removeAttribute('tex'); }}
+  
+# Same as add_TeX, but add the code from the body of the object.
+sub add_body_TeX {
+  my($node,$thing)=@_;
+  if($thing && !$thing->getProperty('_added_body_tex')){
+    if(defined(my $body = $thing->getProperty('body'))){
+      local $LaTeXML::DUAL_BRANCH = 'presentation';
+      my $tex = $body->untex;
+      $LaTeXML::DUAL_BRANCH = 'content';
+      my $ctex = $body->untex;
+      $node->setAttribute('tex',$tex);
+      $node->setAttribute('content-tex',$ctex) if $ctex ne $tex;
+    }
+    $thing->setProperty('_added_body_tex',1); }}
+
+Tag('Math',   afterOpen=>\&add_body_TeX);
+Tag('XMath',  afterClose=>\&cleanup_XMath);
+#Tag('XMTok',  afterClose=>\&cleanup_TeX);
+Tag('XMWrap', afterClose=>\&collapse_XMWrap);
+
+sub cleanup_XMath {
+  my($xnode)=@_;
+  # If the XMath contains only non-math nodes, it apparently isn't math at all (?)
+  # pull them up & toss the XMath and Math wrapper.
+  if(!grep($_->getNodeName =~ /^XMApp|XMArg|XMTok|XMDual|XMHint|XMWrap/, $xnode->childNodes)){
+    my $mnode = $xnode->getParentNode;
+    $mnode->getParentNode->replace($mnode,$xnode->childNodes); }
+}
+
+# NOTE: possibly rewrite to only collapse nested XMWraps?
+# If an XMWrap contains only a single node, replace it by the content,
+# after copying the XMWrap's attributes
+sub collapse_XMWrap {
+  my($wrap)=@_;
+  my @nodes = $wrap->childNodes;
+  if(scalar(@nodes) == 1){
+    my %attr = %{$wrap->getAttributes};
+    map($nodes[0]->setAttribute($_,$attr{$_}), keys %attr); 
+    # and replace the XMWrap.
+    $wrap->getParentNode->replace($wrap,@nodes); }
+  return; }
+
+#======================================================================
+# Scripts are a bit of a strange beast, with respect to when the arguments
+# are processed, and what kind of object should be created.
+#
+# While scripts look like they take a normal TeX argument, they really
+# take the next BOX (AFTER expansion & digestion)!  Thus, while
+#   a^\frac{b}{c} and a^\mathcal{B} 
+# DO work in TeX, other things like
+#   a^\sqrt{3} or a^\acute{b}
+# DO NOT! (Hint: consider the expansions)
+# Note that with
+#  \def\xyz{xyz}
+#   a^\xyz   =>  a^{x}yz
+# So, we try to mimic, but note that our boxes don't correspond 100% to TeX's
+#
+# Normally, sub/super scripts should be turned into a sort of postfix operator:
+# The parser will attach the script to the appropriate preceding object.
+# However, there are a few special cases involving empty boxes {}.
+# If the argument is an empty box $x^{}$, the whole script should just disappear.
+# If the PRECEDING box is {} (in ${}^{p}$, a sort of `floating' script should be created.
+# This may combine, in the parser, with the following object to generate
+# a prescript.
+
+our %scriptstylemap=(display=>'script', text=>'script', 
+		     script=>'scriptscript', scriptscript=>'scriptscript');
+
+sub scriptHandler {
+  my($op)=@_;
+  $GULLET->skipSpaces;
+  my $cs = '\@@POST'.$op;
+  # Check if preceding box is empty {}
+  if(defined(my $prev = $LaTeXML::LIST[$#LaTeXml::LIST])){
+    if($prev->toString eq '{}'){
+      $cs = '\@@FLOATING'.$op; }}
+  my $style = $STOMACH->getMathStyle; # Bump the math style smaller.
+  $STOMACH->setMathStyle($scriptstylemap{$style});
+  # Now, get following boxes
+  my @stuff = $STOMACH->invokeToken($GULLET->readXToken);
+  Fatal("Missing { in sub/super-script argument") unless @stuff;
+  my $script = shift(@stuff);	# ONLY this box is the script!
+  push(@stuff, Whatsit(T_CS($cs)->getDefinition,[$script]))
+    if $script->toString ne '{}';  # ONLY If Script is not empty!!!
+  $STOMACH->setMathStyle($style); # revert
+  @stuff; }
+
+DefPrimitive('^', sub{ scriptHandler('SUPERSCRIPT'); });
+DefPrimitive('_', sub{ scriptHandler('SUBSCRIPT'); });
+
+DefConstructor('\@@POSTSUPERSCRIPT{}',
+	       "<XMApp role='POSTSUPERSCRIPT'><XMArg rule='Superscript'>#1</XMArg></XMApp>",
+	       untex=>'^{#1}');
+DefConstructor('\@@POSTSUBSCRIPT{}',
+	       "<XMApp role='POSTSUBSCRIPT'><XMArg rule='Subscript'>#1</XMArg></XMApp>",
+	       untex=>'_{#1}');
+DefConstructor('\@@FLOATINGSUPERSCRIPT{}',
+	       "<XMApp role='FLOATINGSUPERSCRIPT'><XMArg rule='Superscript'>#1</XMArg></XMApp>",
+	       untex=>'{}^{#1}');
+DefConstructor('\@@FLOATINGSUBSCRIPT{}',
+	       "<XMApp role='FLOATINGSUBSCRIPT'><XMArg rule='Subscript'>#1</XMArg></XMApp>",
+	       untex=>'{}_{#1}');
+
+DefConstructor('\@SUPERSCRIPT{}{}', 
+	       "<XMApp><XMTok name='Superscript'/><XMArg>#1</XMArg><XMArg rule='Superscript'>#2</XMArg></XMApp>",
+	       untex=>'{#1}^{#2}');
+DefConstructor('\@SUBSCRIPT{}{}', 
+	       "<XMApp><XMTok name='Subscript'/><XMArg>#1</XMArg><XMArg rule='Subscript'>#2</XMArg></XMApp>",
+	       untex=>'{#1}_{#2}');
+
+# This only becomes active in math mode.
+$STOMACH->setMathActive('\'');
+DefMacro('\'',sub{
+  my $n = 1;
+  while($GULLET->ifNext(T_OTHER('\''))){ $n++; };
+  (T_SUPER,T_BEGIN,map(T_CS('\prime'), 1..$n),T_END); });
+
+# These are \let in plain
+Let('\sp',T_SUPER);
+Let('\sb',T_SUB);
+
+#======================================================================
+# Additional properties for plain characters.
+# These are allowed in plain text, but need to act a bit special in math.
+$STOMACH->setMathActive('=', '>', '<', '+', '-', '*', '/', '!',
+		       ',', '.', ';',
+		       '(', '[',  ']', ')', '|');
+DefMath('=','=', role=>'RELOP');
+DefMath('>','>', role=>'RELOP');
+DefMath('<','<', role=>'RELOP');
+DefMath('+','+', role=>'ADDOP');
+DefMath('-','-', role=>'ADDOP');
+DefMath('*','*', role=>'MULOP');
+DefMath('/','/', role=>'MULOP', style=>'inline');
+DefMath('!','!', role=>'POSTFIX');
+DefMath(',',',', role=>'PUNCT');
+DefMath('.','.', role=>'PUNCT');
+DefMath(';',';', role=>'PUNCT');
+DefMath('(','(', role=>'OPEN'); DefMath(')',')', role=>'CLOSE');
+DefMath('[','[', role=>'OPEN'); DefMath(']',']', role=>'CLOSE');
+DefMath('|','|', role=>'VERTBAR');
+
+#======================================================================
+# \choose & friends, also need special argument handling
+
+# After digesting the \choose (or whatever), grab the previous and following material
+# and store as args in the whatsit.
+our %fracstylemap=(display=>'text', text=>'script',
+		   script=>'scriptscript', scriptscript=>'scriptscript');
+sub chooseArgHandler {
+  my($whatsit)=@_;
+  my $style = $STOMACH->getMathStyle;
+  $STOMACH->setMathStyle($fracstylemap{$style}); # Bump the style smaller.
+  # Unfortunately, the way we've done it, it's too late for the numerator!!!
+  my @top = $STOMACH->regurgitate;
+  my @bot = $STOMACH->digestNextBody;
+  my $closing = pop(@bot);	# We'll leave whatever closed the list (endmath, endgroup...)
+#  $whatsit->setArgs(MathList(@top),MathList(@bot));
+  $whatsit->setProperty(top=>MathList(@top));
+  $whatsit->setProperty(bottom=>MathList(@bot));
+  $STOMACH->setMathStyle($style);
+  $closing; }			# leave the closing bit
+
+DefConstructor('\choose',
+	       "<XMApp><XMTok name='binomial'/><XMArg>#top</XMArg><XMArg>#bottom</XMArg></XMApp>",
+	       afterDigest=>\&chooseArgHandler,
+	       untex=>'#top \choose #bottom');
+DefConstructor('\over',
+	       "<XMApp><XMTok name='/' style='over'/><XMArg>#top</XMArg><XMArg>#bottom</XMArg></XMApp>",
+	       afterDigest=>\&chooseArgHandler,
+	       untex=>'#top \over #bottom');
+DefConstructor('\atop',
+	       "<XMApp><XMTok name='stacked'/><XMArg>#top</XMArg><XMArg>#bottom</XMArg></XMApp>",
+	       afterDigest=>\&chooseArgHandler,
+	       untex=>'#top \atop #bottom');
+DefConstructor('\overwithdelims{}{}',
+	       "<XMApp open='#1' close='#2'><XMTok name='/' style='over'/>"
+	       .  "<XMArg>#top</XMArg><XMArg>#bottom</XMArg></XMApp>",
+	       afterDigest=>\&chooseArgHandler,
+	       untex=>'#top \overwithdelims{#1}{#2} #bottom');
+# But, wonder what the _meaning_ is!
+DefConstructor('\atopwithdelims{}{}',
+	       "<XMApp open='#1' close='#2'><XMTok name='stacked'/>"
+	       .  "<XMArg>#top</XMArg><XMArg>#bottom</XMArg></XMApp>",
+	       afterDigest=>\&chooseArgHandler,
+	       untex=>'#top \atopwithdelims{#1}{#2} #bottom');
+DefConstructor('\abovewithdelims{}{}{}',
+	       "<XMApp open='#1' close='#2'><XMTok name='/' style='over' thickness='#3'/>"
+	       .  "<XMArg>#top</XMArg><XMArg>#bottom</XMArg></XMApp>",
+	       afterDigest=>\&chooseArgHandler,
+	       untex=>'#top \abovewithdelims{#1}{#2}{#3} #bottom');
+
+#**********************************************************************
+# Old style font styles.
+# The trick is to create an empty Whatsit preserved till assimilation (for untex'ing)
+# but to change the current font used in boxes.
+Tag('textstyle',autoClose=>1);
+DefConstructor('\rm', '', beforeDigest=>sub{ $STOMACH->setFont(family=>'serif'); });
+DefConstructor('\sf', '', beforeDigest=>sub{ $STOMACH->setFont(family=>'sansserif'); });
+DefConstructor('\bf',  '', beforeDigest=>sub{ $STOMACH->setFont(series=>'bold'); });
+DefConstructor('\it',  '', beforeDigest=>sub{ $STOMACH->setFont(shape=>'italic'); });
+DefConstructor('\tt',  '', beforeDigest=>sub{ $STOMACH->setFont(family=>'typewriter'); });
+DefConstructor('\sl',  '', beforeDigest=>sub{ $STOMACH->setFont(shape=>'slanted'); });# No effect in math ?
+DefConstructor('\sc',  '', beforeDigest=>sub{ $STOMACH->setFont(shape=>'smallcaps'); });# No effect in math ?
+DefConstructor('\tiny',          '', beforeDigest=>sub{ $STOMACH->setFont(size=>'tiny'); });
+DefConstructor('\scriptsize',    '', beforeDigest=>sub{ $STOMACH->setFont(size=>'script'); });
+DefConstructor('\footnotesize',  '', beforeDigest=>sub{ $STOMACH->setFont(size=>'footnote'); });
+DefConstructor('\small',         '', beforeDigest=>sub{ $STOMACH->setFont(size=>'small'); });
+DefConstructor('\normalsize',    '', beforeDigest=>sub{ $STOMACH->setFont(size=>'normal'); });
+DefConstructor('\large',         '', beforeDigest=>sub{ $STOMACH->setFont(size=>'large'); });
+DefConstructor('\Large',         '', beforeDigest=>sub{ $STOMACH->setFont(size=>'Large'); });
+DefConstructor('\LARGE',         '', beforeDigest=>sub{ $STOMACH->setFont(size=>'LARGE'); });
+DefConstructor('\huge',          '', beforeDigest=>sub{ $STOMACH->setFont(size=>'huge'); });
+DefConstructor('\Huge',          '', beforeDigest=>sub{ $STOMACH->setFont(size=>'Huge'); });
+DefConstructor('\cal', '', beforeDigest=>sub{ requireMath; $STOMACH->setFont(family=>'caligraphic'); });
+
+DefConstructor('\@end@emph','</emph>');
+DefConstructor('\em',"<emph>", afterDigest=>sub { $STOMACH->pushAfterGroup(T_CS('\@end@emph')); });
+
+DefPrimitive('\boldmath',  sub { forbidMath; $STOMACH->setMathFont(forcebold=>1); });
+DefPrimitive('\unboldmath',sub { forbidMath; $STOMACH->setMathFont(forcebold=>0); });
+
+#**********************************************************************
+# Combining letters & numbers
+#**********************************************************************
+# Combine letters, when the fonts are right.
+sub match_math_letters {
+  my(@list)=@_;
+  my $init = shift(@list);
+  my $font = $init->getFont; 
+  if(! $font->isSticky){ 0; }
+  else {
+    my ($i,$l,$f)=(1);
+    while(($l = shift(@list))
+	  && ((ref $l eq 'LaTeXML::Comment')
+	      || (((ref $l) eq 'LaTeXML::MathBox')
+		  && ($l->getString =~ /^[a-zA-Z]$/)
+		  && ($l->getFont->equals($font))))){
+      $i++; }
+    ($i > 1 ? $i : 0); }}	# Match at least 2
+
+sub replace_math_letters { MathBox(join('',map($_->getString, @_)),$_[0]->getFont, $_[0]->getLocator); }
+
+foreach my $letter (qw(a b c d e f g h i j k l m n o p q r s t u v w x y z
+		       A B C D E F G H I J K L M N O P Q R S T U V W X Y Z)){
+  DefMathFilter($letter, \&match_math_letters, \&replace_math_letters); }
+
+#======================================================================
+# Combine digits in math.
+
+# Accept strings of digits, possibly with a `.', 
+# possibly with \, \: \; spacing embedded,
+# and possibly with a trailing \ldots
+sub check_digit {
+  my($digit,$font)=@_;
+  if(ref $digit eq 'LaTeXML::Whatsit'){
+    my $s = $digit->getDefinition->getCS->untex;
+    if( ( ($s =~ /^[\d\.]$/) && ($digit->getFont->equals($font)) )
+	|| ($s =~ /^(\\,|\\:|\\;|\\ldots|\\dots)$/) ){
+      return $s; }}
+  undef;}
+
+sub match_digits {
+  my(@list)=@_;
+  my ($i,$d,$s,$string) = (0,'','','');
+  my $font = $list[0]->getFont; 
+  # Match digits and spacing, possible trailing \ldots
+  while(($d = shift(@list))
+	&& ((ref $d eq 'LaTeXML::Comment')
+	    || (defined ($s = check_digit($d,$font))
+		&& (($string .=$s) =~ /^(\d|\\,|\\:|\\;)*\.?(\d|\\,|\\:|\\;)*(\\ldots|\\dots)?$/)))){
+	  $i++; }
+  # but back up over trailing spacing
+  while($string =~ s/(\\,|\\:|\\;)$//){ $i--; }
+  # To be worth matching must have at least 2 chars. AND must have a digit
+  (($i > 1) && ($string=~/\d/) ? $i : 0); }
+
+# @@NUMBER
+DefConstructor('\@@NUMBER', sub {
+  my($whatsit,$props)=@_;
+  $INTESTINE->insertMathToken($$props{string},font=>$$props{font},role=>'NUMBER', name=>$$props{value});},
+	       untex=>'#tex');
+
+sub replace_digits { 
+  my(@digits)=@_;
+  my $tex = join('',map($_->untex, @_));
+  my $value = $tex;
+  my $string = $tex;
+  $value =~ s/(\\,|\\:|\\;|\\ldots |\\dots )//g;
+  $string =~ s/\\,/\x{2009}/g;	# THIN SPACE
+  $string =~ s/\\:/\x{2005}/g;	# FOUR-PER-EM SPACE
+  $string =~ s/\\;/\x{2004}/g;	# THREE-PER-EM SPACE
+  $string =~ s/(\\ldots |\\dots )/\x{2026}/g; # HORIZONTAL ELLIPSIS
+  Whatsit(T_CS('\@@NUMBER')->getDefinition,[],
+	  tex=>$tex,value=>$value,string=>$string,
+	  font=>$digits[0]->getFont->specialize('1'), isMath=>1,locator=>$digits[0]->getLocator); }
+
+foreach my $digit (qw(0 1 2 3 4 5 6 7 8 9)){
+  $STOMACH->setMathActive($digit);
+  DefMath($digit,$digit, role=>'NUMBER');
+  DefMathFilter($digit, \&match_digits, \&replace_digits); }
+# "." already defined as punctuation, but make it work with these filters.
+DefMathFilter('.', \&match_digits, \&replace_digits);
+#**********************************************************************
+# Alignments
+
+# & gives an error except within the right context 
+# (which should redefine it!)
+DefConstructor('&',sub { Fatal("Stray \"&\""); });
+
+#**********************************************************************
+# Stuff from Plain
+#**********************************************************************
+
+#**********************************************************************
+# Spacing stuff
+DefConstructor('\@','');
+# Math spacing.
+DefConstructor('\,',"?IfMath(<XMHint name='thinspace'/>)(\x{2009})"); # THIN SPACE
+DefConstructor('\:',"?IfMath(<XMHint name='medspace'/>)(\x{2005})");  # FOUR-PER-EM SPACE
+DefConstructor('\;',"?IfMath(<XMHint name='thickspace'/>)(\x{2004})"); # THREE-PER-EM SPACE
+DefConstructor('\!',"?IfMath(<XMHint name='negthinspace'/>)()");
+DefConstructor('\ ',"?IfMath(<XMHint name='medspace'/>)(\x{2002})"); # EN SPACE
+DefConstructor('\/',"?IfMath(<XMHint name='italiccorr'/>)()");
+DefConstructor('\frenchspacing', "");
+DefConstructor('\nonfrenchspacing',"");
+
+# Math style.
+DefConstructor('\displaystyle','',afterDigest=>sub { $STOMACH->setMathStyle('display'); });
+DefConstructor('\textstyle',   '',afterDigest=>sub { $STOMACH->setMathStyle('text'); });
+DefConstructor('\scriptstyle', '',afterDigest=>sub { $STOMACH->setMathStyle('script'); });
+DefConstructor('\scriptscriptstyle','',afterDigest=>sub { $STOMACH->setMathStyle('scriptscript'); });
+
+#**********************************************************************
+# MATH representation
+#**********************************************************************
+
+#**********************************************************************
+# Various Symbols;
+# Mostly from the LaTeX Manual (presumably most apply to Plain?)
+#**********************************************************************
+
+#======================================================================
+# Normal ASCII chars.
+#======================================================================
+# (Since they're not active, they're only evaluated in math mode)
+
+#======================================================================
+# Accents.  LaTeX Table 3.1, p.38
+#======================================================================
+# All of TeX's accents can (sorta) be handled by Unicode's combining accents
+# (which follow the character to be accented).
+# We'll let unicode normalization do the combination, if needed.
+# Also, note that \t is intended to combine multiple chars, but it appears to
+# work (via mozilla !?) best when the combining char is after the 1st char.
+# Further, the accents \d and \b seem to center the under dot or bar under multiple
+# chars --- how should this be handled in Unicode?
+
+# Since people sometimes try to get fancy by using an empty argument,
+# for each, I'm providing the combining code and an equivalent(?) spacing one.
+our %accents
+  = ('\`' => ["\x{0300}","\x{0060}"], # COMBINING GRAVE ACCENT & GRAVE ACCENT
+     "\\'"=> ["\x{0301}","\x{00B4}"], # COMBINING ACUTE ACCENT & ACUTE ACCENT
+     '\^' => ["\x{0302}","\x{005E}"], # COMBINING CIRCUMFLEX ACCENT & CIRCUMFLEX ACCENT
+     '\"' => ["\x{0308}","\x{00A8}"], # COMBINING DIAERESIS & DIAERESIS
+     '\~' => ["\x{0303}","~"],	      # COMBINING TILDE
+     '\=' => ["\x{0304}","\x{00AF}"], # COMBINING MACRON & MACRON
+     '\.' => ["\x{0307}","\x{00B7}"], # COMBINING DOT ABOVE & MIDDLE DOT (?)
+     '\u' => ["\x{0306}","\x{02D8}"], # COMBINING BREVE & BREVE
+     '\v' => ["\x{030C}","\x{02C7}"], # COMBINING CARON & CARON
+     '\H' => ["\x{030B}","\x{02DD}"], # COMBINING DOUBLE ACUTE ACCENT & non-combining
+     '\c' => ["\x{0327}","\x{00B8}"], # COMBINING CEDILLA & CEDILLA
+     '\d' => ["\x{0323}","\x{00B7}"], # COMBINING DOT BELOW & MIDDLE DOT (?)
+     '\b' => ["\x{0331}","\x{00AF}"], # COMBINING MACRON BELOW  & MACRON
+     '\t' => ["\x{0361}","-"],	# COMBINING DOUBLE INVERTED BREVE & ???? What????
+     # I doubt that latter covers multiple chars...?
+     #		'\bar'=>"\x{0304}", # COMBINING MACRON or is this the longer overbar?
+		);
+foreach my $accent (keys %accents){
+  DefConstructor($accent."{}", sub {
+    my($whatsit,$letter)=@_;
+    if(my @letters = map(($_ eq '\i ' ? 'i':$_),map($_->untex,$letter->unlist))){
+      # Put the accent AFTER the first char(?)
+      $INTESTINE->openText($letters[0].$accents{$accent}->[0].join('',@letters[1..$#letters]),
+			   $letter->getFont);}
+    else {			# Empty argument???
+      $INTESTINE->openText($accents{$accent}->[1],$whatsit->getFont); }} ); }
+
+#======================================================================
+# LaTeX; Table 3.2. Non-English Symbols, p.39
+#======================================================================
+
+# The following shouldn't appear in math.
+DefConstructor('\OE',"\x{0152}");	# LATIN CAPITAL LIGATURE OE
+DefConstructor('\oe',"\x{0153}");	# LATIN SMALL LIGATURE OE
+DefConstructor('\AE',"\x{00C6}");	# LATIN CAPITAL LETTER AE
+DefConstructor('\ae',"\x{00E6}");	# LATIN SMALL LETTER AE
+DefConstructor('\AA',"\x{00C5}");	# LATIN CAPITAL LETTER A WITH RING ABOVE
+DefConstructor('\aa',"\x{00E5}");	# LATIN SMALL LETTER A WITH RING ABOVE
+DefConstructor('\O', "\x{00D8}");	# LATIN CAPITAL LETTER O WITH STROKE
+DefConstructor('\o', "\x{00F8}");	# LATIN SMALL LETTER O WITH STROKE
+DefConstructor('\L', "\x{0141}");	# LATIN CAPITAL LETTER L WITH STROKE
+DefConstructor('\l', "\x{0142}");	# LATIN SMALL LETTER L WITH STROKE
+DefConstructor('\ss',"\x{00DF}");	# LATIN SMALL LETTER SHARP S
+
+# apparently the rest can appear in math.
+DefConstructor('\dag',   "\x{2020}");	# DAGGER
+DefConstructor('\ddag',  "\x{2021}");	# DOUBLE DAGGER
+DefConstructor('\S',     "\x{00A7}");	# SECTION SIGN
+DefConstructor('\P',     "\x{00B6}");	# PILCROW SIGN
+DefConstructor('\copyright',"\x{00A9}"); # COPYRIGHT SIGN
+DefConstructor('\pounds',"\x{00A3}");	# POUND SIGN
+
+# Special Characters.
+DefConstructor('\#',   '#');
+DefConstructor('\&',   '&amp;');
+#DefConstructor('\%',   '%');
+DefMacro('\%',Tokens(T_OTHER('%')));
+DefConstructor("\\\$", "\$");
+DefConstructor('\_',   '_');
+
+#======================================================================
+# LaTeX; Table 3.3, Greek, p.41
+#======================================================================
+
+DefMath('\alpha',     "\x{03B1}"); # GREEK SMALL LETTER ALPHA
+DefMath('\beta',      "\x{03B2}"); # GREEK SMALL LETTER BETA
+DefMath('\gamma',     "\x{03B3}"); # GREEK SMALL LETTER GAMMA
+DefMath('\delta',     "\x{03B4}"); # GREEK SMALL LETTER DELTA
+DefMath('\epsilon'  , "\x{03F5}"); # GREEK LUNATE EPSILON SYMBOL
+DefMath('\varepsilon',"\x{03B5}"); # GREEK SMALL LETTER EPSILON
+DefMath('\zeta',      "\x{03B6}"); # GREEK SMALL LETTER ZETA
+DefMath('\eta',       "\x{03B7}"); # GREEK SMALL LETTER ETA
+DefMath('\theta',     "\x{03B8}"); # GREEK SMALL LETTER THETA
+DefMath('\vartheta',  "\x{03D1}"); # GREEK THETA SYMBOL
+DefMath('\iota',      "\x{03B9}"); # GREEK SMALL LETTER IOTA
+DefMath('\kappa',     "\x{03BA}"); # GREEK SMALL LETTER KAPPA
+DefMath('\lambda',    "\x{03BB}"); # GREEK SMALL LETTER LAMDA
+DefMath('\mu',        "\x{03BC}"); # GREEK SMALL LETTER MU
+DefMath('\nu',        "\x{03BD}"); # GREEK SMALL LETTER NU
+DefMath('\xi',        "\x{03BE}"); # GREEK SMALL LETTER XI
+DefMath('\pi',        "\x{03C0}"); # GREEK SMALL LETTER PI
+DefMath('\varpi',     "\x{03D6}"); # GREEK PI SYMBOL
+DefMath('\rho',       "\x{03C1}"); # GREEK SMALL LETTER RHO
+DefMath('\varrho',    "\x{03F1}"); # GREEK RHO SYMBOL
+DefMath('\sigma',     "\x{03C3}"); # GREEK SMALL LETTER SIGMA
+DefMath('\varsigma',  "\x{03C2}"); # GREEK SMALL LETTER FINAL SIGMA
+DefMath('\tau',       "\x{03C4}"); # GREEK SMALL LETTER TAU
+DefMath('\upsilon',   "\x{03C5}"); # GREEK SMALL LETTER UPSILON
+DefMath('\phi',       "\x{03D5}"); # GREEK PHI SYMBOL
+DefMath('\varphi',    "\x{03C6}"); # GREEK SMALL LETTER PHI
+DefMath('\chi',       "\x{03C7}"); # GREEK SMALL LETTER CHI
+DefMath('\psi',       "\x{03C8}"); # GREEK SMALL LETTER PSI
+DefMath('\omega',     "\x{03C9}"); # GREEK SMALL LETTER OMEGA
+DefMath('\Gamma',     "\x{0393}"); # GREEK CAPITAL LETTER GAMMA
+DefMath('\Delta',     "\x{0394}"); # GREEK CAPITAL LETTER DELTA
+DefMath('\Theta',     "\x{0398}"); # GREEK CAPITAL LETTER THETA
+DefMath('\Lambda',    "\x{039B}"); # GREEK CAPITAL LETTER LAMDA
+DefMath('\Xi',        "\x{039E}"); # GREEK CAPITAL LETTER XI
+DefMath('\Pi',        "\x{03A0}"); # GREEK CAPITAL LETTER PI
+DefMath('\Sigma',     "\x{03A3}"); # GREEK CAPITAL LETTER SIGMA
+DefMath('\Upsilon',   "\x{03A5}"); # GREEK CAPITAL LETTER UPSILON
+DefMath('\Phi',       "\x{03A6}"); # GREEK CAPITAL LETTER PHI
+DefMath('\Psi',       "\x{03A8}"); # GREEK CAPITAL LETTER PSI
+DefMath('\Omega',     "\x{03A9}"); # GREEK CAPITAL LETTER OMEGA
+
+#======================================================================
+# LaTeX; Table 3.4. Binary Operation Symbols, p.42
+#======================================================================
+
+DefMath('\pm',        "\x{00B1}", role=>'ADDOP'); # PLUS-MINUS SIGN
+DefMath('\mp',        "\x{2213}", role=>'ADDOP'); # MINUS-OR-PLUS SIGN
+DefMath('\times',     "\x{00D7}", role=>'MULOP'); # MULTIPLICATION SIGN
+DefMath('\div',       "\x{00F7}", role=>'MULOP'); # DIVISION SIGN
+DefMath('\ast',       "\x{2217}", role=>'MULOP'); # ASTERISK OPERATOR
+DefMath('\star',      "\x{22C6}", role=>'MULOP'); # STAR OPERATOR
+DefMath('\circ',      "\x{2218}", role=>'MULOP'); # RING OPERATOR
+DefMath('\bullet',    "\x{2219}", role=>'MULOP'); # BULLET OPERATOR
+DefMath('\cdot',      "\x{22C5}", role=>'MULOP'); # DOT OPERATOR
+
+# Need to classify set operations more carefully....
+DefMath('\cap',       "\x{2229}", role=>'ADDOP'); # INTERSECTION
+DefMath('\cup',       "\x{222A}", role=>'ADDOP'); # UNION
+DefMath('\uplus',     "\x{228C}", role=>'ADDOP'); # MULTISET
+DefMath('\sqcap',     "\x{2293}", role=>'ADDOP'); # SQUARE CAP
+DefMath('\sqcup',     "\x{2294}", role=>'ADDOP'); # SQUARE CUP
+DefMath('\vee',       "\x{2228}", role=>'ADDOP'); # LOGICAL OR
+DefMath('\lor',       "\x{2228}", role=>'ADDOP'); # LOGICAL OR
+DefMath('\wedge',     "\x{2227}", role=>'ADDOP'); # LOGICAL AND
+DefMath('\land',      "\x{2227}", role=>'ADDOP'); # LOGICAL AND
+DefMath('\setminus',  "\x{2216}", role=>'ADDOP'); # SET MINUS
+DefMath('\wr',        "\x{2240}", role=>'MULOP'); # WREATH PRODUCT
+
+# Should this block be ADDOP or something else?
+DefMath('\diamond',        "\x{22C4}", role=>'ADDOP'); # DIAMOND OPERATOR
+DefMath('\bigtriangleup',  "\x{25B3}", role=>'ADDOP'); # WHITE UP-POINTING TRIANGLE
+DefMath('\bigtriangledown',"\x{25BD}", role=>'ADDOP'); # WHITE DOWN-POINTING TRIANGLE
+DefMath('\triangleleft',   "\x{25C1}", role=>'ADDOP'); # WHITE LEFT-POINTING SMALL TRIANGLE
+DefMath('\triangleright',  "\x{25B7}", role=>'ADDOP'); # WHITE RIGHT-POINTING SMALL TRIANGLE
+DefMath('\lhd',            "\x{22B2}", role=>'ADDOP'); # NORMAL SUBGROUP OF
+DefMath('\rhd',            "\x{22B3}", role=>'ADDOP'); # CONTAINS AS NORMAL SUBGROUP
+DefMath('\unlhd',          "\x{22B4}", role=>'ADDOP'); # NORMAL SUBGROUP OF OR EQUAL TO
+DefMath('\unrhd',          "\x{22B5}", role=>'ADDOP'); # CONTAINS AS NORMAL SUBGROUP OR EQUAL TO
+
+DefMath('\oplus',     "\x{2295}", role=>'ADDOP'); # CIRCLED PLUS
+DefMath('\ominus',    "\x{2296}", role=>'ADDOP'); # CIRCLED MINUS
+DefMath('\otimes',    "\x{2297}", role=>'MULOP'); # CIRCLED TIMES
+DefMath('\oslash',    "\x{2298}", role=>'MULOP'); # CIRCLED DIVISION SLASH
+DefMath('\odot',      "\x{2299}", role=>'MULOP'); # CIRCLED DOT OPERATOR
+DefMath('\bigcirc',   "\x{25CB}", role=>'MULOP'); # WHITE CIRCLE
+DefMath('\dagger',    "\x{2020}", role=>'MULOP'); # DAGGER
+DefMath('\ddagger',   "\x{2021}", role=>'MULOP'); # DOUBLE DAGGER
+DefMath('\amalg',     "\x{2210}", role=>'MULOP'); # N-ARY COPRODUCT
+
+DefMath('\dot',"\x{22C5}", role=>'MULOP');	# DOT OPERATOR
+# Discretionary times; just treat as invisible ?
+DefMath('\*',"\x{2062}", role=>'MULOP'); # INVISIBLE TIMES (or MULTIPLICATION SIGN = 00D7)
+
+# And also
+
+#DefMath('\ldots',"\x{2026}", role=>'ID'); # HORIZONTAL ELLIPSIS
+# Ah, since \ldots can appear in text....
+DefConstructor('\ldots',"?IfMath(<XMTok name='ldots' font='#font' role='ID'>\x{2026}</XMTok>)(\x{2026})",
+	      properties=>{font=>sub{ $STOMACH->getFont->merge(family=>'serif');}} ); # Since not DefMath!
+DefMath('\cdots',"\x{22EF}", role=>'ID'); # MIDLINE HORIZONTAL ELLIPSIS
+DefMath('\vdots',"\x{22EE}", role=>'ID'); # VERTICAL ELLIPSIS
+DefMath('\ddots',"\x{22F1}", role=>'ID'); # DOWN RIGHT DIAGONAL ELLIPSIS
+DefMath('\colon',':');
+# Note that amsmath redefines \dots to be `smart'.
+# Aha, also can be in text...
+DefConstructor('\dots',"?IfMath(<XMTok name='dots' font='#font' role='ID'>\x{2026}</XMTok>)(\x{2026})",
+	      properties=>{font=>sub{ $STOMACH->getFont->merge(family=>'serif');}} ); # Since not DefMath!
+# And while we're at it...
+DefMathFilter('\cdot\cdot\cdot','\cdots');
+DefTextFilter('...','\ldots');
+DefMathFilter('...','\ldots');
+
+#======================================================================
+# LaTeX; Table 3.5. Relation Symbols, p.43
+#======================================================================
+DefMath('\le',        "\x{2264}", role=>'RELOP'); # LESS-THAN OR EQUAL TO
+DefMath('\ge',        "\x{2265}", role=>'RELOP'); # GREATER-THAN OR EQUAL TO
+DefMath('\ne',        "\x{2260}", role=>'RELOP'); # NOT EQUAL TO
+ 
+DefMath('\leq',       "\x{2264}", role=>'RELOP'); # LESS-THAN OR EQUAL TO
+DefMath('\prec',      "\x{227A}", role=>'RELOP'); # PRECEDES
+DefMath('\preceq',    "\x{2AAF}", role=>'RELOP'); # PRECEDES ABOVE SINGLE-LINE EQUALS SIGN
+DefMath('\ll',        "\x{226A}", role=>'RELOP'); # MUCH LESS-THAN
+DefMath('\subset',    "\x{2282}", role=>'RELOP'); # SUBSET OF
+DefMath('\subseteq',  "\x{2286}", role=>'RELOP'); # SUBSET OF OR EQUAL TO
+DefMath('\sqsubset',  "\x{228F}", role=>'RELOP'); # SQUARE IMAGE OF (latexsym package only!!)
+DefMath('\sqsubseteq',"\x{2291}", role=>'RELOP'); # SQUARE IMAGE OF OR EQUAL TO
+DefMath('\in',        "\x{2208}", role=>'RELOP'); # ELEMENT OF
+DefMath('\vdash',     "\x{22A3}", role=>'RELOP'); # LEFT TACK
+
+DefMath('\geq',       "\x{2265}", role=>'RELOP'); # GREATER-THAN OR EQUAL TO
+DefMath('\succ',      "\x{227B}", role=>'RELOP'); # SUCCEEDS
+DefMath('\succeq',    "\x{2AB0}", role=>'RELOP'); # SUCCEEDS ABOVE SINGLE-LINE EQUALS SIGN
+DefMath('\gg',        "\x{226B}", role=>'RELOP'); # MUCH GREATER-THAN
+DefMath('\supset',    "\x{2283}", role=>'RELOP'); # SUPERSET OF
+DefMath('\supseteq',  "\x{2287}", role=>'RELOP'); # SUPERSET OF OR EQUAL TO
+DefMath('\sqsupset',  "\x{2290}", role=>'RELOP'); # SQUARE ORIGINAL OF (latexsym only!)
+DefMath('\sqsupseteq',"\x{2292}", role=>'RELOP'); # SQUARE ORIGINAL OF OR EQUAL TO
+DefMath('\ni',        "\x{220B}", role=>'RELOP'); # CONTAINS AS MEMBER
+DefMath('\dashv',     "\x{22A2}", role=>'RELOP'); # RIGHT TACK
+
+DefMath('\equiv',     "\x{2261}", role=>'RELOP'); # IDENTICAL TO
+DefMath('\sim',       "\x{223C}", role=>'RELOP'); # TILDE OPERATOR
+DefMath('\simeq',     "\x{2243}", role=>'RELOP'); # ASYMPTOTICALLY EQUAL TO
+DefMath('\asymp',     "\x{224D}", role=>'RELOP'); # EQUIVALENT TO
+DefMath('\approx',    "\x{2248}", role=>'RELOP'); # ALMOST EQUAL TO
+DefMath('\cong',      "\x{2245}", role=>'RELOP'); # APPROXIMATELY EQUAL TO
+DefMath('\neq',       "\x{2260}", role=>'RELOP'); # NOT EQUAL TO
+DefMath('\doteq',     "\x{2250}", role=>'RELOP'); # APPROACHES THE LIMIT
+DefMath('\notin',     "\x{2209}", role=>'RELOP'); # NOT AN ELEMENT OF
+
+DefMath('\models',    "\x{22A7}", role=>'RELOP'); # MODELS
+DefMath('\perp',      "\x{22A5}", role=>'RELOP'); # UP TACK
+DefMath('\mid',       "\x{2223}", role=>'RELOP'); # DIVIDES
+DefMath('\parallel',  "\x{2225}", role=>'VERTBAR'); # PARALLEL TO
+DefMath('\bowtie',    "\x{22C8}", role=>'RELOP');   # BOWTIE
+DefMath('\Join',      "\x{2A1D}", role=>'RELOP');   # JOIN
+DefMath('\smile',     "\x{2323}", role=>'RELOP');   # SMILE
+DefMath('\frown',     "\x{2322}", role=>'RELOP');   # FROWN
+DefMath('\propto',    "\x{221D}", role=>'RELOP'); # PROPORTIONAL TO
+
+DefMath('\gtrless',   "\x{2276}", role=>'RELOP'); # LESS-THAN OR GREATER-THAN
+
+DefMath('\not',"not", role=>'PREFIX');
+DefMathFilter('\not=','\ne');
+DefMathFilter('\not\in','\notin');
+
+# and many more!
+
+# Have to synthesize various not-operators (a nice shorthand?)
+# I've basically put in every `not' form from Unicode 2200-226C, for which there is 
+# a corresponding TeX operator.
+# BUT note that most of these are also defined in amssymb!
+# .. I'd just as soon define them here, but shouldn't steal the symbols!
+DefMath('\@not@lt', "\x{226E}", role=>'RELOP', untex=>'\not<'); # NOT LESS-THAN
+DefMathFilter('\not<','\@not@lt');
+DefMath('\@not@gt', "\x{226F}", role=>'RELOP', untex=>'\not>'); # NOT GREATER-THAN
+DefMathFilter('\not>','\@not@gt');
+DefMath('\@not@le', "\x{2270}", role=>'RELOP', untex=>'\not\le'); # NEITHER LESS-THAN NOR EQUAL TO
+DefMathFilter('\not\le','\@not@le');
+DefMathFilter('\not\leq','\@not@le');
+DefMath('\@not@ge', "\x{2271}", role=>'RELOP', untex=>'\not\ge'); # NEITHER GREATER-THAN NOR EQUAL TO
+DefMathFilter('\not\ge','\@not@ge');
+DefMathFilter('\not\geq','\@not@ge');
+
+
+DefMath('\@not@prec', "\x{2280}", role=>'RELOP', untex=>'\not\prec'); # DOES NOT PRECEDE
+DefMathFilter('\not\prec','\@not@prec');
+DefMath('\@not@succ', "\x{2281}", role=>'RELOP', untex=>'\not\succ'); # DOES NOT SUCCEED
+DefMathFilter('\not\succ','\@not@succ');
+DefMath('\@not@preceq', "\x{22E0}", role=>'RELOP', untex=>'\not\preceq'); # DOES NOT PRECEDE OR EQUAL
+DefMathFilter('\not\preceq','\@not@prec');
+DefMath('\@not@succeq', "\x{22E1}", role=>'RELOP', untex=>'\not\succeq'); # DOES NOT SUCCEED OR EQUAL
+DefMathFilter('\not\succeq','\@not@succeq');
+DefMath('\@not@subset', "\x{2284}", role=>'RELOP', untex=>'\not\subset'); # NOT A SUBSET OF
+DefMathFilter('\not\subset','\@not@subset');
+DefMath('\@not@supset', "\x{2285}", role=>'RELOP', untex=>'\not\supset');	# NOT A SUPERSET OF
+DefMathFilter('\not\supset','\@not@supset');
+DefMath('\@not@subseteq', "\x{2288}", role=>'RELOP', untex=>'\not\subseteq'); # NEITHER A SUBSET OF NOR EQUAL TO
+DefMathFilter('\not\subseteq','\@not@subseteq');
+DefMath('\@not@supseteq', "\x{2289}", role=>'RELOP', untex=>'\not\supseteq'); # NEITHER A SUPERSET OF NOR EQUAL TO
+DefMathFilter('\not\supseteq','\@not@supseteq');
+DefMath('\@not@sqsubseteq', "\x{22E2}", role=>'RELOP', # NOT SQUARE IMAGE OF OR EQUAL TO
+	  untex=>'\not\sqsubseteq');
+DefMathFilter('\not\sqsubseteq','\@not@sqsubseteq');
+DefMath('\@not@sqsupseteq', "\x{22E3}", role=>'RELOP', # NOT SQUARE ORIGINAL OF OR EQUAL TO
+	  untex=>'\not\sqsupseteq');
+DefMathFilter('\not\sqsupseteq','\@not@sqsupseteq');
+
+
+DefMath('\@not@equiv', "\x{2262}", role=>'RELOP', untex=>'\not\equiv'); # NOT IDENTICAL TO
+DefMathFilter('\not\equiv','\@not@equiv');
+DefMath('\@not@asymp', "\x{226D}", role=>'RELOP', untex=>'\not\asymp');	# NOT EQUIVALENT TO
+DefMathFilter('\not\asymp','\@not@asymp');
+DefMath('\@not@approx', "\x{2249}", role=>'RELOP', untex=>'\not\approx'); # NOT ALMOST EQUAL TO
+DefMathFilter('\not\approx','\@not@approx');
+
+
+DefMath('\@not@lhd',       "\x{22EA}", role=>'RELOP', untex=>'\not\lhd'); # NOT NORMAL SUBGROUP OF
+DefMathFilter('\not\lhd','\@not@lhd');
+DefMath('\@not@rhd',       "\x{22EB}", role=>'RELOP', # DOES NOT CONTAIN AS NORMAL SUBGROUP
+	 untex=>'\not\rhd');
+DefMathFilter('\not\rhd','\@not@rhd');
+DefMath('\@not@unlhd',     "\x{22EC}", role=>'RELOP', # NOT NORMAL SUBGROUP OF OR EQUAL TO
+	 untex=>'\not\unlhd');
+DefMathFilter('\not\unlhd','\@not@unlhd');
+DefMath('\@not@unrhd',     "\x{22ED}", role=>'RELOP', # DOES NOT CONTAIN AS NORMAL SUBGROUP OR EQUAL
+	 untex=>'\not\unrhd');
+DefMathFilter('\not\unrhd','\@not@unrhd');
+
+
+#======================================================================
+# LaTeX; Table 3.6. Arrow Symbols, p.43
+#======================================================================
+# (treat them as RELOP for now ???)
+
+DefMath('\leftarrow',         "\x{2190}", role=>'ARROW'); # LEFTWARDS ARROW
+DefMath('\Leftarrow',         "\x{21D0}", role=>'ARROW'); # LEFTWARDS DOUBLE ARROW
+DefMath('\rightarrow',        "\x{2192}", role=>'ARROW'); # RIGHTWARDS ARROW
+DefMath('\Rightarrow',        "\x{21D2}", role=>'ARROW'); # RIGHTWARDS DOUBLE ARROW
+DefMath('\leftrightarrow',    "\x{2194}", role=>'METARELOP');	# LEFT RIGHT ARROW
+DefMath('\Leftrightarrow',    "\x{21D4}", role=>'METARELOP'); # LEFT RIGHT DOUBLE ARROW
+DefMath('\iff',               "\x{21D4}", role=>'METARELOP'); # LEFT RIGHT DOUBLE ARROW
+DefMath('\mapsto',            "\x{21A6}", role=>'ARROW'); # RIGHTWARDS ARROW FROM BAR
+DefMath('\hookleftarrow',     "\x{21A9}", role=>'ARROW'); # LEFTWARDS ARROW WITH HOOK
+DefMath('\leftharpoonup',     "\x{21BC}", role=>'ARROW'); # LEFTWARDS HARPOON WITH BARB UPWARDS
+DefMath('\leftharpoondown',   "\x{21BD}", role=>'ARROW'); # LEFTWARDS HARPOON WITH BARB DOWNWARDS
+DefMath('\rightleftharpoons', "\x{21CC}", role=>'METARELOP');	# RIGHTWARDS HARPOON OVER LEFTWARDS HARPOON
+
+DefMath('\longleftarrow',     "\x{27F5}", role=>'ARROW'); # LONG LEFTWARDS ARROW
+DefMath('\Longleftarrow',     "\x{27F8}", role=>'ARROW'); # LONG LEFTWARDS DOUBLE ARROW
+DefMath('\longrightarrow',    "\x{27F6}", role=>'ARROW'); # LONG RIGHTWARDS ARROW
+DefMath('\Longrightarrow',    "\x{27F9}", role=>'ARROW'); # LONG RIGHTWARDS DOUBLE ARROW
+DefMath('\longleftrightarrow',"\x{27F7}", role=>'METARELOP');	# LONG LEFT RIGHT ARROW
+DefMath('\Longleftrightarrow',"\x{27FA}", role=>'METARELOP'); # LONG LEFT RIGHT DOUBLE ARROW
+DefMath('\longmapsto',        "\x{27FC}", role=>'ARROW'); # LONG RIGHTWARDS ARROW FROM BAR
+DefMath('\hookrightarrow',    "\x{21AA}", role=>'ARROW'); # RIGHTWARDS ARROW WITH HOOK
+DefMath('\rightharpoonup',    "\x{21C0}", role=>'ARROW'); # RIGHTWARDS HARPOON WITH BARB UPWARDS
+DefMath('\rightharpoondown',  "\x{21C1}", role=>'ARROW'); # RIGHTWARDS HARPOON WITH BARB DOWNWARDS
+DefMath('\leadsto',           "\x{219D}", role=>'ARROW'); # RIGHTWARDS WAVE ARROW
+
+DefMath('\uparrow',           "\x{2191}", role=>'ARROW'); # UPWARDS ARROW
+DefMath('\Uparrow',           "\x{21D1}", role=>'ARROW'); # UPWARDS DOUBLE ARROW
+DefMath('\downarrow',         "\x{2193}", role=>'ARROW'); # DOWNWARDS ARROW
+DefMath('\Downarrow',         "\x{21D3}", role=>'ARROW'); # DOWNWARDS DOUBLE ARROW
+DefMath('\updownarrow',       "\x{2195}", role=>'ARROW'); # UP DOWN ARROW
+DefMath('\Updownarrow',       "\x{21D5}", role=>'ARROW'); # UP DOWN DOUBLE ARROW
+DefMath('\nearrow',           "\x{2197}", role=>'ARROW'); # NORTH EAST ARROW
+DefMath('\searrow',           "\x{2198}", role=>'ARROW'); # SOUTH EAST ARROW
+DefMath('\swarrow',           "\x{2199}", role=>'ARROW'); # SOUTH WEST ARROW
+DefMath('\nwarrow',           "\x{2196}", role=>'ARROW'); # NORTH WEST ARROW
+
+#======================================================================
+# LaTeX; Table 3.7. Miscellaneous Symbols, p.43
+#======================================================================
+# Some should be differential operators, qualifiers, ...
+DefMath('\aleph',    "\x{2135}");   # ALEF SYMBOL
+DefMath('\hbar',     "\x{210F}", role=>'ID');	# PLANCK CONSTANT OVER TWO PI
+DefMath('\imath',    "\x{0131}");   # LATIN SMALL LETTER DOTLESS I
+DefMath('\jmath',    "j");	    # Unicode?
+DefMath('\ell',      "\x{2113}");   # SCRIPT SMALL L
+DefMath('\wp',       "\x{2118}", name=>'Weierstrassp'); # SCRIPT CAPITAL P
+DefMath('\Re',       "\x{211C}", role=>'FUNCTION'); # BLACK LETTER CAPITAL R
+DefMath('\Im',       "\x{2111}", role=>'FUNCTION'); # BLACK LETTER CAPITAL I
+DefMath('\mho',      "\x{2127}");   # INVERTED OHM SIGN
+
+DefMath('\prime',    "\x{2032}", role=>'SUPOP');    # PRIME
+DefMath('\emptyset', "\x{2205}", role=>'ID');	    # EMPTY SET
+DefMath('\nabla',    "\x{2207}", role=>'FUNCTION'); # NABLA
+DefMath('\surd',     "\x{221A}", role=>'FUNCTION');  # SQUARE ROOT
+DefMath('\top',      "\x{22A4}");		     # DOWN TACK
+DefMath('\bot',      "\x{22A5}");		     # UP TACK
+DefMath('\|',        "\x{2225}", role=>'VERTBAR'); # PARALLEL TO
+DefMath('\angle',    "\x{2220}");		   # ANGLE
+
+# NOTE: This is probably the wrong role.
+# Also, should probably carry info about Binding for OpenMath
+DefMath('\forall',   "\x{2200}", role=>'FUNCTION'); # FOR ALL
+DefMath('\exists',   "\x{2203}", role=>'FUNCTION'); # THERE EXISTS
+DefMath('\neg',      "\x{00AC}", role=>'FUNCTION'); # NOT SIGN
+DefMath('\flat',     "\x{266D}"); # MUSIC FLAT SIGN
+DefMath('\natural',  "\x{266E}"); # MUSIC NATURAL SIGN
+DefMath('\sharp',    "\x{266F}"); # MUSIC SHARP SIGN
+DefMath('\backslash',"\x{005C}", role=>'MULOP');    # REVERSE SOLIDUS
+DefMath('\partial',  "\x{2202}", role=>'FUNCTION'); # PARTIAL DIFFERENTIAL
+
+DefMath('\@not@exists', "\x{2204}", role=>'FUNCTION', untex=>'\not\exists');	# THERE DOES NOT EXIST
+DefMathFilter('\not\exists','\@not@exists');
+
+DefMath('\infty',    "\x{221E}", role=>'ID', name=>'Infinity'); # INFINITY
+DefMath('\Box',      "\x{25A1}");  # WHITE SQUARE
+DefMath('\Diamond',  "\x{25C6}");  # WHITE DIAMOND
+DefMath('\triangle', "\x{25B2}");  # WHITE UP-POINTING TRIANGLE
+DefMath('\clubsuit', "\x{2663}");  # BLACK CLUB SUIT
+DefMath('\diamondsuit',"\x{2662}");	# WHITE DIAMOND SUIT
+DefMath('\heartsuit',"\x{2661}");	# WHITE HEART SUIT
+DefMath('\spadesuit',"\x{2660}");	# BLACK SPADE SUIT
+
+#======================================================================
+# LaTeX; Table 3.8. Variable-sized Symbols, p.44.
+#======================================================================
+# NOTE: Almost got this right!
+#  These stackscripts=>'yes' should really set it to 'yes' IFF we
+# are currently in displaystyle!
+# IE. we need to evaluate the properties in the digestion context!!!!
+
+sub doStackscripts { ($STOMACH->getMathStyle eq 'display' ? 'yes' : undef); }
+
+DefMath('\sum',      "\x{2211}", role=>'SUMOP', stackscripts=>\&doStackscripts); # N-ARY SUMMATION
+DefMath('\prod',     "\x{220F}", role=>'SUMOP', stackscripts=>\&doStackscripts); # N-ARY PRODUCT
+DefMath('\coprod',   "\x{2210}", role=>'SUMOP', stackscripts=>\&doStackscripts); # N-ARY COPRODUCT
+DefMath('\int',      "\x{222B}", role=>'INTOP'); # INTEGRAL
+DefMath('\oint',     "\x{222E}", role=>'INTOP'); # CONTOUR INTEGRAL
+DefMath('\bigcap',   "\x{22C2}", role=>'SUMOP', stackscripts=>\&doStackscripts); # N-ARY INTERSECTION
+DefMath('\bigcup',   "\x{22C3}", role=>'SUMOP', stackscripts=>\&doStackscripts); # N-ARY UNION
+DefMath('\bigsqcup', "\x{2294}", role=>'SUMOP', stackscripts=>\&doStackscripts); # SQUARE CUP (N-ARY ???)
+DefMath('\bigvee',   "\x{22C1}", role=>'SUMOP', stackscripts=>\&doStackscripts); # N-ARY LOGICAL OR
+DefMath('\bigwedge', "\x{22C0}", role=>'SUMOP', stackscripts=>\&doStackscripts); # N-ARY LOGICAL AND
+DefMath('\bigodot',  "\x{22A1}", role=>'SUMOP', stackscripts=>\&doStackscripts); # CIRCLED DOT OPERATOR (N-ARY ???)
+DefMath('\bigotimes',"\x{2297}", role=>'SUMOP', stackscripts=>\&doStackscripts); # CIRCLED TIMES (N-ARY ?)
+DefMath('\bigoplus', "\x{2295}", role=>'SUMOP', stackscripts=>\&doStackscripts); # CIRCLED PLUS (N-ARY ?)
+DefMath('\biguplus', "\x{2296}", role=>'SUMOP', stackscripts=>\&doStackscripts); # CIRCLED MINUS (N-ARY ?)
+
+
+DefMath('\smallint',"\x{222B}", name=>'Integral', role=>'INTOP', size=>'small', stackscripts=>\&doStackscripts); # INTEGRAL
+
+DefConstructor('\limits',  sub { $INTESTINE->getNode->lastChild->setAttribute(stackscripts=>'yes'); });
+DefConstructor('\nolimits',sub { $INTESTINE->getNode->lastChild->setAttribute(stackscripts=>'no'); });
+
+#======================================================================
+# LaTeX; Table 3.9. Log-like Functions, p.44.
+#======================================================================
+# NOTE: Classifying some as TRIGFUNCTION might clarify 'pi' ambiguities ?
+DefMath('\arccos', "arccos", role=>'FUNCTION');
+DefMath('\arcsin', "arcsin", role=>'FUNCTION');
+DefMath('\arctan', "arctan", role=>'FUNCTION');
+DefMath('\arg',    "arg", role=>'FUNCTION');
+
+DefMath('\cos',    "cos",  role=>'FUNCTION');
+DefMath('\cosh',   "cosh", role=>'FUNCTION');
+DefMath('\cot',    "cot",  role=>'FUNCTION');
+DefMath('\coth',   "coth", role=>'FUNCTION');
+
+DefMath('\csc',    "csc", role=>'FUNCTION');
+DefMath('\deg',    "deg", role=>'FUNCTION');
+DefMath('\det',    "det", role=>'LIMITOP', stackscripts=>\&doStackscripts);
+DefMath('\dim',    "dim", role=>'LIMITOP');
+
+DefMath('\exp',    "exp", role=>'FUNCTION');
+DefMath('\gcd',    "gcd", role=>'FUNCTION', stackscripts=>\&doStackscripts);
+DefMath('\hom',    "hom", role=>'FUNCTION');
+DefMath('\inf',    "inf", role=>'LIMITOP', stackscripts=>\&doStackscripts);
+
+DefMath('\ker',    "ker", role=>'FUNCTION');
+DefMath('\lg',     "lg",  role=>'FUNCTION');
+DefMath('\lim',    "lim", role=>'LIMITOP', stackscripts=>\&doStackscripts);
+DefMath('\liminf', "lim inf", role=>'LIMITOP', stackscripts=>\&doStackscripts);
+
+DefMath('\limsup', "lim sup", role=>'LIMITOP', stackscripts=>\&doStackscripts);
+DefMath('\ln',     "ln",  role=>'FUNCTION');
+DefMath('\log',    "log", role=>'FUNCTION');
+DefMath('\max',    "max", role=>'LIMITOP', stackscripts=>\&doStackscripts);
+
+DefMath('\min',    "min", role=>'LIMITOP', stackscripts=>\&doStackscripts);
+DefMath('\Pr',     "Pr",  role=>'FUNCTION', stackscripts=>\&doStackscripts);
+DefMath('\sec',    "sec", role=>'FUNCTION');
+DefMath('\sin',    "sin", role=>'FUNCTION');
+
+DefMath('\sinh',   "sinh", role=>'FUNCTION');
+DefMath('\sup',    "sup",  role=>'LIMITOP', stackscripts=>\&doStackscripts);
+DefMath('\tan',    "tan",  role=>'FUNCTION');
+DefMath('\tanh',   "tanh", role=>'FUNCTION');
+
+#======================================================================
+# LaTeX; Table 3.10. Delimiters, p.47
+#======================================================================
+
+DefMath('\{',        '{',        role=>'OPEN');
+DefMath('\lbrace',   "{",        role=>'OPEN');
+DefMath('\lbrack',   "[",        role=>'OPEN');
+DefMath('\lfloor',   "\x{230A}", role=>'OPEN'); # LEFT FLOOR
+DefMath('\lceil',    "\x{2308}", role=>'OPEN'); # LEFT CEILING
+DefMath('\langle',   "\x{2329}", role=>'OPEN');   # LEFT-POINTING ANGLE BRACKET
+DefMath('\}',        '}',        role=>'CLOSE');
+DefMath('\rbrace',   "}",        role=>'CLOSE');
+DefMath('\rbrack',   "]",        role=>'CLOSE');
+DefMath('\rfloor',   "\x{230B}", role=>'CLOSE'); # RIGHT FLOOR
+DefMath('\rceil',    "\x{2309}", role=>'CLOSE'); # RIGHT CEILING
+DefMath('\rangle',   "\x{232A}", role=>'CLOSE');	# RIGHT-POINTING ANGLE BRACKET
+# Note that a variety of other arrows are also defined as delimiters,
+# as far as TeX is concerned (See p.146).
+# However, it isn't clear that these should get roles of OPEN|CLOSE (?)
+DefConstructor('\left Token ',"<XMWrap role='OPEN'>#1</XMWrap>");
+DefConstructor('\right Token ',"<XMWrap role='CLOSE'>#1</XMWrap>");
+
+# Defined in e-Tex and other places.
+DefConstructor('\middle Token ',"<XMWrap role='MIDDLE' style='stretchy'>#1</XMWrap>");
+
+DefConstructor('\bigl Token',"<XMWrap role='OPEN' style='big'>#1</XMWrap>");
+DefConstructor('\bigm Token',"<XMWrap role='MIDDLE' style='big'>#1</XMWrap>");
+DefConstructor('\bigr Token',"<XMWrap role='CLOSE' style='big'>#1</XMWrap>");
+DefConstructor('\Bigl Token',"<XMWrap role='OPEN' style='Big'>#1</XMWrap>");
+DefConstructor('\Bigm Token',"<XMWrap role='MIDDLE' style='Big'>#1</XMWrap>");
+DefConstructor('\Bigr Token',"<XMWrap role='CLOSE' style='Big'>#1</XMWrap>");
+DefConstructor('\biggl Token',"<XMWrap role='OPEN' style='bigg'>#1</XMWrap>");
+DefConstructor('\biggm Token',"<XMWrap role='MIDDLE' style='bigg'>#1</XMWrap>");
+DefConstructor('\biggr Token',"<XMWrap role='CLOSE' style='bigg'>#1</XMWrap>");
+DefConstructor('\Biggl Token',"<XMWrap role='OPEN' style='Bigg'>#1</XMWrap>");
+DefConstructor('\Biggm Token',"<XMWrap role='MIDDLE' style='Bigg'>#1</XMWrap>");
+DefConstructor('\Biggr Token',"<XMWrap role='CLOSE' style='Bigg'>#1</XMWrap>");
+
+# ?
+DefConstructor('\big Token',"<XMWrap style='big'>#1</XMWrap>");
+DefConstructor('\Big Token',"<XMWrap style='Big'>#1</XMWrap>");
+DefConstructor('\bigg Token',"<XMWrap style='bigg'>#1</XMWrap>");
+DefConstructor('\Bigg Token',"<XMWrap style='Bigg'>#1</XMWrap>");
+
+DefMath('\vert','|', role=>'VERTBAR');
+DefMath('\Vert',"\x{2225}", role=>'VERTBAR'); # PARALLEL TO
+
+DefConstructor('\phantom{}',"?IfMath(<XMHint name='phantom'/>)()");
+DefConstructor('\hphantom{}',"?IfMath(<XMHint name='hphantom'/>)()");
+DefConstructor('\vphantom{}',"?IfMath(<XMHint name='vphantom'/>)()");
+DefConstructor('\mathstrut{}',"?IfMath(<XMHint name='mathstrut'/>)()");
+DefConstructor('\smash{}',"#1"); # well, what?
+
+#======================================================================
+# Math Accents.
+#======================================================================
+# LaTeX; Table 3.11. Math Mode Accents, p.50.
+# Are these all TeX (or LaTeX)?
+
+DefMath('\hat{}',       "\x{005E}", operator_role=>'OVERACCENT'); # CIRCUMFLEX ACCENT
+DefMath('\check{}',     "\x{2713}", operator_role=>'OVERACCENT'); # CHECK MARK
+DefMath('\breve{}',     "\x{02D8}", operator_role=>'OVERACCENT'); # BREVE
+DefMath('\acute{}',     "\x{00B4}", operator_role=>'OVERACCENT'); # ACUTE ACCENT
+DefMath('\grave{}',     "\x{0060}", operator_role=>'OVERACCENT'); # GRAVE ACCENT
+DefMath('\tilde{}',     "\x{007E}", operator_role=>'OVERACCENT'); # TILDE
+DefMath('\bar{}',       "\x{00AF}", operator_role=>'OVERACCENT'); # MACRON
+DefMath('\vec{}',       "\x{2192}", operator_role=>'OVERACCENT'); # RIGHTWARDS ARROW
+DefMath('\dot{}',       "\x{02D9}", operator_role=>'OVERACCENT'); # DOT ABOVE
+DefMath('\ddot{}',      "\x{00A8}", operator_role=>'OVERACCENT'); # DIAERESIS
+DefMath('\overline{}',  "\x{00AF}", operator_role=>'OVERACCENT'); # MACRON
+DefMath('\overbrace{}', "\x{FE37}", operator_role=>'OVERACCENT', # PRESENTATION FORM FOR VERTICAL LEFT CURLY BRACKET
+	stackscripts=>'yes');
+DefMath('\widehat{}',   "\x{005E}", operator_role=>'OVERACCENT'); # CIRCUMFLEX ACCENT [plain? also amsfonts]
+DefMath('\widetilde{}', "\x{007E}", operator_role=>'OVERACCENT'); # TILDE [plain? also amsfonts]
+
+DefMath('\underline{}', "\x{00AF}", operator_role=>'UNDERACCENT'); # MACRON
+DefMath('\underbrace{}',"\x{FE38}", operator_role=>'UNDERACCENT', # PRESENTATION FORM FOR VERTICAL RIGHT CURLY BRACKET
+	stackscripts=>'yes');
+DefMath('\overrightarrow{}', "\x{2192}", operator_role=>'OVERACCENT');
+DefMath('\overleftarrow{}', "\x{2190}", operator_role=>'OVERACCENT');
+
+#**********************************************************************
+# Stray stuff .... where to ?
+#**********************************************************************
+# These 3 should have some `name' assigned ... but what???
+
+DefConstructor('\mathrel{}',"<XMWrap role='RELOP'>#1</XMWrap>");
+DefConstructor('\mathop{}', "<XMWrap role='FUNCTION'>#1</XMWrap>");
+
+
+DefMacro('\hiderel{}', "#1"); # Just ignore, for now...
+# ???? this ain't latex...
+# See amsmath's \genfrac
+#DefConstructor('\stacked{}{}","<STACKED/>");
+
+DefConstructor('\hbox{}', "<text>#1</text>", mode=>'text');
+DefMacro('\strut','');
+DefConstructor('\quad', "?IfMath(<XMHint name='quad'/>)(\x{2001})"); # EM QUAD
+DefConstructor('\qquad',"?IfMath(<XMHint name='qquad'/>)(\x{2001}\x{2001})"); # EM QUAD
+
+DefMath('\to',"\x{2192}", role=>'ARROW'); # RIGHTWARDS ARROW??? a bit more explicitly relation-like?
+
+
+# TeX's ligatures handled by Filters.
+DefTextFilter("---","\x{2014}");	   # EM DASH
+DefTextFilter("--","\x{2013}"); # EN DASH (NOTE: With digits before & aft => \N{FIGURE DASH})
+DefTextFilter("``","\x{201C}");	# LEFT DOUBLE QUOTATION MARK
+DefTextFilter("''","\x{201D}");	# RIGHT DOUBLE QUOTATION MARK
+
+DefConstructor('\TeX', 'TeX');
+DefConstructor('\i',"\x{0131}");	# LATIN SMALL LETTER DOTLESS I
+DefConstructor('\j',"j");	# Apparently, no Unicode equivalent...
+
+
+DefConstructor('\>',"<XMHint name='\>'/>");	# ??
+
+#**********************************************************************
+# LaTeX Hook
+#**********************************************************************
+# No, \documentclass isn't really a primitive -- It's not even TeX!
+# But we define it here so it will automatically load whatever class definition,
+# and indirectly (hopefully), the LaTeX Package.
+our %ignorable_classoptions 
+  = map(($_=>1),qw(10pt 11pt 12pt 
+		   letterpaper legalpaper executivepaper a4paper a5paper b5paper
+		   landscape final draft oneside twoside
+		   openright openany onecolumn twocolumn 
+		   notitlepage titlepage openbib leqno fleqn));
+
+DefConstructor('\documentclass[]{}',"<?latexml class='#2' ?#1(options='#1')?>",
+  afterDigest=>sub {
+    my($whatsit,$options,$class)=@_;
+    $options = $options->toString if defined $options;
+    my @options = grep( !$ignorable_classoptions{$_},  split(/,\s*/, $options||''));
+    Warn("Unrecognized options ".join(', ',map(Stringify($_),@options))." ignored") if @options;
+    $STOMACH->setInPreamble(1);	# \begin{document} will clear this.
+    $STOMACH->input($class); 
+    return;});
+
+#**********************************************************************
+# Support for Declarations & Presentation/Semantic Duality
+#**********************************************************************
+DefConstructor('\DUAL[]{}{}',
+	       "<XMDual ?#1(role='#1')>#2<XMWrap>#3</XMWrap></XMDual>",
+	       untex=>sub {
+		 my($whatsit)=@_;
+		 my($role,$content,$presentation)=$whatsit->getArgs;
+		 if($LaTeXML::DUAL_BRANCH eq 'content'){
+		   $content->untex; }
+		 elsif($LaTeXML::DUAL_BRANCH eq 'presentation'){
+		   $presentation->untex; }
+		 else {
+		   my $untex = '\DUAL{'.(defined $role ? ToString($role):'').'}{';
+		   { local $LaTeXML::DUAL_BRANCH = 'content';
+		     $untex .= $content->untex. '}{'; }
+		   { local $LaTeXML::DUAL_BRANCH = 'presentation';
+		     $untex .= $presentation->untex .'}'; }
+		   $untex; }});
+
+DefConstructor('\FCN{}',    "<XMWrap role='FUNCTION'>#1</XMWrap>", untex=>'#1');
+DefConstructor('\ROLE{}{}', "<XMWrap role='#1'>#2</XMWrap>",       untex=>'#2');
+
+# NOTE: work through this systematically!
+DefConstructor('\@SYMBOL{}', "<XMWrap role='ID'>#1</XMWrap>", untex=>'#1');
+DefConstructor('\@APPLY{}',  "<XMApp>#1</XMApp>", untex=>'#1');
+DefConstructor('\@WRAP{}',   "<XMWrap>#1</XMWrap>", untex=>'#1');
+DefConstructor('\@TOKEN{}',   "<XMTok name='#1'/>", untex=>'');
+DefMath('\@APPLYFUNCTION', "\x{2061}", untex=>'', name=>'', role=>'APPLYOP'); # APPLY FUNCTION
+DefMath('\@INVISIBLETIMES',"\x{2062}", untex=>'', name=>'', role=>'MULOP'); # INVISIBLE TIMES
+
+# Would be nice to make the ID argument optional, but since these can appear in
+# optional arguments to other macros, we'll end up nesting [] !!
+DefConstructor('\@XMArg{}{}',"<XMArg ?#1(xml:id='#1')>#2</XMArg>", untex=>'#2',
+	       properties=>{id=>'#1'});
+DefConstructor('\@XMRef{}',"<XMRef idref='#1'/>",
+	       untex=>sub{ $STOMACH->lookupID($_[0]->getArg(1)->toString)->untex; });
+
+DefConstructor('\@ERROR{}{}', "<ERROR type='#1'>#2</ERROR>");
+
+#**********************************************************************
+# Support for defered values (not known till after digestion.
+DefConstructor('\@VALUE{}', sub {
+  my($whatsit,$key)=@_;
+  $key = $key->toString;
+  my $value = $STOMACH->lookupValue($key);
+  if(!$value){
+    Warn("Missing value for \"$key\"");
+    $value = Box("??",$whatsit->getFont,$whatsit->getLocator); 
+    $STOMACH->assignValue($key,$value); } # Go ahead and set it to inhibit more messages.
+  $INTESTINE->absorb($value); });
+
+#**********************************************************************
+1;
