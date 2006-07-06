@@ -1,0 +1,54 @@
+# -*- CPERL -*-
+# /=====================================================================\ #
+# |  amsrefs                                                            | #
+# | Implementation for LaTeXML                                          | #
+# |=====================================================================| #
+# | Part of LaTeXML:                                                    | #
+# |  Public domain software, produced as part of work done by the       | #
+# |  United States Government & not subject to copyright in the US.     | #
+# |---------------------------------------------------------------------| #
+# | Bruce Miller <bruce.miller@nist.gov>                        #_#     | #
+# | http://dlmf.nist.gov/LaTeXML/                              (o o)    | #
+# \=========================================================ooo==U==ooo=/ #
+package LaTeXML::Package::Pool::amsrefs;
+use LaTeXML::Package;
+
+#**********************************************************************
+# \bib{key}{type}{keyval pairs}
+
+#our %equivs = (booktitle=>'title', place=>'address', year=>'date');
+our %equivs = (place=>'address', year=>'date');
+
+DefKeyVal('amsrefs','url','semiverb');
+DefKeyVal('amsrefs','code_url','semiverb');
+
+# \bib{key}{type}{keyval-pairs}
+DefConstructor('\bib{any}{any}{KeyVal:amsrefs}', sub {
+  my($document,$key,$type,$fields)=@_;
+  $document->openElement('bibentry',key=>$key, type=>$type);
+  my @pairs = $fields->getKeyVals;
+  while(@pairs){
+    my($field,$value)=(shift(@pairs),shift(@pairs));
+    $field=lc($field);
+    $field=$equivs{$field} if $equivs{$field};
+    $document->insertElement("bib-$field",$value); }
+  $document->closeElement('bibentry'); });
+
+DefEnvironment('{bibdiv}','#body');
+DefEnvironment('{biblist}',"<biblist>#body</biblist>");
+
+
+#**********************************************************************
+# Other Defns (presumably from textcmds?)
+
+DefConstructor('\MR{any}',sub {
+  my($document,$mrnumber)=@_;
+  # Patch up old-style MathReviews numbers
+  my $id = $mrnumber->toString;
+  $id =~ s/\s+\\\#\s*/:/;
+  $document->insertElement('bib-mr',LaTeXML::Box->new($id,$mrnumber->getFont,$mrnumber->getLocator)); });
+
+DefConstructor('\ndash',"\x{2013}"); # EN DASH
+DefConstructor('\mdash',"\x{2014}"); # EM DASH
+#**********************************************************************
+1;
