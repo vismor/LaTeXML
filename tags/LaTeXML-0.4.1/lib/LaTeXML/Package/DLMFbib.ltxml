@@ -1,0 +1,43 @@
+# -*- CPERL -*-
+# /=====================================================================\ #
+# |  DLMFbib                                                            | #
+# | Implementation for LaTeXML                                          | #
+# |=====================================================================| #
+# | Part of LaTeXML:                                                    | #
+# |  Public domain software, produced as part of work done by the       | #
+# |  United States Government & not subject to copyright in the US.     | #
+# |---------------------------------------------------------------------| #
+# | Bruce Miller <bruce.miller@nist.gov>                        #_#     | #
+# | http://dlmf.nist.gov/LaTeXML/                              (o o)    | #
+# \=========================================================ooo==U==ooo=/ #
+package LaTeXML::Package::Pool;
+use strict;
+use LaTeXML::Package;
+
+RequirePackage('LaTeX');
+#**********************************************************************
+# Document
+#**********************************************************************
+DocType("bibliography","-//NIST LaTeXML//LaTeXML DLMF Chapter",'DLMF.dtd',
+	"http://dlmf.nist.gov/LaTeXML");
+DefEnvironment('{document}',"<bibliography>#body</bibliography>",
+		 beforeDigest=> sub { AssignValue(inPreamble=>0); });
+
+# Load special functions & other required packages.
+RequirePackage('DLMFmath');
+RequirePackage('amsmath');
+RequirePackage('amsrefs');
+RequirePackage('url');
+
+DefKeyVal('amsrefs','text_url','Semiverbatim');
+DefKeyVal('amsrefs','abstract_url','Semiverbatim');
+
+# Oh, and these too...
+DefConstructor('\URL[]{}',"<a href='#2'>?#1(#1)(#2)</a>");
+DefConstructor('\GAMSclass{}',"<GAMS class='#1'/>");
+DefConstructor('\GAMSpackage{}',"<GAMS package='#1'/>");
+DefConstructor('\GAMSclasspackage{}{}',"<GAMS class='#1' package='#2'/>");
+DefConstructor('\GAMSmodule{}{}{}',"<GAMS package='#1' module='#2' module_id='#3'/>");
+
+#**********************************************************************
+1;

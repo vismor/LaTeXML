@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ /=====================================================================\ 
+ |  DLMF.dtd                                                           |
+ | Extension of LaTeXML.dtd for DLMF documents                         |
+ |=====================================================================|
+ | Part of LaTeXML:                                                    |
+ |  Public domain software, produced as part of work done by the       |
+ |  United States Government & not subject to copyright in the US.     |
+ |=====================================================================|
+ | Bruce Miller <bruce.miller@nist.gov>                        #_#     |
+ | http://dlmf.nist.gov/LaTeXML/                              (o o)    |
+ \=========================================================ooo==U==ooo=/
+-->
+
+<!ENTITY % Inline.extra "| email | VRML | GAMS">
+<!ENTITY % Para.extra "| equationmix">
+<!ENTITY % Block.extra  "| figuregroup | begin_onecolumn | end_onecolumn">
+<!ENTITY % Misc.extra   "| electroniconly | printonly">
+<!ENTITY % Frontmatter.extra "| affiliation | acknowledgements | sidebar | gallery | copyright
+                              | origref">
+<!ENTITY % Sectitle.extra "">
+
+<!ENTITY % define.structure  "IGNORE" >
+<!ENTITY % Equation.extra "| origref | constraint">
+<!-- figure & table already contain Misc.extra -->
+<!ENTITY % Figure.extra "| origref">
+<!ENTITY % Table.extra "| origref">
+<!ENTITY % Bibentry.extra "| bib-text_url | bib-code_url | bib-gams_package | bib-gams_module">
+
+<!ENTITY % LaTeXML.dtd SYSTEM "LaTeXML.dtd" >
+%LaTeXML.dtd; 
+
+<!-- Redefined document structure -->
+<!ELEMENT chapter       ((%Frontmatter.mix;)*, (part | note)*, bibliography?)>
+<!ELEMENT part          ((%Sectitle.mix;)*, (%Block.mix; | section | paragraph)*)>
+<!ELEMENT section       ((%Sectitle.mix;)*, (%Block.mix; | subsection | paragraph)*)>
+<!ELEMENT subsection    ((%Sectitle.mix;)*, (%Block.mix; | subsubsection | paragraph)*)>
+<!ELEMENT subsubsection ((%Sectitle.mix;)*, (%Block.mix; | paragraph)*)>
+<!ELEMENT paragraph     ((%Sectitle.mix;)*, (%Block.mix;)*)>
+<!ATTLIST chapter       %Common.attr; %Labelled.attr; %Section.attr;>
+<!ATTLIST part          %Common.attr; %Labelled.attr; %Section.attr;>
+<!ATTLIST section       %Common.attr; %Labelled.attr; %Section.attr;>
+<!ATTLIST subsection    %Common.attr; %Labelled.attr; %Section.attr;>
+<!ATTLIST subsubsection %Common.attr; %Labelled.attr; %Section.attr;>
+<!ATTLIST paragraph     %Common.attr; %Labelled.attr; %Section.attr;>
+
+<!-- Redefined document structure -->
+
+<!ELEMENT affiliation (#PCDATA | %Inline.mix;)*>
+<!ELEMENT acknowledgements (#PCDATA | %Inline.mix;)*>
+
+<!ELEMENT copyright (#PCDATA | %Inline.mix;)*>
+<!ATTLIST copyright
+          year CDATA #IMPLIED>
+
+<!ELEMENT begin_onecolumn      ANY>
+<!ELEMENT end_onecolumn      ANY>
+<!ELEMENT printonly      ANY>
+<!ELEMENT electroniconly ANY>
+
+<!ELEMENT gallery (galleryitem)*>
+<!ELEMENT galleryitem (graphics)*>
+<!ATTLIST galleryitem
+          graphic   CDATA #REQUIRED
+          name      CDATA #IMPLIED
+	  labelref  CDATA #IMPLIED>
+<!ELEMENT figuregroup (figure)*>
+<!ELEMENT sidebar (title?, toctitle?, author?, (%Block.mix;)*)>
+<!ATTLIST sidebar
+          name  CDATA #REQUIRED
+	  label CDATA #IMPLIED>
+<!ELEMENT equationmix (#PCDATA | %Inline.mix; | punct | origref | constraint)*>
+<!ATTLIST equationmix  %Labelled.attr;>
+<!ELEMENT constraint (#PCDATA | Math)*>
+<!ATTLIST constraint 
+          hidden (yes|no) #IMPLIED>
+<!ELEMENT email (#PCDATA | %Inline.mix;)*>
+<!ELEMENT origref (#PCDATA | %Inline.mix;)*>
+<!ATTLIST origref
+          ref CDATA #IMPLIED>
+
+<!ELEMENT VRML EMPTY>
+<!ATTLIST VRML
+         href CDATA #REQUIRED>
+
+<!ELEMENT GAMS EMPTY>
+<!ATTLIST GAMS
+          class CDATA #IMPLIED
+          package CDATA #IMPLIED>
+
+<!-- Character entities -->
+<!ENTITY ldots "">
+
+<!-- Bibliography extensions -->
+<!ELEMENT bib-text_url (#PCDATA | %Inline.mix;)*>
+<!ATTLIST bib-text-url %Common.attr;>
+
+<!ELEMENT bib-code_url (#PCDATA | %Inline.mix;)*>
+<!ATTLIST bib-code-url %Common.attr;>
+
+<!ELEMENT bib-gams_package (#PCDATA | %Inline.mix;)*>
+<!ATTLIST bib-gams_package %Common.attr;>
+<!ELEMENT bib-gams_module (#PCDATA | %Inline.mix;)*>
+<!ATTLIST bib-gams_module %Common.attr;>
