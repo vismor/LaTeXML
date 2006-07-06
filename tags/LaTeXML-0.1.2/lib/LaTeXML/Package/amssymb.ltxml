@@ -1,0 +1,29 @@
+# -*- CPERL -*-
+# /=====================================================================\ #
+# |  amssymb                                                            | #
+# | Implementation for LaTeXML                                          | #
+# |=====================================================================| #
+# | Part of LaTeXML:                                                    | #
+# |  Public domain software, produced as part of work done by the       | #
+# |  United States Government & not subject to copyright in the US.     | #
+# |---------------------------------------------------------------------| #
+# | Bruce Miller <bruce.miller@nist.gov>                        #_#     | #
+# | http://dlmf.nist.gov/LaTeXML/                              (o o)    | #
+# \=========================================================ooo==U==ooo=/ #
+
+#**********************************************************************
+# Currently only a random collection of things I need for DLMF chapters.
+# Eventually, go through the doc and implement it all.
+#**********************************************************************
+package LaTeXML::Package::Pool;
+use strict;
+use LaTeXML::Package;
+use charnames ":full";
+
+DefConstructor('\mathbb{}', '#1',
+	       beforeDigest=>sub{ $_[0]->requireMath; $_[0]->bgroup; $_[0]->setFont(family=>'blackboard'); },
+	       afterDigest=>sub{$_[0]->egroup; });
+
+
+#**********************************************************************
+1;
