@@ -1,0 +1,1659 @@
+# -*- CPERL -*-
+# /=====================================================================\ #
+# |  LaTeX                                                              | #
+# | Implementation for LaTeXML                                          | #
+# |=====================================================================| #
+# | Part of LaTeXML:                                                    | #
+# |  Public domain software, produced as part of work done by the       | #
+# |  United States Government & not subject to copyright in the US.     | #
+# |---------------------------------------------------------------------| #
+# | Bruce Miller <bruce.miller@nist.gov>                        #_#     | #
+# | http://dlmf.nist.gov/LaTeXML/                              (o o)    | #
+# \=========================================================ooo==U==ooo=/ #
+
+#**********************************************************************
+# Organized following 
+#  "LaTeX: A Document Preparation System"
+#   by Leslie Lamport
+#   2nd edition
+# Addison Wesley, 1994
+# Appendix C. Reference Manual
+#**********************************************************************
+# NOTE: A lot of this should be in Primitives.pm 
+# either builtin, or inherited from plain.
+#**********************************************************************
+package LaTeXML::Package::Pool;
+use strict;
+use LaTeXML::Package;
+use LaTeXML::Util::Pathname;
+no warnings 'redefine';
+
+#**********************************************************************
+# C.1.  Commands and Environments.
+#**********************************************************************
+
+#======================================================================
+# C.1.1 Command Names and Arguments
+#======================================================================
+# Nothing...
+
+#======================================================================
+# C.1.2 Environments
+#======================================================================
+
+# In LaTeX, \newenvironment{env} defines \env and \endenv.
+# \begin{env} & \end{env} open/close a group, and invoke these.
+# In fact, the \env & \endenv don't have to have been created by
+# \newenvironment; And in fact \endenv doesn't even have to be defined!
+# [it is created by \csname, and equiv to \relax if no previous defn]
+
+# We need to respect these usages here, but we also want to be able
+# to define environment constructors that `capture' the body so that
+# it can be processed specially, if needed.  These are the magic
+# '\begin{env}', '\end{env}' control sequences created by DefEnvironment.
+
+DefExpandable('\begin{}',sub { 
+  my($self,$env)=@_;
+  my $name = $env->toString;
+  if(T_CS("\\begin{$name}")->getDefinition){
+    T_CS("\\begin{$name}"); } # Magic cs!
+  else {			# If not defined, let stomach handle it.
+    (T_CS('\begingroup'),T_CS("\\$name")); }});
+
+DefExpandable('\end{}',  sub { 
+  my($self,$env)=@_;
+  my $name = $env->toString;
+  my $t;
+  if   (($t=T_CS("\\end{$name}"))->getDefinition){ $t; } # Magic CS!
+  elsif(($t=T_CS("\\end$name"))->getDefinition)  { ($t, T_CS('\endgroup')); }
+  else { ( T_CS('\endgroup')); }});
+
+#======================================================================
+# C.1.3 Fragile Commands
+#======================================================================
+# Because of the way we `move information', revertable and pre-processed,
+# I don't think we actually need to do anything ... 
+# [Course that means we're not _really_ TeX!]
+DefExpandable('\protect',undef);
+
+#======================================================================
+# C.1.4 Declarations
+#======================================================================
+# actual implementation later.
+#======================================================================
+# C.1.5 Invisible Commands
+#======================================================================
+# actual implementation later.
+
+#======================================================================
+# C.1.6 The \\ Command
+#======================================================================
+# In math, \\ is just a formatting hint, unless within an array, cases, .. environment.
+DefConstructor("\\\\ Flag:* []", "?IfMath(<XMHint name='\\'/>)(\n)", untex=>"\\\\\n");
+
+#**********************************************************************
+# C.2. The Structure of the Document
+#**********************************************************************
+#   prepended files (using filecontents environment)
+#   preamble (starting with \documentclass)
+#   \begin{document}
+#    text
+#   \end{document}
+
+DefEnvironment('{document}','<document>#body</document>',
+	       beforeDigest=> sub { AssignValue(inPreamble=>0); },
+	       afterDigest=> sub { $GULLET->flush; return; });
+
+#**********************************************************************
+# C.3. Sentences and Paragraphs
+#**********************************************************************
+
+#======================================================================
+# C.3.1 Making Sentences
+#======================================================================
+# quotes;  should these be handled in DOM/construction?
+# dashes:  We'll need some sort of Ligature analog, or something like
+# Omega's OTP, to combine sequences of "-" into endash, emdash,
+# Perhaps it also applies more semantically?
+# Such as interpreting certain sequences as section headings,
+# or math constructs.
+
+# Spacing; in Primitives.pm
+
+# Special Characters; in Primitives.pm
+
+# Logos
+# \TeX is in Primitives.pm
+DefConstructor('\LaTeX', 'LaTeX');
+
+our @MonthNames=(qw( January February March April May June
+		     July August September October November December));
+DefExpandable('\today',sub { 
+   Explode($MonthNames[LookupValue('\month')->valueOf-1]
+	   ." ".LookupValue('\day')->valueOf
+	   .', '.LookupValue('\year')->valueOf); });
+
+DefConstructor('\emph{}', "<emph>#1</emph>", mode=>'text');
+Tag('text', autoClose=>1, autoOpen=>1); # ???
+
+#======================================================================
+# C.3.2 Making Paragraphs
+#======================================================================
+# \noindent, \indent, \par in Primitives.pm
+
+# Style parameters
+# \parindent, \baselineskip, \parskip alreadin in Primitives.pm
+
+#======================================================================
+# C.3.3 Footnotes
+#======================================================================
+# NOTE: probably should default the mark to some counter?
+DefConstructor('\footnote[]{}',"<footnote ?#1(footnotemark='#1')>#2</footnote>");
+# NOTE: DOM should reattach the footnotetext to the footnotemark ?
+#  Hmm, in general the mark & text _could_ come in either order...
+DefConstructor('\footnotemark[]',""); # ????
+DefConstructor('\footnotetext[]{}',"<footnote ?#1(footnotemark='#1')>#2</footnote>");
+
+# Style parameters
+DefRegister('\footnotesep' => Dimension(0));
+DefPrimitive('\footnoterule',undef);
+
+#======================================================================
+# C.3.4 Accents and Special Symbols
+#======================================================================
+# See Primitives.pm
+
+# See Section 3.3.2 Mathematical Symbols, below
+
+#**********************************************************************
+# C.4 Sectioning and Table of Contents
+#**********************************************************************
+
+#======================================================================
+# C.4.1 Sectioning Commands.
+#======================================================================
+# Note that LaTeX allows fairly arbitrary stuff in \the<ctr>, although
+# it can get you in trouble.  However, in almost all cases, the result
+# is plain text.  So, I'm putting refnum as an attribute, where I like it!
+# You want something else? Redefine!
+
+# A little more messy than seems necessary:
+#  We don't know whether to step the counter and update \@currentlabel until we see the '*',
+# but we have to know it before we digest the title, since \label can be there!
+foreach my $sec (qw(part chapter section subsection subsubsection paragraph subparagraph)){
+  Tag($sec, autoClose=>1);
+  DefExpandable('\\'.$sec.' Flag:*',
+		sub { 
+		  my($self,$flag)=@_;
+		  if($flag){
+		    (T_CS('\\@@'.$sec)); }
+		  else {
+		    refStepCounter($sec);
+		    (T_CS('\\@@'.$sec),T_OTHER('['),T_CS('\@currentlabel'),T_OTHER(']')); }});
+  DefConstructor('\\@@'.$sec.'[][]{}',
+		 "<$sec ?#1(refnum='#1')><title>#3</title>?#2(<toctitle>#2</toctitle>)",
+		 beforeDigest=>\&BGroup, afterDigest=>\&EGroup); }
+
+# Not sure if this is best, but if no explicit \section'ing...
+Tag('section',autoOpen=>1);
+#======================================================================
+# C.4.2 The Appendix
+#======================================================================
+# NOTE: 2 options:
+#  1) redefine \section, etc to produce <appendix>, <subappendix>, etc.
+#  2) Wrap remainder of doc with <appendix>
+# DefPrimitive('\appendix');
+
+#======================================================================
+# C.4.3 Table of Contents
+#======================================================================
+# Ignore these; leave it up to post processing.
+DefPrimitive('\tableofcontents', undef);
+DefPrimitive('\listoffigures',   undef);
+DefPrimitive('\listoftables',    undef);
+
+DefPrimitive('\addcontentsline{}{}{}', undef);
+DefPrimitive('\numberline{}{}', undef);
+DefPrimitive('\addtocontents{}{}', undef);
+
+#======================================================================
+# C.4.4 Style registers
+#======================================================================
+DefRegister('\secnumdepth' => Number(0));
+DefRegister('\tocdepth'    => Number(0));
+
+#**********************************************************************
+# C.5 Classes, Packages and Page Styles
+#**********************************************************************
+
+#======================================================================
+# C.5.1 Document Class
+#======================================================================
+# \documentclass is defined in Primitives.pm, to automatically switch
+# to LaTeX mode when processing LaTeX files.
+
+# Style Parameters
+DefRegister('\bibindent'    => Dimension(0));
+DefRegister('\columnsep'    => Dimension(0));
+DefRegister('\columnseprule'=> Dimension(0));
+DefRegister('\mathindent'   => Dimension(0));
+
+#======================================================================
+# C.5.2 Packages
+#======================================================================
+# We'll prefer to load package.pm, but will try package.sty or 
+# package.tex (the latter being unlikely to work, but....)
+# See Stomach.pm for details
+# Ignorable packages ??
+# pre-defined packages??
+
+DefConstructor('\usepackage[]{}',"<?latexml package='#2' ?#1(options='#1')?>",
+	       afterDigest=>sub { my($whatsit,$options,$packages)=@_;
+				  my @pkgs = split(',',$packages->toString);
+				  $options = [($options ? split(',',($options->toString)) :())];
+				  map(RequirePackage($_,options=>$options),@pkgs);
+				  return});
+DefConstructor('\RequirePackage[]{}',"<?latexml package='#2' ?#1(options='#1')?>",
+	       afterDigest=>sub { my($whatsit,$options,$package)=@_;
+				  $options = [($options ? split(',',($options->toString)) :())];
+				  RequirePackage(ToString($package), options=>$options); });
+DefConstructor('\LoadClass[]{}',"<?latexml class='#2' ?#1(options='#1')?>",
+	       afterDigest=>sub { my($whatsit,$options,$class)=@_;
+				  $options = [($options ? split(',',($options->toString)) :())];
+				  RequirePackage(ToString($class), options=>$options); });
+
+#======================================================================
+# C.5.3 Page Styles
+#======================================================================
+# Ignored
+DefPrimitive('\pagestyle{}',    undef);
+DefPrimitive('\thispagestyle{}',undef);
+DefPrimitive('\markright{}',    undef);
+DefPrimitive('\markboth{}{}',   undef);
+DefPrimitive('\pagenumbering{}',undef);
+DefPrimitive('\twocolumn[]',    undef);
+DefPrimitive('\onecolumn',      undef);
+
+# Style parameters from Fig. C.3, p.182
+DefRegister('\paperheight'   => Dimension(0));
+DefRegister('\paperwidth'    => Dimension(0));
+DefRegister('\textheight'    => Dimension(0));
+DefRegister('\textwidth'     => Dimension('6in'));
+DefRegister('\topmargin'     => Dimension(0));
+DefRegister('\headheight'    => Dimension(0));
+DefRegister('\headsep'       => Dimension(0));
+DefRegister('\footskip'      => Dimension(0));
+DefRegister('\evensidemargin'=> Dimension(0));
+DefRegister('\oddsidemargin' => Dimension(0));
+DefRegister('\marginparwidth'=> Dimension(0));
+DefRegister('\marginparsep'  => Dimension(0));
+DefRegister('\columnwidth'   => Dimension('6in'));
+DefRegister('\linewidth  '   => Dimension('6in'));
+DefRegister('\baselinestretch'   => Dimension(0));
+
+#======================================================================
+# C.5.4 The Title Page and Abstract
+#======================================================================
+
+DefMacro('\@title','');
+DefMacro('\@author','');
+DefMacro('\@date','\today');
+DefPrimitive('\title{}',    sub { DefMacro('\@title',$_[1])});
+DefPrimitive('\author{}',   sub { DefMacro('\@author',$_[1])});
+DefPrimitive('\date{}',     sub { DefMacro('\@date',$_[1])});
+DefConstructor('\thanks{}', "<thanks>#1</thanks>");
+
+# Introduce secret control sequences to format the title, date, etc.
+# These will be used by \maketitle when the time comes.
+DefConstructor('\fmt@title{}', "<title>#1</title>");
+DefConstructor('\fmt@author{}', "<author>#1</author>");
+# Would be nice to put the ISO date as an attribute!
+DefConstructor('\fmt@date{}', "<creationdate>#1</creationdate>");
+# This needs to be a macro so that \@author, etal, get expanded.
+DefMacro('\maketitle', '\fmt@title{\@title}\fmt@author{\@author}\fmt@date{\@date}');
+
+DefEnvironment('{abstract}','<abstract>#body</abstract>');
+# Presumably you'll do whatever you need to specify author, etc ???
+DefEnvironment('{titlepage}','#body');
+
+#**********************************************************************
+# C.6 Displayed Paragraphs
+#**********************************************************************
+DefEnvironment('{center}','<centering>#body</centering>');
+DefEnvironment('{centering}','<centering>#body</centering>');
+# NOTE: center the _line_ (till \\ or \par or ?) ! How to get it?
+DefPrimitive('\centering',undef);
+
+#======================================================================-
+# C.6.1 Quotations and Verse
+#======================================================================-
+DefEnvironment('{quote}',    '<quote>#body</quote>');
+DefEnvironment('{quotation}','<quotation>#body</quotation>');
+# NOTE: Handling of \\ within these environments?
+DefEnvironment('{verse}',    '<verse>#body</verse>');
+
+#======================================================================
+# C.6.2 List-Making environments
+#======================================================================
+Tag('item', autoClose=>1);
+DefConstructor('\item[]', "<item>?#1(<tag>#1</tag>)");
+
+DefEnvironment('{itemize}',    '<itemize>#body</itemize>');
+DefEnvironment('{enumerate}',  '<enumerate>#body</enumerate>');
+DefEnvironment('{description}','<description>#body</description>');
+
+# NOTE: Do I need to do anything with
+# \labelitemi, labelitemii, labelitemiii or labelitemiv ?
+# Probably would be useful (once I've got counters properly implemented)
+# to add a number to the items.
+
+#======================================================================
+# C.6.3 The list and trivlist environments.
+#======================================================================
+# Mostly just punting, here; you probably want a more meaningful name
+# for your list if you want better XML.
+DefEnvironment('{list}{}{}', "<list default_label='#1' declarations='#2'>#body</list>");
+DefEnvironment('{trivlist}', '<trivlist>#body</trivlist>');
+
+DefRegister('\topsep'        => Glue(0));
+DefRegister('\partopsep'     => Glue(0));
+DefRegister('\itemsep'       => Glue(0));
+DefRegister('\parsep'        => Glue(0));
+DefRegister('\leftmargin'    => Dimension(0));
+DefRegister('\rightmargin'   => Dimension(0));
+DefRegister('\listparindent' => Dimension(0));
+DefRegister('\itemindent'    => Dimension(0));
+DefRegister('\labelsep'      => Dimension(0));
+
+# NOTE: Eventually use \makelabel to construct the list ?
+#\makelabel{label}
+# \usecounter{ctr}
+
+#======================================================================
+# C.6.4 Verbatim
+#======================================================================
+
+# NOTE: how's the best way to get verbatim material through?
+DefEnvironment('{verbatim}', '<verbatim>#body</verbatim>');
+DefEnvironment('{verbatim*}','<verbatim>#body</verbatim>');
+
+# verbatim is a bit of special case;
+# We're going to sidestep the Gullet for inputting, 
+# and also the usual environment capture.
+$STATE->installDefinition(LaTeXML::Constructor
+			   ->new(T_CS('\begin{verbatim}'),undef,
+				 "<verbatim font='#font'>#body</verbatim>",
+				 beforeDigest=>[sub { BGroup; AssignValue(current_environment=>'verbatim'),
+							MergeFont(family=>'typewriter'); }],
+				 afterDigest=>[sub {
+						 my($whatsit)=@_;
+						 my $font = $whatsit->getFont;
+						 my $loc  = $whatsit->getLocator;
+						 my @lines = $GULLET->getMouth->readRawLines("\\end{verbatim}");
+						 # Note last line ends up as Whatsit's "trailer"
+						 $whatsit->setBody(map(LaTeXML::Box->new($_,$font,$loc),
+								       @lines, "\end{verbatim}"));
+						 EGroup; }]));
+
+our $EMPTY_CATTABLE=LaTeXML::State->new(catcodes=>'none');
+DefExpandable('\verb', sub { 
+  my $mouth = $GULLET->getMouth;
+  local $STATE = $EMPTY_CATTABLE;
+  my $init = $mouth->readToken;
+  $init = $mouth->readToken if $init->toString eq '*'; # Should I bother handling \verb* ?
+  my $verb = $mouth->readTokens($init);
+  $verb->unlist; });
+
+# This is defined by the alltt package.
+# Environment('alltt', ?);
+
+#**********************************************************************
+# C.7 Mathematical Formulas
+#**********************************************************************
+
+#======================================================================
+# C.7.1 Math Mode Environments
+#======================================================================
+DefEnvironment('{displaymath}', 
+	       "<equation><Math mode='display'><XMath>#body</XMath></Math></equation>", 
+	       mode=>'display_math');
+DefEnvironment('{math}',
+	       "<Math mode='inline'><XMath>#body</XMath></Math>",
+	       mode=>'inline_math');
+DefEnvironment('{equation}',
+	       "<equation refnum='#refnum'><Math mode='display'><XMath>#body</XMath></Math></equation>", 
+	       mode=>'display_math',
+	       properties=> {refnum=>sub { refStepCounter('equation'); }});
+DefEnvironment('{equation*}',
+	       "<equation><Math mode='display'><XMath>#body</XMath></Math></equation>",
+	       mode=>'display_math');
+
+# NOTE: This has to interact with equation to CANCEL (or backtrack?) the
+# numbering?
+DefPrimitive('\nonumber',undef);
+
+# Define \( ..\) and \[ ... \] to act like environments.
+DefConstructor('\[',
+	       "<equation><Math mode='display'><XMath>#body</XMath></Math></equation>",
+	       beforeDigest=> sub{ BeginMode('display_math'); },
+	       captureBody=>1);
+DefConstructor('\]'  ,"",beforeDigest=> sub{ EndMode('display_math'); });
+DefConstructor('\(' ,
+	       "<Math mode='inline'><XMath>#body</XMath></Math>",
+	       beforeDigest=> sub{ BeginMode('inline_math'); },
+	       captureBody=>1);
+DefConstructor('\)'   ,"", beforeDigest=> sub{ EndMode('inline_math'); });
+
+# Can just enter math, can't we?
+#DefConstructor('\ensuremath{}', '#1', mode=>'inline_math');
+DefExpandable('\ensuremath{}', sub {
+  my($self,$stuff)=@_;
+  if(LookupValue('IN_MATH')){ @$stuff; }
+  else { (T_MATH,@$stuff,T_MATH); }});
+
+# NOTE: Implement these
+# Environment('eqnarray' ...
+# Environment('eqnarray*' ...
+
+# NOTE: The numbering isn't right.
+# And the parseability will have to be worked on!
+#DefEnvironment('{eqnarray}',
+#	       "<equation refnum='#refnum'><Math mode='display'><XMath>#body</XMath></Math></equation>", 
+#	       mode=>'display_math',
+#	       properties=> {refnum=>sub { refStepCounter('equation'); }});
+#DefEnvironment('{eqnarray*}',
+#	       "<equation><Math mode='display'><XMath>#body</XMath></Math></equation>", 
+DefEnvironment('{eqnarray}',
+	       sub { 
+		 my($document)=@_;
+		 $document->openElement('equation',refnum=>'#refnum');
+		 $document->openElement('Math',mode=>'display');
+		 $document->openElement('XMath');
+		 matharray($document,'',$_[1], 'Matrix','Row','Cell');
+		 $document->closeElement('XMath');
+		 $document->closeElement('Math');
+		 $document->closeElement('equation'); },
+	       mode=>'display_math',
+	       properties=> {refnum=>sub { refStepCounter('equation'); }},
+	       beforeDigest=>\&before_matharray, afterDigest=>\&after_matharray);
+DefEnvironment('{eqnarray*}',
+	       sub { 
+		 my($document)=@_;
+		 $document->openElement('equation');
+		 $document->openElement('Math',mode=>'display');
+		 $document->openElement('XMath');
+		 matharray($document,'',$_[1], 'Matrix','Row','Cell');
+		 $document->closeElement('XMath');
+		 $document->closeElement('Math');
+		 $document->closeElement('equation'); },
+	       mode=>'display_math',
+	       beforeDigest=>\&before_matharray, afterDigest=>\&after_matharray);
+
+# Style Parameters
+#  \abovedisplayskip \abovedisplayshortskip are in Primitives.pm
+DefRegister('\jot'  => Dimension(0)); 
+DefRegister('\mathindent' =>Dimension(0)); 
+DefRegister('\belowdisplayskip' => Glue(0)); 
+DefRegister('\belowdisplayshortskip' => Glue(0));
+
+#======================================================================
+# C.7.2 Common Structures
+#======================================================================
+# sub, superscript and prime are in Primitives.pm
+
+# Ugh; my state keeping is kinda messed up.
+# I want to set the style according to current math style
+# AND set the math style smaller for the args!
+our %fracstylemap=(display=>'text', text=>'script',
+		   script=>'scriptscript', scriptscript=>'scriptscript');
+sub beforeFrac { BGroup; 
+		 AssignValue(mathstyle=>$fracstylemap{LookupValue('mathstyle')}); }
+sub afterFrac  { EGroup;
+		 $_[0]->setProperty('style',LookupValue('mathstyle')); }
+DefMath('\frac{}{}','/', name=>"/", operator_role=>'MULOP',
+	beforeDigest=>\&beforeFrac, afterDigest =>\&afterFrac);
+
+DefConstructor('\sqrt[]{}',
+	       "?#1(<XMApp><XMTok name='root'/><XMArg>#1</XMArg><XMArg>#2</XMArg></XMApp>)"
+	         ."(<XMApp><XMTok name='sqrt'/><XMArg>#2</XMArg></XMApp>)");
+
+# Ellipsis: See Primitives
+
+#======================================================================
+# C.7.3 Mathematical Symbols
+#======================================================================
+# See Tables 3.3 through 3.8 (pp 41--44)
+# Defined in Primitives.pm
+# [Possibly some are strictly LaTeX and should be moved here?]
+
+
+#======================================================================
+# Modulo
+
+DefMath('\mod',    'mod');
+DefMath('\pmod{}', '(\textrm{mod} #1)', role=>'POSTFIX'); # Well, sorta postfix..
+DefMath('\bmod',   'mod', role=>'ADDOP');
+
+#======================================================================
+# C.7.4 Arrays
+#======================================================================
+#  See Section C.10.2
+
+#======================================================================-
+# C.7.5 Delimiters
+#======================================================================-
+# All this is already in Primitives.pm
+
+DefMath('\stackrel{}{}','');
+#======================================================================-
+# C.7.6 Putting One Thing Above Another
+#======================================================================-
+# All this is already in Primitives.pm
+
+#======================================================================-
+# C.7.7 Spacing
+#======================================================================-
+# All this is already in Primitives.pm
+
+#======================================================================
+# C.7.8 Changing Style
+#======================================================================
+# For Math style changes, we record the current font, which is then merged
+# into the Whatsit's created for letters, etc.  The merging depends on
+# the type of letter, greek, symbol, etc.
+# Apparently, with the normal TeX setup, these fonts don't really merge,
+# rather they override all of family, series and shape.
+
+DefConstructor('\mathrm{}', '#1',
+	       beforeDigest=>sub{ RequireMath; BGroup; MergeFont(family=>'serif'); },
+	       afterDigest=>\&EGroup);
+DefConstructor('\mathit{}',  '#1',
+	       beforeDigest=>sub{ RequireMath; BGroup; MergeFont(shape=>'italic'); },
+	       afterDigest=>\&EGroup);
+DefConstructor('\mathbf{}',  '#1',
+	       beforeDigest=>sub{ RequireMath; BGroup; MergeFont(series=>'bold'); },
+	       afterDigest=>\&EGroup);
+DefConstructor('\mathsf{}',  '#1',
+	       beforeDigest=>sub{ RequireMath; BGroup; MergeFont(family=>'sansserif'); },
+	       afterDigest=>\&EGroup);
+DefConstructor('\mathtt{}',  '#1',
+	       beforeDigest=>sub{ RequireMath; BGroup; MergeFont(family=>'typewriter'); },
+	       afterDigest=>\&EGroup);
+DefConstructor('\mathcal{}', '#1',
+	       beforeDigest=>sub{ RequireMath; BGroup; MergeFont(family=>'caligraphic'); },
+	       afterDigest=>\&EGroup);
+DefConstructor('\mathscr{}', '#1',
+	       beforeDigest=>sub{ RequireMath; BGroup; MergeFont(family=>'script'); },
+	       afterDigest=>\&EGroup);
+
+#**********************************************************************
+# C.8 Definitions, Numbering and Programming
+#**********************************************************************
+
+#======================================================================
+# C.8.1 Defining Commands
+#======================================================================
+
+DefPrimitive('\newcommand Flag:* {Token}[][]{}', sub {
+  my($self,$star,$cs,$nargs,$opt,$body)=@_;
+  Fatal(Stringify($cs)." is already defined") if $cs->getDefinition;
+  DefMacro($cs->toString . convertLaTeXArgs($nargs,$opt),$body); });
+
+DefPrimitive('\renewcommand Flag:* {Token}[][]{}', sub {
+  my($self,$star,$cs,$nargs,$opt,$body)=@_;
+  DefMacro($cs->toString . convertLaTeXArgs($nargs,$opt),$body); });
+
+DefPrimitive('\providecommand Flag:* {Token}[][]{}', sub {
+  my($self,$star,$cs,$nargs,$opt,$body)=@_;
+  return if $cs->getDefinition;
+  DefMacro($cs->toString . convertLaTeXArgs($nargs,$opt),$body); });
+
+# Need to figure out exactly what `robust' means to LaTeXML...
+DefPrimitive('\DeclareRobustCommand Flag:* {Token}[][]{}', sub {
+  my($self,$star,$cs,$nargs,$opt,$body)=@_;
+  return if $cs->getDefinition;
+  DefMacro($cs->toString . convertLaTeXArgs($nargs,$opt),$body); });
+
+#======================================================================
+# C.8.2 Defining Environments
+#======================================================================
+# Note that \env & \endenv defined by \newenvironment CAN be 
+# invoked directly.
+
+DefPrimitive('\newenvironment Flag:* {}[][]{}{}', sub {
+  my($self,$star,$name,$nargs,$opt,$begin,$end)=@_;
+  $name = $name->toString;
+  Fatal("Environment $name is already defined") if T_CS("\\$name")->getDefinition;
+  DefMacro(join('','\\',$name, convertLaTeXArgs($nargs,$opt)),$begin);
+  DefMacro(join('','\\end',$name),$end); });
+
+DefPrimitive('\renewenvironment Flag:* {}[][]{}{}', sub {
+  my($self,$star,$name,$nargs,$opt,$begin,$end)=@_;
+  $name = $name->toString;
+  DefMacro(join('','\\',$name, convertLaTeXArgs($nargs,$opt)),$begin);
+  DefMacro(join('','\\end',$name),$end); });
+
+#======================================================================
+# C.8.3 Theorem-like Environments
+#======================================================================
+# NOTE: Implement.
+#  define a new environment which constructs a theorem ?
+# Def('\newtheorem','{}[]{}[]", ....);
+# => something like <theorem type="foo"> .. </theorem>
+
+#======================================================================
+# C.8.4 Numbering
+#======================================================================
+sub NewCounter { 
+  my($ctr,$within,@inner)=@_;
+  DefRegister("\\c\@$ctr",Number(0));
+  AssignValue("\\c\@$ctr"=>Number(0),'global');
+  AssignValue("\\cl\@$ctr"=>Tokens(),'global');
+  AssignValue("\\cl\@$within" =>
+	      Tokens(T_CS($ctr),LookupValue("\\cl\@$within")->unlist),'global')
+    if $within;
+  AssignValue('nested_counters_'.$ctr =>[@inner]) if @inner;
+  DefMacro("\\the$ctr","\\arabic{$ctr}");
+  }
+
+sub stepCounter {
+  my($ctr)=@_;
+  AssignValue("\\c\@$ctr"=>LookupValue("\\c\@$ctr")->add(Number(1)),'global');
+  # and reset any within counters!
+  foreach my $c (LookupValue("\\cl\@$ctr")->unlist){
+    resetCounter($c->toString); }
+  return; }
+
+sub refStepCounter {
+  my($ctr)=@_;
+  stepCounter($ctr);
+  my $v = $GULLET->expandTokens(Tokens(T_CS("\\the$ctr")));
+  $STATE->installDefinition(LaTeXML::Expandable->new(T_CS('\@currentlabel'),undef,$v));
+  # Any scopes activated for previous value of this counter (& any nested counters) must be removed.
+  # This may also include scopes activated for \label
+  deactivateCounterScope($ctr);
+  # And install the scope (if any) for this reference number.
+  AssignValue(current_counter=>$ctr,'local');
+  AssignValue('scopes_for_counter:'.$ctr => [$ctr.':'.ToString($v)],'local');
+  $STATE->activateScope($ctr.':'.ToString($v));
+  $v; }
+
+sub deactivateCounterScope {
+  my($ctr)=@_;
+#  print STDERR "Unusing scopes for $ctr\n";
+ if(my $scopes = LookupValue('scopes_for_counter:'.$ctr)){
+    map($STATE->deactivateScope($_), @$scopes); }
+  foreach my $inner_ctr (@{LookupValue('nested_counters_'.$ctr) || []}){
+    deactivateCounterScope($inner_ctr); }}
+
+sub resetCounter {
+  my($ctr)=@_;
+  AssignValue('\c@'.$ctr => Number(0),'global'); }
+
+
+DefPrimitive('\newcounter{}[]',sub { shift; NewCounter(map($_ && $_->toString,@_)); });
+
+DefPrimitive('\setcounter{}{}',sub {
+  my($self,$ctr,$value)=@_;
+  $ctr=$ctr->toString;
+  $GULLET->unread(@$value,T_CS('\relax')); # Put back, so we can read as <number>
+  AssignValue("c\@$ctr",$GULLET->readNumber(),'global'); 
+  return});
+
+DefPrimitive('\addtocounter{}{}',sub {
+  my($self,$ctr,$value)=@_;
+  $ctr=$ctr->toString;
+  $GULLET->unread(@$value,T_CS('\relax')); # Put back, so we can read as <number>
+  AssignValue("c\@$ctr",LookupValue("c\@$ctr")->add($GULLET->readNumber),'global'); });
+
+DefPrimitive('\stepcounter{}',   sub { stepCounter($_[1]->toString); });
+DefPrimitive('\refstepcounter{}',sub { refStepCounter($_[1]->toString); return; });
+
+DefExpandable('\value{}', sub {
+  Explode(LookupValue('\c@'.$_[1]->toString)->valueOf);});
+DefExpandable('\arabic{}',sub {
+  Explode(LookupValue('\c@'.$_[1]->toString)->valueOf); });
+DefExpandable('\roman{}', sub {
+  roman(LookupValue('\c@'.$_[1]->toString)->valueOf); });
+DefExpandable('\Roman{}', sub {
+  Roman(LookupValue('\c@'.$_[1]->toString)->valueOf); });
+DefExpandable('\alph{}',  sub {
+  T_OTHER(chr(LookupValue('\c@'.$_[1]->toString)->valueOf+ord('a')-1));});
+DefExpandable('\Alph{}',  sub {
+  T_OTHER(chr(LookupValue('\c@'.$_[1]->toString)->valueOf+ord('A')-1));});
+our @fnsymbols=(T_OTHER('*'), T_CS('\dag'), T_CS('\ddag'), T_CS('\S'), T_CS('\P'),
+		T_CS('\Vert'), T_OTHER('**'), Tokens(T_CS('\dag'),T_CS('\dag')),
+		Tokens(T_CS('\ddag'),T_CS('\ddag')));
+DefExpandable('\fnsymbol{}',sub { 
+  $fnsymbols[LookupValue('\c@'.$_[1]->toString)->valueOf-1]->unlist;});
+
+#======================================================================
+# C.8.5 The ifthen Package.
+#======================================================================
+# \ifthenelse
+# and sundry conditionals...
+#
+# Yeah, maybe this'll get done someday....
+
+#**********************************************************************
+# C.9 Figures and Other Floating Bodies
+#**********************************************************************
+
+#======================================================================
+# C.9.1 Figures and Tables
+#======================================================================
+
+# Note that, technically, the number is associated with the caption.
+# (to allow multiple figures per figure environment?).
+# We'll have to sort that out later....
+DefEnvironment('{figure}[]', "<figure refnum='#refnum' ?#1(placement='#1')>#body</figure>",
+	       properties=> { refnum=> sub { refStepCounter('figure'); }});
+DefEnvironment('{figure*}[]', "<figure refnum='#refnum' ?#1(placement='#1')>#body</figure>",
+	       properties=> { refnum=> sub { refStepCounter('figure'); }});
+DefEnvironment('{table}[]',   "<table refnum='#refnum' ?#1(placement='#1')>#body</table>",
+	       properties=> { refnum=> sub { refStepCounter('table'); }});
+DefEnvironment('{table*}[]',  "<table refnum='#refnum' ?#1(placement='#1')>#body</table>",
+	       properties=> { refnum=> sub { refStepCounter('table'); }});
+DefConstructor('\caption[]{}',"<caption>#2</caption>\n?#1(<toccaption>#1</toccaption>)");
+
+DefPrimitive('\suppressfloats[]', undef);
+
+NewCounter('topnumber');
+DefMacro('\topfraction',"0.25");
+NewCounter('bottomnumber');
+DefMacro('\bottomfraction',"0.25");
+NewCounter('totalnumber');
+DefMacro('\textfraction',"0.25");
+DefMacro('\floatpagefraction',"0.25");
+NewCounter('dbltopnumber');
+DefMacro('\dblfloatpagefraction',"0.25");
+DefMacro('\dblfloatpagefraction',"0.25");
+DefRegister('\floatsep',Glue(0));
+DefRegister('\textfloatsep',Glue(0));
+DefRegister('\intextsep',Glue(0));
+DefRegister('\dblfloatsep',Glue(0));
+DefRegister('\dbltextfloatsep',Glue(0));
+
+#======================================================================
+# C.9.2 Marginal Notes
+#======================================================================
+
+DefConstructor('\marginpar[]{}', "<marginpar>#2</marginpar>");
+DefPrimitive('\reversemarginpar',undef);
+DefPrimitive('\normalmarginpar', undef);
+DefRegister('\marginparpush',Dimension(0));
+
+#**********************************************************************
+# C.10 Lining It Up in Columns
+#**********************************************************************
+
+#======================================================================
+# C.10.1 The tabbing Environment
+#======================================================================
+
+# NOTE: Do it!!
+
+#======================================================================
+# C.10.2 The array and tabular Environments
+#======================================================================
+# See the postprocessing class LaTeXML::Post::HTMLTable
+# for how to make a more HTML-like table from this.
+# NOTE: May need to come back & fill in some things like \tabularcr
+# \@arraycr, etc..
+
+Tag('tr', autoOpen=>1, autoClose=>1);
+Tag('td', autoOpen=>1, autoClose=>1);
+
+# These two can be used as the beforeDigest and afterDigest of tabular-like environments.
+# They setup the appropriate definitions and such for constructing tabulars, dealing with 
+# rows & columns.
+sub before_tabular {
+  # This handles & in tables.
+  # If there is an open td or multicolumn, close it,
+  # Otherwise, we need to open a td first, then close it!
+  # NOTE: It needs to be generalized for different sorts of arrays, etc.
+  DefConstructor('&',sub {   $_[0]->maybeCloseElement('td') || $_[0]->insertElement('td'); },
+		 beforeDigest=>\&EGroup, afterDigest=>\&BGroup );
+  DefConstructor("\\\\ Flag:* []", sub { $_[0]->maybeCloseElement('tr'); },
+		 untex=>"\\\\\n",
+		 beforeDigest=>\&EGroup, afterDigest=>\&BGroup );
+  BGroup; }
+
+sub after_tabular {
+  EGroup; }
+
+# Note: we allow a tabular to float up to where it is allowed (it's sometimes inside equation)
+DefEnvironment('{tabular}[]{}', "^<tabular pattern='#2'>#body</tabular>",
+  beforeDigest=> \&before_tabular, afterDigest=> \&after_tabular,
+  mode=>'text');
+
+# ignore width(#1), and pos(#2)
+DefEnvironment('{tabular*}{}[]{}', "^<tabular pattern='#2'>#body</tabular>",
+  beforeDigest=> \&before_tabular, afterDigest=> \&after_tabular,
+  mode=>'text');
+
+# Open, but don't close, so "&" can operate correctly.
+DefConstructor('\multicolumn{}{}{}',"<td colspan='#1' pattern='#2'>#3");
+DefConstructor('\hline',"<hline/>");
+
+# NOTE: \vline, \cline{c1-c2}
+DefRegister('\arraycolsep',Dimension(0));
+DefRegister('\tabcolsep',Dimension(0));
+DefRegister('\arrayrulewidth',Dimension(0));
+DefMacro('\extracolsep{}','');
+DefMacro('\arraystretch',"1");
+
+# Array and similar environments
+# Since in Math, we're using XMTok and XMApp generically, rather than specific <tr>,<td> etc.
+# we have to do all the `automatic' open/close manually.
+sub matharray {
+  my($document,$alignment,$props, $arrayname,$rowname,$cellname,%attributes)=@_;
+  local($LaTeXML::arrayname,$LaTeXML::rowname,$LaTeXML::cellname)=($arrayname,$rowname,$cellname);
+  # Open the Array, and an initial row and cell.
+  open_matharray_level($document,$arrayname,%attributes);
+  open_matharray_level($document,$rowname);
+  open_matharray_level($document,$cellname);
+  open_matharray_arg($document);
+  # Now process the body (& and // should be bound to matharray_{align|cr} )
+  $document->absorb($$props{body});
+  # Close open cell and row, pruning empty ones.
+  close_matharray_arg($document);
+  close_matharray_level($document,$cellname,1);
+  close_matharray_level($document,$rowname,1);
+  close_matharray_level($document,$arrayname,0);
+}
+
+# Close XMArg, and if empty, remove it.
+sub open_matharray_arg {
+  my($document)=@_;
+  # NOTE: Until this gets better sorted out, allow punctuation!
+  $document->openElement('XMArg',rule=>'Anything,'); }
+
+sub close_matharray_arg {
+  my($document)=@_;
+  my $node = $document->closeElement('XMArg')->lastChild;
+  # If XMArg is (except for comments) empty, remove it, but move it's comments up.
+  if(grep(ref $_ ne 'LaTeXML::CommentNode', $node->childNodes) == 0){ # No non-comment => `empty'
+    $node->getParentNode->removeChild($node);
+    map($node->getParentNode->insert($_),grep(ref $_ eq 'LaTeXML::CommentNode', $node->childNodes)); }
+}
+
+sub open_matharray_level {
+  my($document,$levelname,%attributes)=@_;
+  $document->openElement('XMApp'); 
+  $document->insertElement('XMTok',undef,name=>$levelname,%attributes); }
+
+sub close_matharray_level {
+  my($document,$levelname,$prune)=@_;
+  # If XMApp is empty (except for the Array/Row/Cell operator and comments), remove it,
+  # but preserve the commetns.
+  my $node = $document->closeElement('XMApp')->lastChild;
+  if(grep(ref $_ ne 'LaTeXML::CommentNode', $node->childNodes) == 1){ # Only 1 non-comment => `empty'
+    $node->getParentNode->removeChild($node);
+    map($node->getParentNode->insert($_),grep(ref $_ eq 'LaTeXML::CommentNode', $node->childNodes)); }
+}
+
+# Note: The next two worry me abit.
+#  If we're in the middle of something `important', particularly something
+# that can't be broken, when a & or \\ appears, it may be preferable
+# to ignore the & or \\ and continue.  The table/array structure won't end
+# up right, but...
+sub matharray_align {
+  my($document)=@_;
+  my $n;
+  # Convoluted: "Do we seem to be in the right place?"
+  if(($n=$document->isCloseable('XMArg','XMApp'))
+      && ($n = $n->firstChild) && (($n->getAttribute('name')||'') eq $LaTeXML::cellname)){
+    close_matharray_arg($document);
+    close_matharray_level($document,$LaTeXML::cellname);
+    open_matharray_level($document,$LaTeXML::cellname);
+    open_matharray_arg($document); }
+  else { Error("Unable to insert array align in unclosed ".$document->getNodePath);}
+}
+
+sub matharray_cr {
+  my($document)=@_;
+  my $n;
+  # Convoluted: "Do we seem to be in the right place?"
+  if(($n=$document->isCloseable('XMArg','XMApp','XMApp'))
+      && ($n = $n->firstChild) && (($n->getAttribute('name')||'') eq $LaTeXML::rowname)){
+    close_matharray_arg($document);
+    close_matharray_level($document,$LaTeXML::cellname,1);
+    close_matharray_level($document,$LaTeXML::rowname);
+    open_matharray_level($document,$LaTeXML::rowname);
+    open_matharray_level($document,$LaTeXML::cellname);
+    open_matharray_arg($document); }
+  else { Error("Unable to insert array cr in unclosed ".$document->getNodePath);}
+}
+
+
+# The next two can serve as the beforeDigest and afterDigest for array-like environments.
+# They set up things for constructing the array, rows and colums.
+sub before_matharray {
+  DefConstructor('&', \&matharray_align,
+		 beforeDigest=>\&EGroup, afterDigest=>\&BGroup );
+  DefConstructor("\\\\ Flag:* []", \&matharray_cr,
+		 beforeDigest=>\&EGroup, afterDigest=>\&BGroup );
+  # Hmm... So, if we've got \hlines, it's more like a table than a matrix,....
+  DefConstructor('\hline',"<XMHint name='hline'/>");
+  BGroup; }
+
+sub after_matharray {
+  EGroup; }
+
+DefEnvironment('{array}[]{}',sub { matharray($_[0],$_[2],$_[3], 'Array','Row','Cell');},
+	       beforeDigest=>\&before_matharray, afterDigest=>\&after_matharray);
+
+#**********************************************************************
+# C.11 Moving Information Around
+#**********************************************************************
+
+#======================================================================
+# C.11.1 Files
+#======================================================================
+DefPrimitive('\nofiles',undef);
+
+#======================================================================
+# C.11.2 Cross-References
+#======================================================================
+# add a label id to nearest labelable element.
+DefConstructor('\label{semiverb}',"^ label='#1'",  untex=>'',
+	       afterDigest=>sub {
+		 my $label = $_[1]->toString;
+		 my $scope = 'label:'.$label;
+		 unshift(@{LookupValue('scopes_for_counter:'.LookupValue('current_counter'))},
+		      $scope);
+		 $STATE->activateScope($scope);
+		 BeginMode('text');
+		 AssignValue('LABEL@'.$_[1]->toString, Digest(T_CS('\@currentlabel')),'global');
+		 EndMode('text'); });
+
+DefMacro('\ref{semiverb}', '\@REF{#1}{\@VALUE{LABEL@#1}}');
+DefMacro('\pageref{semiverb}', '\@REF{#1}{\@VALUE{LABEL@#1}}'); # Any sense in distinguishing?
+DefConstructor('\@REF{}{}', "<ref labelref='#1'>#2</ref>");
+
+#======================================================================
+# C.11.3 Bibliography and Citation
+#======================================================================
+
+# NOTE: Not really complete, since I haven't dealt with bibliographies!
+DefConstructor('\bibliography{}', "<bibliography files='#1'/>");
+
+DefEnvironment('{thebibliography}{}',"<bibliography>#body</bibliography>");
+
+# NOTE: 
+DefConstructor('\bibitem[]{}',"<bibitem ref='#1'>#1</bibitem>");
+
+sub makecite {
+  my($style,$show, $document,$phrase1,$phrase2,$ref)=@_;
+  $document->openElement('cite', ref=>$ref,style=>$style, show=>$show);
+  if(defined $phrase1 && defined $phrase2){
+    $document->insertElement('citepre',$phrase1);
+    $document->insertElement('citepost',$phrase2); }
+  elsif(defined $phrase1){
+    $document->insertElement('citepost',$phrase1); }
+  $document->closeElement('cite'); }
+
+# Most of this is really natbib style.
+DefConstructor('\cite[][]{semiverb}',       sub { makecite('intext','all',@_); });
+DefConstructor('\citet[][]{semiverb}',      sub { makecite('intext','all',@_); });
+DefConstructor('\citep[][]{semiverb}',      sub { makecite('parenthetic','all',@_); });
+DefConstructor('\citeauthor[][]{semiverb}', sub { makecite('intext','author',@_); });
+DefConstructor('\citeyear[][]{semiverb}',   sub { makecite('intext','year',@_); });
+DefConstructor('\citeyearpar[][]{semiverb}',sub { makecite('parenthetic','year',@_); });
+
+
+#======================================================================
+# C.11.4 Splitting the input
+#======================================================================
+# LaTeX's \input is a bit different...
+DefPrimitive('\input', sub {
+  my ($tok,$file);
+  if($tok=$GULLET->ifNext('{',CC_BEGIN)){ # Read LaTeX style
+    $GULLET->unread($tok);
+    $file=$GULLET->expandTokens($GULLET->readArg()); }
+  else {			# Read TeX style.
+    my ($token,@tokens)=();
+    while(($token=$GULLET->readXToken()) && ($token->getCatcode != CC_SPACE)){
+      push(@tokens,$token); }
+    $file = Tokens(@tokens); }
+  $GULLET->input($file,['tex']);
+  return; });
+
+# Note that even excluded files SHOULD have the effects of their inclusion
+# simulated by having read the corresponding aux file;
+# But we're not bothering with that.
+DefPrimitive('\include{}',sub { 
+  my($self,$file)=@_;
+  $file = $file->toString;
+  my $table = LookupValue('including@only');
+  $GULLET->input($file,['tex']) if !$table || $$table{$file};
+  return;});
+
+DefPrimitive('\includeonly{}',sub {
+  my($self,$files)=@_;
+  $files = $files->toString;
+  my $table = LookupValue('including@only');
+  AssignValue('including@only', $table = {}, 'global') unless $table;
+  map( $$table{$_}=1, split(',',$files));
+  return; });
+
+#Environment('filecontents','{}',?
+#Environment('filecontents*','{}',?
+
+DefPrimitive('\listfiles',undef);
+
+#======================================================================
+# C.11.5 Index and Glossary
+#======================================================================
+DefEnvironment('{theindex}', "<theindex>#body</theindex>");
+DefPrimitive('\printindex',  undef);
+DefPrimitive('\makeindex',   undef);
+DefPrimitive('\makeglossary',undef);
+
+# Format of Index entries:
+#   \index{entry!entry}  gives multilevel index (handled)
+# Each entry:
+#   foo@bar  sorts on "foo" but prints "bar" (not handled yet)
+# The entries can end with a |expression:
+#   \index{...|(}    this page starts a range for foo (not handled)
+#   \index{...|)}    this page ends a range (not handled)
+#   \index{...|see{key}}  cross reference (not handled yet)
+#      [I think makeindex just prints key, but we'll have to create an actual cross link!!!]
+#   \index{...|textbf}  (etc) causes the number to be printed in bold!
+#
+# I guess the formula is that
+#    \index{foo!whatever{pi}{pa}{po}}  => \whatever{pi}{pa}{po}{page}
+# How should this get interpreted??
+
+# A bit screwy, but....
+# Expand \index{a!b!...} into \@index{\@indexphrase{a}\@indexphrase{b}...}
+DefExpandable('\index{}',sub { 
+  my($self,$phrases)=@_;
+  my @expansion = (T_CS('\@index'),T_BEGIN);
+  # Split the text into phrases, separated by "!"
+  my @tokens = $phrases->unlist;
+  push(@tokens,T_OTHER('!')) unless $tokens[$#tokens]->getString eq '!'; # Add terminal !
+  my @phrase=();
+  foreach my $tok (@tokens){
+    if($tok->getString eq '!'){
+      while(@phrase && ($phrase[$#phrase]->getString =~ /\s/)){ pop(@phrase); }
+      push(@expansion,T_CS('\@indexphrase'),T_BEGIN,@phrase,T_END)
+	if @phrase;
+      @phrase=(); }
+    elsif(!@phrase && ($tok->getString =~ /\s/)){}	# Skip leading whitespace
+    else { 
+      push(@phrase,$tok); }}
+  push(@expansion,T_END);
+  @expansion; });
+
+DefConstructor('\@index{}',"^<index>#1</index>", mode=>'text', untex=>'');
+DefConstructor('\@indexphrase{}',"<indexphrase>#1</indexphrase>");
+
+# NOTE:
+# DefConstructor('\glossary','{}',sub { ...
+#======================================================================
+# C.11.6 Terminal Input and Output
+#======================================================================
+
+DefPrimitive('\typeout{}',sub {
+  my($self,$stuff)=@_;
+  print STDERR $GULLET->expandTokens($stuff)->untex;
+  return; });
+
+#DefPrimitive('\typein[]{}',sub {
+#  print STDERR $_[2]->untex; 
+#  # Then setValue $_[1] to read ???
+#	       });
+
+#**********************************************************************
+# C.12 Line and Page Breaking
+#**********************************************************************
+
+#======================================================================
+# C.12.1 Line Breaking
+#======================================================================
+DefPrimitive('\linebreak[]',undef);
+DefPrimitive('\nolinebreak[]',undef);
+# \\ already defined
+DefConstructor('\newline',"\n");
+DefPrimitive('\-',undef);	# We don't do hyphenation.
+# \hyphenation in Primitives.pm
+
+DefPrimitive('\sloppy',undef);
+DefPrimitive('\fussy',undef);
+
+#======================================================================
+# C.12.2 Page Breaking
+#======================================================================
+DefPrimitive('\pagebreak[]',undef);
+DefPrimitive('\nopagebreak[]',undef);
+DefPrimitive('\enlargethispage Flag:* {}',undef);
+
+DefPrimitive('\clearpage',undef); # Could possibly mean something?
+DefPrimitive('\cleardoublepage',undef);
+
+#**********************************************************************
+# C.13 Lengths, Spaces and Boxes
+#**********************************************************************
+
+#####
+#####
+#  Complete to here
+#  [except for NOTE'd entries, of course]
+#####
+#####
+
+#======================================================================
+# C.13.1 Length
+#======================================================================
+# \fill
+# \stretch
+# \newlength{cmd}
+DefPrimitive('\newlength{Token}',sub {
+  my($self,$cmd)=@_;
+  DefRegister($cmd->toString,Dimension(0)); });
+# \setlength{cmd}{len}
+DefPrimitive('\setlength{Token}{Dimension}',sub{
+  my($self,$cmd,$dimen)=@_;
+  $cmd->getDefinition->setValue($dimen);});
+# \addtolength{cmd}{len}
+DefPrimitive('\addtolength{Token}{Dimension}',sub{
+  my($self,$cmd,$dimen)=@_;
+  my $register =  $cmd->getDefinition;
+  $register->setValue($register->valueOf->add($dimen));});
+# \settowidth{cmd}{text}
+# \settoheight{cmd}{text}
+# \settodepth{cmd}{text}
+
+# Assuming noone tries to get clever with figuring out the allocation of 
+# numbers, these become simple DefRegister's
+DefPrimitive('\newcount{Token}', sub { DefRegister($_[1]->toString,Number(0)); });
+DefPrimitive('\newdimen{Token}', sub { DefRegister($_[1]->toString,Dimension(0)); });
+DefPrimitive('\newskip{Token}',  sub { DefRegister($_[1]->toString,Glue(0)); });
+DefPrimitive('\newmuskip{Token}',sub { DefRegister($_[1]->toString,MuGlue(0)); });
+#DefPrimitive('\newbox{Token}',  sub { DefRegister($_[1]->toString,LaTeXML::Box->new()); });
+DefPrimitive('\newtoks{Token}',  sub { DefRegister($_[1]->toString,Tokens()); });
+
+#======================================================================
+# C.13.2 Space
+#======================================================================
+DefPrimitive('\hspace Flag:* {}',undef);
+DefPrimitive('\vspace Flag:* {}',undef);
+# \bigskip, \medskip, \smallskip
+# \addvspace{len}
+# \hfill, \vfill
+
+#======================================================================
+# C.13.3 Boxes
+#======================================================================
+DefConstructor('\mbox{}',"<text>#1</text>", mode=>'text');
+DefConstructor('\makebox[Dimension][]{}',"<text ?#1(width='#1') ?#2(pos='#2')>#3</text>", 
+	       mode=>'text');
+DefConstructor('\fbox{}',"<text framed='yes'>#1</text>", mode=>'text');
+DefConstructor('\framebox[Dimension][]{}',"<text ?#1(width='#1') ?#2(pos='#2') framed='yes'>#3</text>",
+	       mode=>'text');
+DefPrimitive('\newsavebox{Token}',sub { AssignValue('box'.$_[1]->toString, LaTeXML::List->new()); });
+DefPrimitive('\sbox{Token}{}',sub {
+   AssignValue('box'.$_[1]->toString, Digest($_[2])); return;});
+DefPrimitive('\savebox{Token}[][]{}',sub {
+   AssignValue('box'.$_[1]->toString, Digest($_[4])); return;});
+DefEnvironment('{lrbox}{Token}','',
+  afterDigest=>sub{ 
+    my($whatsit,$name)=@_;
+    AssignValue('box'.$name->toString, $whatsit->getProperty('body')); });
+DefPrimitive('\usebox{Token}', sub { LookupValue('box'.$_[1]->toString);});
+
+DefConstructor('\parbox[][Dimension]{}',"<minipage ?#2(width='#2') ?#1(pos='#1') justified='yes'>#3</minipage>",
+	       mode=>'text');
+DefEnvironment('{minipage}[]{Dimension}',"<minipage ?#2(width='#2') ?#1(pos='#1') justified='yes'>#body</minipage>",
+	       mode=>'text');
+DefConstructor('\rule[]{}{}', "<rule ?#1(raise='#1') width='#2' height='#3'/>");
+
+#**********************************************************************
+# C.14 Pictures and Color
+#**********************************************************************
+#======================================================================
+# C.14.1 The picture environment
+#======================================================================
+DefRegister('\unitlength',Dimension('1pt'));
+
+sub readPicCoordinate {
+  if($GULLET->ifNext(T_OTHER('('))){
+    my $x = LookupValue('\unitlength')->multiply($GULLET->readUntil(T_OTHER(','))->toString);
+    my $y = LookupValue('\unitlength')->multiply($GULLET->readUntil(T_OTHER(')'))->toString);
+    ($x,$y); }
+  else {
+    (undef,undef); }}
+
+sub readPicCoordinate {
+  if($GULLET->ifNext(T_OTHER('('))){
+    $GULLET->skipSpaces;
+    my $x = $GULLET->readNumber;
+    $GULLET->skipSpaces;
+    $GULLET->readUntil(T_OTHER(','));
+    $GULLET->skipSpaces;
+    my $y = $GULLET->readNumber;
+    $GULLET->skipSpaces;
+    $GULLET->readUntil(T_OTHER(')'));
+
+    $x = LookupValue('\unitlength')->multiply($x->valueOf);
+    $y = LookupValue('\unitlength')->multiply($y->valueOf);
+    ($x,$y); }
+  else {
+    (undef,undef); }}
+
+sub read_pic_box_args {
+  (readPicCoordinate(),
+   Digest($GULLET->readOptional),
+   Digest($GULLET->readArg)); }
+
+sub read_pic_line_args {
+  (readPicCoordinate(),
+#   Digest($GULLET->readArg)
+   $GULLET->readNumber # well, actually {Number}, not just Number!!
+); }
+
+sub before_picture {
+  DefConstructor('\makebox',
+		 "<box width='#1' height='#2' position='#3'>#4</box>",
+		 beforeDigest=>\&BGroup, 
+		 nargs=>4, afterDigest=>sub { $_[0]->setArgs(read_pic_box_args()); EGroup; }); 
+  DefConstructor('\framebox',
+		 "<box frame='yes' width='#1' height='#2' position='#3'>#4</box>",
+		 beforeDigest=>\&BGroup,
+		 nargs=>4, afterDigest=>sub { $_[0]->setArgs(read_pic_box_args()); EGroup; }); 
+  DefConstructor('\dashbox',
+		 "<box dash-spacing='#1' width='#2' height='#3' position='#4'>#5</box>",
+		 beforeDigest=>\&BGroup,
+		 nargs=>5, afterDigest=>sub { $_[0]->setArgs(Digest($GULLET->readArg),
+							     read_pic_box_args()); EGroup; });
+  DefConstructor('\line',
+		 "<line x-slope='#1' y-slope='#2' length='#3'/>",
+		 nargs=>3, afterDigest=>sub { $_[0]->setArgs(read_pic_line_args()); });
+  DefConstructor('\vector',
+		 "<line x-slope='#1' y-slope='#2' length='#3' arrowhead='yes'/>",
+		 nargs=>3, afterDigest=>sub { $_[0]->setArgs(read_pic_line_args()); });
+  DefConstructor('\circle Flag:* {}', "<circle filled='#1' diameter='#2'/>");
+  DefConstructor('\oval',
+		 "<oval radius='#1' width='#2' height='#3' part='#4'/>",
+		 nargs=>4, afterDigest=>sub {
+		   $_[0]->setArgs(Digest($GULLET->readArg),
+				  read_pic_line_args(),
+				  Digest($GULLET->readOptional)); });
+  DefConstructor('\frame{}', "<frame>#1</frame>");
+  DefConstructor('\shortstack{}', "<box>#1</box>");
+}
+sub after_picture {}
+
+
+DefEnvironment('{picture}',
+	       "<picture width='#1' height='#2' xoff='#3' yoff='#4'>#body</picture>",
+	       nargs=>4,
+	       beforeDigest=>\&before_picture,
+	       afterDigestBegin=>sub {
+		 my($whatsit)=@_;
+		 $whatsit->setArgs(readPicCoordinate(),
+				   readPicCoordinate()); 
+		 return; },
+	       afterDigest=>\&after_picture);
+DefConstructor('\put',
+	       "<put x='#1' y='#2'>#3</put>",
+	       nargs=>3, beforeDigest=>\&BGroup,
+	       afterDigest=>sub { $_[0]->setArgs(readPicCoordinate(),
+						 Digest($GULLET->readArg)); EGroup; }); 
+
+Tag('put',afterClose=>sub {
+      my($node)=@_;
+      my($x,$y)=map($node->getAttribute($_),qw(x y));
+      my $parent=$node->parentNode;
+      foreach my $child ($node->childNodes){
+	$child->setAttribute(x=>$x);
+	$child->setAttribute(y=>$y);
+	$parent->insertBefore($child,$node); }
+      $parent->removeChild($node);
+});
+
+DefMacro('\multiput Literal:( Until:, Until:) Literal:( Until:, Until:) {}{}',
+	 sub{ my($ignore,$x,$y,$dx,$dy,$n,$body)=@_;
+	      ($x,$y,$dx,$dy,$n)=map($_->toString,$x,$y,$dx,$dy,$n);
+	      my @exp=();
+	      for(my $i=0; $i<$n; $i++){
+		push(@exp,T_CS('\put'),T_OTHER('('),Explode($x),T_OTHER(','),Explode($y),T_OTHER(')'),
+		     T_BEGIN,$body->unlist,T_END); 
+		$x += $dx; $y+=$dy; }
+	      @exp; });
+
+DefConstructor('\qbezier',
+	       "<qbezier spacing='#1' x0='#2' y0='#3' x1='#4' y1='#5' x2='#6' y2='#7'/>",
+	       nargs=>7,
+	       afterDigest=>sub { $_[0]->setArgs(Digest($GULLET->readOptional), 
+						 readPicCoordinate(),
+						 readPicCoordinate(),
+						 readPicCoordinate()); });
+
+# \savebox -- already defined differntly in C.13 above ? 
+DefPrimitive('\thinlines',undef);
+DefPrimitive('\thicklines',undef);
+DefPrimitive('\linethickness{}',undef);
+
+#**********************************************************************
+# C.15 Font Selection
+#**********************************************************************
+#======================================================================
+# C.15.1 Changing the Type Style
+#======================================================================
+# Text styles.
+
+# What about \f@family, etc....?
+# These are not allowed in math.
+DefConstructor('\mdseries', '',  beforeDigest=>sub{ ForbidMath; MergeFont(series=>'medium');});
+DefConstructor('\bfseries', '',  beforeDigest=>sub{ ForbidMath; MergeFont(series=>'bold');});
+
+DefConstructor('\rmfamily', '',  beforeDigest=>sub{ ForbidMath; MergeFont(family=>'serif');});
+DefConstructor('\sffamily', '',  beforeDigest=>sub{ ForbidMath; MergeFont(family=>'sansserif');});
+DefConstructor('\ttfamily', '',  beforeDigest=>sub{ ForbidMath; MergeFont(family=>'typewriter');});
+
+DefConstructor('\upshape',  '', beforeDigest=>sub{ ForbidMath; MergeFont(shape=>'upright');});
+DefConstructor('\itshape',  '', beforeDigest=>sub{ ForbidMath; MergeFont(shape=>'italic');});
+DefConstructor('\slshape',  '', beforeDigest=>sub{ ForbidMath; MergeFont(shape=>'slanted');});
+DefConstructor('\scshape',  '', beforeDigest=>sub{ ForbidMath; MergeFont(shape=>'smallcaps');});
+
+DefConstructor('\normalfont', '', beforeDigest=>sub{ MergeFont(family=>'serif', series=>'medium', shape=>'upright');});
+
+DefConstructor('\verbatim@font', '', beforeDigest=>sub{ MergeFont(family=>'typewriter', series=>'medium', shape=>'upright');});
+
+# If these series or shapes appear in math, they revert it to roman, medium, upright (?)
+DefConstructor('\textmd{}', "?IfMath(<text>#1</text>)(#1)", mode=>'text',
+	       beforeDigest=>sub{ BGroup; MergeFont(series=>'medium'); },
+	       afterDigest=>\&EGroup);
+DefConstructor('\textbf{}', "?IfMath(<text>#1</text>)(#1)", mode=>'text',
+	       beforeDigest=>sub{ BGroup; MergeFont(series=>'bold');},
+	       afterDigest=>\&EGroup);
+DefConstructor('\textrm{}', "?IfMath(<text>#1</text>)(#1)", mode=>'text',
+	       beforeDigest=>sub{ BGroup; MergeFont(family=>'serif');},
+	       afterDigest=>\&EGroup);
+DefConstructor('\textsf{}', "?IfMath(<text>#1</text>)(#1)", mode=>'text',
+	       beforeDigest=>sub{ BGroup; MergeFont(family=>'sansserif');},
+	       afterDigest=>\&EGroup);
+DefConstructor('\texttt{}', "?IfMath(<text>#1</text>)(#1)", mode=>'text',
+	       beforeDigest=>sub{ BGroup; MergeFont(family=>'typewriter'); },
+	       afterDigest=>\&EGroup);
+
+DefConstructor('\textup{}', "?IfMath(<text>#1</text>)(#1)", mode=>'text',
+	       beforeDigest=>sub{ BGroup; MergeFont(shape=>'upright'); },
+	       afterDigest=>\&EGroup);
+DefConstructor('\textit{}', "?IfMath(<text>#1</text>)(#1)", mode=>'text',
+	       beforeDigest=>sub{ BGroup; MergeFont(shape=>'italic'); },
+	       afterDigest=>\&EGroup);
+DefConstructor('\textsl{}', "?IfMath(<text>#1</text>)(#1)", mode=>'text',
+	       beforeDigest=>sub{ BGroup; MergeFont(shape=>'slanted'); },
+	       afterDigest=>\&EGroup);
+DefConstructor('\textsc{}', "?IfMath(<text>#1</text>)(#1)", mode=>'text',
+	       beforeDigest=>sub{ BGroup; MergeFont(shape=>'smallcaps'); },
+	       afterDigest=>\&EGroup);
+
+DefConstructor('\textnormal{}', '#1',
+	       beforeDigest=>sub{ BGroup; MergeFont(family=>'serif',series=>'medium',shape=>'upright'); },
+	       afterDigest=>\&EGroup);
+
+DefPrimitive('\mathversion{}',sub {
+  my($self,$version)=@_;
+  $version = $version->toString;
+  if($version eq 'bold'     ){ setMathBoldness(1); }
+  elsif($version eq 'normal'){ setMathBoldness(0); }
+  else { Fatal("Unknown math verison \"$version\""); }});
+
+#======================================================================
+# C.15.2 Changing the Type Size
+#======================================================================
+# Handled in Primitive.pm
+
+#======================================================================
+# C.15.3 Special Symbol
+#======================================================================
+# \symbol{num} ????
+
+# These in LaTeX, but not in the book...
+DefConstructor('\textdollar',"\$");
+DefConstructor('\textemdash',"\x{2014}"); # EM DASH
+DefConstructor('\textendash',"\x{2013}"); # EN DASH
+DefConstructor('\textexclamdown',"\x{00A1}"); # INVERTED EXCLAMATION MARK
+DefConstructor('\textquestiondown',"\x{00BF}");	# INVERTED QUESTION MARK
+DefConstructor('\textquotedblleft',"\x{201C}"); # LEFT DOUBLE QUOTATION MARK
+DefConstructor('\textquotedblright',"\x{201D}"); # RIGHT DOUBLE QUOTATION MARK
+DefConstructor('\textquoteleft',"\x{2018}");     # LEFT SINGLE QUOTATION MARK
+DefConstructor('\textquoteright',"\x{2019}");    # RIGHT SINGLE QUOTATION MARK
+#DefConstructor('\textsterling',"\x{}");
+#DefConstructor('\textasteriskcentered',"\x{}");
+DefConstructor('\textbackslash',"\x{005C}"); # REVERSE SOLIDUS
+#DefConstructor('\textbar',"\x{}");
+DefConstructor('\textbraceleft',"{");
+DefConstructor('\textbraceright',"}");
+DefConstructor('\textbullet',"\x{2022}");    # BULLET
+DefConstructor('\textdaggerdbl',"\x{2020}"); # DOUBLE DAGGER
+DefConstructor('\textdagger',"\x{2021}");    # DAGGER
+DefConstructor('\textparagraph',"\x{00B6}"); # PILCROW SIGN
+DefConstructor('\textperiodcentered',"\x{22C5}"); # DOT OPERATOR
+DefConstructor('\textsection',"\x{00A7}");	      # SECTION SIGN
+DefConstructor('\textless',"<");
+DefConstructor('\textgreater',">");
+DefConstructor('\textcopyright',"\x{00A9}"); # COPYRIGHT SIGN
+DefConstructor('\textasciicircum',"^");
+DefConstructor('\textasciitilde',"~");
+#DefConstructor('\textcompwordmark',"\leavevmode\kern\z@}
+DefConstructor('\textunderscore',"_");
+DefConstructor('\textvisiblespace'," ");
+DefConstructor('\textellipsis',"\x{2026}"); # HORIZONTAL ELLIPSIS
+#defconstructor('\textregistered',"\textcircled{\scshape r}}
+#DefConstructor('\texttrademark',"\textsuperscript{TM}}
+DefConstructor('\textsuperscript{}',"<textsup>#1</textsup>");
+#DefConstructor('\textcircled{}',
+
+#**********************************************************************
+# Other stuff
+#**********************************************************************
+# Some stuff that got missed in the appendices ?
+
+DefMacro('\@namedef{}','\expandafter\def\csname #1\endcsname');
+DefMacro('\@nameuse{}','\csname #1\endcsname');
+
+#DefMacro('\space',' ');
+DefMacro('\space',Tokens(T_SPACE));
+DefMacro('\@spaces','\space\space\space\space');
+DefMacro('\@empty',Tokens());
+Let('\empty',T_CS('\@empty'));
+Let('\@sptoken',T_SPACE);
+#======================================================================
+# Internals used in Packages
+DefMacro('\NeedsTeXFormat{}','');
+DefMacro('\ProvidesClass{}[]','');
+DefMacro('\ProvidesPackage{}[]','');
+DefMacro('\DeclareOption{}{}', sub {
+  my($self,$option,$code)=@_;
+#  DefMacro('\ds@'.$option->toString,
+#	   $GULLET->expandTokens(Tokens($GULLET->neutralizeTokens($code->unlist)))); });
+  $STATE->installDefinition(
+       LaTeXML::Expandable->new(T_CS('\ds@'.$option->toString),undef,
+		   $GULLET->expandTokens(Tokens($GULLET->neutralizeTokens($code->unlist)))));
+  (); });
+
+DefMacro('\ExecuteOptions{}', sub{
+  my($self,$options)=@_;
+  map(T_CS('\ds@'.$_),split(',',$options->toString)); });
+DefMacro('\ProcessOptions','');
+DefMacro('\@ehc',"I can't help");
+
+sub make_message {
+  my($cs,@args)=@_;
+  join("\n",map($GULLET->expandTokens($_)->toString,@args)); }
+
+DefMacro('\@onlypreamble{}',''); # Don't bother enforcing this.
+
+DefMacro('\GenericError{}{}{}{}', sub{ Fatal(make_message(@_)); });
+DefMacro('\GenericWarning{}{}',         sub{ Warn(make_message(@_)); });
+DefMacro('\GenericInfo{}{}{}{}',  sub{ print STDERR "Info: ".make_message(@_)."\n"; });
+
+DefMacro('\PackageError{}{}{}',
+  ' \GenericError{%
+      (#1)\@spaces\@spaces\@spaces\@spaces
+   }{%
+      Package #1 Error: #2%
+   }{%
+      See the #1 package documentation for explanation.%
+   }{#3}');
+DefMacro('\PackageWarning{}{}',
+   '\GenericWarning{%
+      (#1)\@spaces\@spaces\@spaces\@spaces
+   }{%
+      Package #1 Warning: #2%
+   }');
+DefMacro('\PackageWarningNoLine{}{}',
+  ' \PackageWarning{#1}{#2\@gobble}');
+DefMacro('\PackageInfo{}{}',
+  '\GenericInfo{%
+      (#1) \@spaces\@spaces\@spaces
+   }{%
+      Package #1 Info: #2%
+   }');
+DefMacro('\ClassError{}{}{}',
+  '\GenericError{%
+      (#1) \space\@spaces\@spaces\@spaces
+   }{%
+      Class #1 Error: #2%
+   }{%
+      See the #1 class documentation for explanation.%
+   }{#3}');
+DefMacro('\ClassWarning{}{}',
+  '\GenericWarning{%
+      (#1) \space\@spaces\@spaces\@spaces
+   }{%
+      Class #1 Warning: #2%
+   }');
+DefMacro('\ClassWarningNoLine{}{}',
+  '\ClassWarning{#1}{#2\@gobble}');
+DefMacro('\ClassInfo{}{}',
+  '\GenericInfo{%
+      (#1) \space\space\@spaces\@spaces
+   }{%
+      Class #1 Info: #2%
+   }');
+DefMacro('\@latex@error{}{}',
+  '\GenericError{%
+      \space\space\space\@spaces\@spaces\@spaces
+   }{%
+      LaTeX Error: #1%
+   }{%
+      See the LaTeX manual or LaTeX Companion for explanation.%
+   }{#2}');
+DefMacro('\@latex@warning{}',
+  '\GenericWarning{%
+      \space\space\space\@spaces\@spaces\@spaces
+   }{%
+      LaTeX Warning: #1%
+   }');
+DefMacro('\@latex@warning@no@line{}',
+  '\@latex@warning{#1\@gobble}');
+DefMacro('\@latex@info{}',
+   '\GenericInfo{%
+      \@spaces\@spaces\@spaces
+   }{%
+      LaTeX Info: #1%
+   }');
+DefMacro('\@latex@info@no@line{}',
+  '\@latex@info{#1\@gobble}');
+
+#======================================================================
+
+# From latex.ltx
+#\newdimen\maxdimen \maxdimen=16383.99999pt % the largest legal <dimen>
+#\newskip\hideskip \hideskip=-1000pt plus 1fill % negative but can grow
+#\newdimen\p@ \p@=1pt % this saves macro space and time
+#\newdimen\z@ \z@=0pt % can be used both for 0pt and 0
+#\newskip\z@skip \z@skip=0pt plus0pt minus0pt
+#\newbox\voidb@x % permanently void box register
+
+# First approximation.
+DefRegister('\maxdimen',Dimension(16383.99999*65536));
+DefRegister('\hideskip',Glue(-1000*65536,'1fill'));
+DefRegister('\p@',Dimension(65536));
+DefRegister('\z@',Dimension(0));
+DefRegister('\z@skip',Glue(0,0,0));
+DefMacro('\voidb@x','');
+
+# \newread
+# \newwrite
+
+#======================================================================
+# Some control structure from latex.ltx
+# (amazing that it actually works!)
+# How much of this control struture will I need?
+RawTeX(<<'EOTeX');
+\def\@nnil{\@nil}
+\def\@empty{}
+\def\@fornoop#1\@@#2#3{}
+\long\def\@for#1:=#2\do#3{%
+  \expandafter\def\expandafter\@fortmp\expandafter{#2}%
+  \ifx\@fortmp\@empty \else
+    \expandafter\@forloop#2,\@nil,\@nil\@@#1{#3}\fi}
+\long\def\@forloop#1,#2,#3\@@#4#5{\def#4{#1}\ifx #4\@nnil \else
+       #5\def#4{#2}\ifx #4\@nnil \else#5\@iforloop #3\@@#4{#5}\fi\fi}
+\long\def\@iforloop#1,#2\@@#3#4{\def#3{#1}\ifx #3\@nnil
+       \expandafter\@fornoop \else
+      #4\relax\expandafter\@iforloop\fi#2\@@#3{#4}}
+
+EOTeX
+
+#======================================================================
+DefMacro('\check@mathfonts','');
+DefMacro('\fontsize{}{}','');
+DefMacro('\math@fontsfalse','');
+DefMacro('\math@fontstrue','');
+DefMacro('\selectfont','');
+
+#======================================================================
+# Various symbols, accents, etc from Chapter 3 defined in Primitives.pm
+
+#**********************************************************************
+# Semi-Undocumented stuff
+#**********************************************************************
+DefMacro('\@ifnextchar Token {}{}', sub {
+  my($self,$token,$if,$else)=@_;
+  my $next = $GULLET->readNonSpace;
+  # NOTE: Not actually substituting, but collapsing ## pairs!!!!
+  ( LaTeXML::Expandable::substituteTokens($token->equals($next) ? $if : $else),$next); });
+
+DefMacro('\@ifundefined{}{}{}',sub {
+  my($ignore,$name,$if,$else)=@_;
+  my $cs = T_CS('\\'.$name->untex);
+  if($STATE->lookupMeaning($cs) ne $cs){
+   $if->unlist; }
+  else {
+   $else->unlist; }});
+
+DefMacro('\IfFileExists{}{}{}', sub{
+  my($ignore,$file,$if,$else)=@_;
+  if(pathname_find($file->toString,paths=>$STATE->lookupValue('SEARCHPATHS'))){
+   $if->unlist; }
+  else {
+   $else->unlist; }});
+
+DefMacro('\InputIfFileExists{}{}', sub{
+  my($ignore,$file,$if)=@_;
+  if(pathname_find($file->toString,paths=>$STATE->lookupValue('SEARCHPATHS'))){
+   $GULLET->input($file); 
+   $if->unlist; }
+  else { (); }});
+
+#======================================================================
+# Hair
+DefPrimitive('\makeatletter',sub { AssignCatcode('@'=>CC_LETTER,'local'); });
+DefPrimitive('\makeatother', sub { AssignCatcode('@'=>CC_OTHER, 'local'); });
+
+#**********************************************************************
+#**********************************************************************
+# Sundry (is this ams ?)
+DefConstructor('\textprime',"\x{00B4}"); # ACUTE ACCENT
+
+#**********************************************************************
+1;
