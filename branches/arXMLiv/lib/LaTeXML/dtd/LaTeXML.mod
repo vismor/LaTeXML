@@ -40,6 +40,11 @@
   %LaTeXML-tabular-model.mod;
 ]]>
 
+<![%LaTeXML-theorem.module;[
+  <!ENTITY % LaTeXML-theorem-model.mod   SYSTEM "LaTeXML-theorem-model-1.mod">
+  %LaTeXML-theorem-model.mod;
+]]>
+
 <![%LaTeXML-graphics.module;[
   <!ENTITY % LaTeXML-graphics-model.mod   SYSTEM "LaTeXML-graphics-model-1.mod">
   %LaTeXML-graphics-model.mod;

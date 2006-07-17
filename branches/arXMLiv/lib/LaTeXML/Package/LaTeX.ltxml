@@ -307,6 +307,7 @@ DefRegister('\topmargin'     => Dimension(0));
 DefRegister('\headheight'    => Dimension(0));
 DefRegister('\headsep'       => Dimension(0));
 DefRegister('\footskip'      => Dimension(0));
+DefRegister('\footheight'    => Dimension(0));
 DefRegister('\evensidemargin'=> Dimension(0));
 DefRegister('\oddsidemargin' => Dimension(0));
 DefRegister('\marginparwidth'=> Dimension(0));
@@ -761,10 +762,35 @@ DefPrimitive('\renewenvironment OptionalMatch:* {}[][]{}{}', sub {
 #======================================================================
 # C.8.3 Theorem-like Environments
 #======================================================================
-# NOTE: Implement.
-#  define a new environment which constructs a theorem ?
-# Def('\newtheorem','{}[]{}[]", ....);
-# => something like <theorem type="foo"> .. </theorem>
+
+DefPrimitive('\newtheorem {}[]{}[]', sub {
+               my ($stomach, $thmset, $otherthmset, $text, $reset) = @_;
+               $thmset = $thmset->toString;
+               $text = $text->toString;
+               $reset = $reset ? $reset->toString : undef;
+
+               # compute the counter for this theorem set:
+               my $counter = $otherthmset ? LookupValue('THM:counter:'.$otherthmset->toString) : undef;
+               unless ($counter) {
+                 $counter = 'THM@'.$thmset;
+                 NewCounter($counter, $reset,
+                            idprefix => 'Thm'); }
+
+               AssignValue('THM:counter:'.$thmset => $counter);
+
+               DefEnvironment("{$thmset}[]",
+                              "<ltx:theorem id='#id' refnum='#refnum' ?#1(for='#1')()>#body</ltx:theorem>",
+                              afterDigestBegin => sub {
+                                my @res = $text ? Digest(TokenizeInternal('{\bfseries\thm@header@{right}{}{'.$text.'}}')) : ();
+                                return (@res, Digest(T_CS('\itshape'))); },
+                              properties => sub {
+                                if ($counter) { refStepCounter($counter); }},
+                              scope => 'global');
+             });
+
+DefConstructor('\thm@header@{}{}{}', "<ltx:caption position='#1' separator='#2'>#3</ltx:caption>",
+               mode=>'text');
+
 
 #======================================================================
 # C.8.4 Numbering
@@ -813,7 +839,7 @@ sub NewCounter {
     else {
       DefMacro("\\the$ctr\@ID","$prefix\\\@$ctr\@ID"); }
     DefMacro("\\\@$ctr\@ID","0"); }
-  }
+  return; }
 
 sub stepCounter {
   my($ctr)=@_;
@@ -1035,6 +1061,7 @@ DefConstructor('\@alignment@hline', sub { alignment_hline($_[0]); },
 sub before_alignment {
   Let(T_ALIGN,        T_CS('\@alignment@align'));
   Let(T_CS("\\\\"),   T_CS('\@alignment@cr'));
+  Let(T_CS('\cr'),    T_CS('\@alignment@cr'));
   Let(T_CS('\hline'), T_CS('\@alignment@hline'));
   AssignValue(alignment_max_cols=>0);
   AssignValue(alignment_n_cols=>1);
@@ -1148,8 +1175,13 @@ DefConstructor('\newblock',"<ltx:bibblock>");
 Tag('ltx:bibitem', autoClose=>1);
 Tag('ltx:bibblock', autoClose=>1);
 
+# Here's an annoyance: The case of the keys have to agree in LaTeX,
+# but can be different from the BibTeX!!!
+# (bibtex matches case insensitively)
+# Only sane solution is to downcase the keys in both places.
 sub makecite {
   my($style,$show, $document,$phrase1,$phrase2,$ref)=@_;
+  $ref = lc(ToString($ref)); $ref =~ s/\s//g;
   $document->openElement('ltx:cite', ref=>$ref,style=>$style, show=>$show);
   if(defined $phrase1 && defined $phrase2){
     $document->insertElement('ltx:citepre',$phrase1);
@@ -1182,7 +1214,8 @@ DefPrimitive('\input', sub {
     while(($token = $gullet->readXToken) && ($token->getCatcode != CC_SPACE)){
       push(@tokens,$token); }
     $file = Tokens(@tokens); }
-  $gullet->input($file,['tex','']);
+  $file =~ s/\.sty$//i;
+  $gullet->input($file,['ltxml','tex','','sty']);
   return; });
 
 # Note that even excluded files SHOULD have the effects of their inclusion

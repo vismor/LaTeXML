@@ -263,7 +263,8 @@ DefExpandable('\input',sub {
     push(@tokens,$token); }
   my $path = Tokens(@tokens)->toString;
   $path = $1 if $path =~ /^\{(.*)\}$/; # just in case
-  $gullet->input($path,['tex','']);
+  $path =~ s/\.sty$//i;
+  $gullet->input($path,['ltxml','tex','','sty']);
   return; });
 
 DefExpandable('\endinput',sub { $_[0]->closeMouth(1); return; });
@@ -808,6 +809,7 @@ DefPrimitive('\penalty Number',undef);
 DefPrimitive('\kern Dimension',undef);
 DefPrimitive('\mkern MuGlue',undef);
 DefPrimitive('\unpenalty',undef);
+DefPrimitive('\unskip', undef);
 
 #======================================================================
 # Remaining Vertical Mode primitives in Ch.24, pp.281--283
@@ -880,6 +882,8 @@ DefPrimitive('\leavevmode',undef);
 
 # Well, what else?
 DefMacro('\newpage','');
+
+DefPrimitive('\linespread{}', undef);
 
 #======================================================================
 # Math mode stuff
@@ -1473,6 +1477,7 @@ DefConstructor('\bigskip',"");
 # TeX Book, Appendix B, p. 353
 
 DefPrimitive('\break',undef);
+DefPrimitive('\nobreak',undef);
 DefPrimitive('\allowbreak',undef);
 DefConstructor("~","?#isMath(<ltx:XMHint name='nobreakspace'/>)(".UTF(0xA0).")"); # NO-BREAK SPACE
 
@@ -2306,8 +2311,11 @@ DefConstructor('\documentclass[]{}[]',"<?latexml class='#2' ?#1(options='#1')?>"
       NoteBegin($msg); 
       $stomach->getGullet->input('article',['ltxml']);
       NoteEnd($msg); }
+    foreach my $option(@options) {
+      if(my $file = pathname_find($option,paths=>LookupValue('SEARCHPATHS'),
+				  types=>['ltxml'], installation_subdir=>'Package')){
+	$stomach->getGullet->input($option,['ltxml']); }}
     return;});
-
 
 Let('\documentstyle','\documentclass');
 

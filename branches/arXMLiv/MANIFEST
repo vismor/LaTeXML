@@ -134,6 +134,7 @@ t/22_fonts.t
 t/40_math.t
 t/50_structure.t
 t/52_namespace.t
+t/55_theorem.t
 t/65_graphics.t
 t/70_parse.t
 t/80_complex.t
@@ -211,7 +212,6 @@ t/math/testscripts.tex
 t/math/testscripts.xml
 t/namespace/ns1.dvi
 t/namespace/ns1.latexml
-t/namespace/ns1.log
 t/namespace/ns1.tex
 t/namespace/ns1.xml
 t/namespace/ns2.dvi
@@ -234,6 +234,9 @@ t/namespace/song-ns.dtd
 t/namespace/song-nsm.dtd
 t/namespace/song-nss.dtd
 t/namespace/song.dtd
+t/parse/compose.dvi
+t/parse/compose.tex
+t/parse/compose.xml
 t/parse/functions.dvi
 t/parse/functions.tex
 t/parse/functions.xml
@@ -260,6 +263,9 @@ t/structure/para.xml
 t/structure/sec.dvi
 t/structure/sec.tex
 t/structure/sec.xml
+t/theorem/theorem.dvi
+t/theorem/theorem.tex
+t/theorem/theorem.xml
 t/tokenize/alltt.dvi
 t/tokenize/alltt.tex
 t/tokenize/alltt.xml

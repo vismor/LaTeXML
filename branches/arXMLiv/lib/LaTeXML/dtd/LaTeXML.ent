@@ -65,6 +65,14 @@
 ]]>
 <!ENTITY % LaTeXML-tabular.Misc.class "">
 
+<!-- ==================== Theorem module ====================-->
+<!ENTITY % LaTeXML-theorem.module  "INCLUDE" >
+<![%LaTeXML-theorem.module;[
+  <!ENTITY % LaTeXML-theorem-qname.mod   SYSTEM "LaTeXML-theorem-qname-1.mod">
+  %LaTeXML-theorem-qname.mod;
+]]>
+<!ENTITY % LaTeXML-theorem.Misc.class "">
+
 <!-- ==================== Graphics module ====================-->
 <!ENTITY % LaTeXML-graphics.module  "INCLUDE" >
 <![%LaTeXML-graphics.module;[
@@ -167,6 +175,7 @@
 <!ENTITY % LaTeXML.Misc.class
 	 "%LaTeXML-block.Misc.class;
 	  %LaTeXML-tabular.Misc.class;
+	  %LaTeXML-theorem.Misc.class;
 	  %LaTeXML-graphics.Misc.class;
 	  %LaTeXML-picture.Misc.class;
 	  %LaTeXML-extra.Misc.class;

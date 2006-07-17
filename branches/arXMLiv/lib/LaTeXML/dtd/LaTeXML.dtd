@@ -40,6 +40,7 @@
 <!ENTITY % LaTeXML-xref.module  "INCLUDE" ><!--  Xref module -->
 <!ENTITY % LaTeXML-index.module  "INCLUDE" ><!--  Index module -->
 <!ENTITY % LaTeXML-tabular.module  "INCLUDE" ><!--  Tabular module -->
+<!ENTITY % LaTeXML-theorem.module  "INCLUDE" ><!--  Theorem module -->
 <!ENTITY % LaTeXML-graphics.module  "INCLUDE" ><!--  Graphics module -->
 <!ENTITY % LaTeXML-picture.module  "INCLUDE" ><!--  Picture module -->
 <!ENTITY % LaTeXML-float.module  "INCLUDE" ><!--  Float module -->

@@ -355,6 +355,15 @@ DefEnvironment('{matrix}',
 			       name=>'Matrix');},
 	       beforeDigest=>\&before_alignment,
 	       afterDigest=>\&after_alignment);
+DefEnvironment('{smallmatrix}',
+               sub { my($document,%props)=@_;
+                     my $n=$props{trailer}->getProperty('n_columns');
+                     alignment($document,$props{body},
+                               makeTabularPattern($n,'center'),0,
+                               name=>'Matrix');},
+               beforeDigest=>\&before_alignment,
+               afterDigestBegin=>sub { MergeFont(size=>'script'); return; },
+               afterDigest=>\&after_alignment);
 DefEnvironment('{pmatrix}',
 	       sub { my($document,%props)=@_;
 		     my $n=$props{trailer}->getProperty('n_columns');
@@ -480,7 +489,7 @@ DefConstructor('\xrightarrow[]{}',
 
 DefConstructor('\overset{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMWrap role='OVERACCENT>#1</ltx:XMWrap>"
+	       . "<ltx:XMWrap role='OVERACCENT'>#1</ltx:XMWrap>"
 	       . "<ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>");
 DefConstructor('\underset{}{}',
@@ -660,6 +669,8 @@ DefConstructor('\sideset{}{}{}', sub {
 # Section 7.3 Placement of subscripts and limits
 # \limits and \nolimits; already in TeX
 
+DefPrimitive('\notag', undef);
+
 #======================================================================
 # Section 7.4 Multiple integral signs
 
@@ -703,6 +714,20 @@ DefMacro('\varPsi',     '\mathit{\Psi}');
 DefMacro('\varXi',      '\mathit{\Xi}');
 DefMacro('\varOmega',   '\mathit{\Omega}');
 DefMacro('\varPi',      '\mathit{\Pi}');
+
+
+#======================================================================
+# Redefined accents
+Let('\Hat', '\hat');
+Let('\Check', '\check');
+Let('\Tilde', '\tilde');
+Let('\Acute', '\acute');
+Let('\Grave', '\grave');
+Let('\Dot', '\dot');
+Let('\Ddot', '\ddot');
+Let('\Breve', '\breve');
+Let('\Bar', '\bar');
+Let('\Vec', '\vec');
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 1;
-
