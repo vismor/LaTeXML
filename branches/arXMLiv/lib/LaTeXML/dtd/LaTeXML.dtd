@@ -36,21 +36,25 @@
 	 be customized by defining before loading the submodule.
 -->
 
-<!ENTITY % LaTeXML-math.module  "INCLUDE" ><!--  Math module -->
-<!ENTITY % LaTeXML-xref.module  "INCLUDE" ><!--  Xref module -->
-<!ENTITY % LaTeXML-index.module  "INCLUDE" ><!--  Index module -->
-<!ENTITY % LaTeXML-tabular.module  "INCLUDE" ><!--  Tabular module -->
-<!ENTITY % LaTeXML-theorem.module  "INCLUDE" ><!--  Theorem module -->
-<!ENTITY % LaTeXML-graphics.module  "INCLUDE" ><!--  Graphics module -->
-<!ENTITY % LaTeXML-picture.module  "INCLUDE" ><!--  Picture module -->
-<!ENTITY % LaTeXML-float.module  "INCLUDE" ><!--  Float module -->
-<!ENTITY % LaTeXML-acro.module  "INCLUDE" ><!--  Acro module -->
-<!ENTITY % LaTeXML-list.module  "INCLUDE" ><!--  List module -->
-<!ENTITY % LaTeXML-bib.module  "INCLUDE" ><!--  Bib module -->
-<!ENTITY % LaTeXML-structure.module  "INCLUDE" ><!--  Structure module -->
+<!-- ======================================================================
+     Load QName Declarations and parts of various classes
+     ====================================================================== -->
 
-<!-- now load all the entities using these switches -->
-<!ENTITY % LaTeXML.ent   SYSTEM "LaTeXML.ent">%LaTeXML.ent;
+<!-- ======================================================================
+     These core declarations, along with the text & block modules are essentially
+     the `core' for any normal  use of LaTeXML, or with simple extensions. -->
 
-<!-- now load all the entities using these switches -->
-<!ENTITY % LaTeXML.mod   SYSTEM "LaTeXML.mod">%LaTeXML.mod;
+<!ENTITY % LaTeXML-core.mod   SYSTEM "LaTeXML-core-1.mod">
+%LaTeXML-core.mod;
+
+<!-- Define qualified names for all elements -->
+<!ENTITY % LaTeXML-qname.mod   SYSTEM "LaTeXML-qname-1.mod">
+%LaTeXML-qname.mod;
+
+<!-- Assemble the classes for various models -->
+<!ENTITY % LaTeXML-classes.mod   SYSTEM "LaTeXML-classes-1.mod">
+%LaTeXML-classes.mod;
+
+<!-- Include all included modules' models -->
+<!ENTITY % LaTeXML-model.mod   SYSTEM "LaTeXML-model-1.mod">
+%LaTeXML-model.mod;
