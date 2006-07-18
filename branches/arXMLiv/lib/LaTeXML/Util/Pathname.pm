@@ -180,7 +180,7 @@ sub candidate_pathnames {
 	     : ($cwd));
     # And, if installation dir specified, append it.
     if(my $subdir = $options{installation_subdir}){
-      push(@dirs,map(pathname_concat($_,$subdir),@INSTALLDIRS)); }}
+	unshift(@dirs,map(pathname_concat($_,$subdir),@INSTALLDIRS)); }}
 
   # extract the desired extensions.
   my @exts = ();
