@@ -781,7 +781,7 @@ DefPrimitive('\newtheorem {}[]{}[]', sub {
                AssignValue('THM:counter:'.$thmset => $counter);
 
                DefEnvironment("{$thmset}[]",
-                              "<ltx:theorem id='#id' refnum='#refnum' ?#1(for='#1')()>#body</ltx:theorem>",
+                              "<ltx:block class='theorem' id='#id' refnum='#refnum' ?#1(for='#1')()>#body</ltx:block>",
                               afterDigestBegin => sub {
                                 my @res = $text ? Digest(TokenizeInternal('{\bfseries\thm@header@{right}{}{'.$text.'}}')) : ();
                                 return (@res, Digest(T_CS('\itshape'))); },

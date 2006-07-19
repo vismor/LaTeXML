@@ -313,7 +313,7 @@ our %iparms= (pretolerance=>100, tolerance=>200, hbadness=>1000, vbadness=>1000,
 	      tracingcommands=>0, tracingrestores=>0, language=>0, uchyph=>1, lefthyphenmin=>0,
 	      righthyphenmin=>0, globaldefs=>0, defaulthyphenchar=>ord('-'), defaultskewchar=>-1,
 	      escapechar=>0, endlinechar=>0, newlinechar=>-1, maxdeadcycles=>0, hangafter=>0, 
-	      fam=>0, mag=>1000, delimiterfactor=>0, time=>0, day=>0, month=>0, year=>0,
+	      fam=>0, mag=>1000, magnification=>1000, delimiterfactor=>0, time=>0, day=>0, month=>0, year=>0,
 	      showboxbreadth=>5, showboxdepth=>3, errorcontextlines=>5);
 foreach my $p (keys %iparms){
   DefRegister("\\$p",Number($iparms{$p})); }
