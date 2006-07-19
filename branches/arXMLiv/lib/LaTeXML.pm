@@ -138,6 +138,7 @@ sub convertDocument {
 
   LaTeXML::MathParser->new()->parseMath($document) unless $$self{nomathparse};
   my $xml = $document->finalize();
+  NoteProgress("\nConversion complete.\n");
   $xml; }
 
 sub writeDOM {
