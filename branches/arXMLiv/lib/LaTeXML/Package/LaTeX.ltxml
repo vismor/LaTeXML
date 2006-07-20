@@ -1882,6 +1882,7 @@ DefMacro('\fontsize{}{}','');
 DefMacro('\math@fontsfalse','');
 DefMacro('\math@fontstrue','');
 DefMacro('\selectfont','');
+DefMacro('\newfont{}{}', '\font#1=#2');
 
 #======================================================================
 # Various symbols, accents, etc from Chapter 3 defined in Primitives.pm
