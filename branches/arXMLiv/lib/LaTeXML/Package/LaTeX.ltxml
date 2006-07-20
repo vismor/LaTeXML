@@ -94,6 +94,7 @@ DefExpandable('\protect',undef);
 # In math, \\ is just a formatting hint, unless within an array, cases, .. environment.
 DefConstructor("\\\\ OptionalMatch:* [Dimension]",
 	       "?#isMath(<ltx:XMHint name='\\'/>)(\n)", alias=>"\\\\\n");
+DefMacro('\cr', "\\\\"); # we don't want Let() because meaning of \\ may change
 
 #**********************************************************************
 # C.2. The Structure of the Document
@@ -1063,7 +1064,6 @@ DefConstructor('\@alignment@hline', sub { alignment_hline($_[0]); },
 sub before_alignment {
   Let(T_ALIGN,        T_CS('\@alignment@align'));
   Let(T_CS("\\\\"),   T_CS('\@alignment@cr'));
-  Let(T_CS('\cr'),    T_CS('\@alignment@cr'));
   Let(T_CS('\hline'), T_CS('\@alignment@hline'));
   AssignValue(alignment_max_cols=>0);
   AssignValue(alignment_n_cols=>1);
