@@ -38,6 +38,14 @@ DefParameterType('UntilBrace', sub{
   my $value=$gullet->readUntil(T_BEGIN);
   $gullet->unread(T_BEGIN);
   $value; });
+DefParameterType('BalancedParen', sub {
+		   my ($gullet) = @_;
+		   my $tok = $gullet->readToken;
+		   if (ref $tok && $tok->toString eq '(') {
+		     $gullet->readUntil(T_OTHER(')'));
+		   } else {
+		     $gullet->unread($tok) if ref $tok;
+		     undef; }});
 DefParameterType('Match',      sub{shift->readMatch(@_); });
 DefParameterType('Keyword',    sub{shift->readKeyword(@_); });
 DefParameterType('Balanced',   sub{$_[0]->readBalanced; });
@@ -1551,6 +1559,8 @@ DefMacro('\strut','');
 # End of TeX Book definitions.
 #======================================================================
 
+DefPrimitive('\eqno BalancedParen', undef);
+DefPrimitive('\leqno BalancedParen', undef);
 
 # Mostly ignorable, although it could add an attribute to an ancestor
 # to record the desired justification.
