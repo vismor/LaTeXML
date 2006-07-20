@@ -327,8 +327,4 @@ DefMath('\nRightarrow',        "\x{21CF}", role=>'ARROW'); # LEFTWARDS DOUBLE AR
 DefMath('\nLeftrightarrow',    "\x{21CE}", role=>'ARROW'); # LEFT RIGHT DOUBLE ARROW WITH STROKE
 
 #======================================================================
-
-Let('\twoheadrightarrow', '\hookrightarrow');
-
-#======================================================================
 1;

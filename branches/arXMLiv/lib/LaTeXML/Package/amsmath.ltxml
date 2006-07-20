@@ -355,15 +355,6 @@ DefEnvironment('{matrix}',
 			       name=>'Matrix');},
 	       beforeDigest=>\&before_alignment,
 	       afterDigest=>\&after_alignment);
-DefEnvironment('{smallmatrix}',
-               sub { my($document,%props)=@_;
-                     my $n=$props{trailer}->getProperty('n_columns');
-                     alignment($document,$props{body},
-                               makeTabularPattern($n,'center'),0,
-                               name=>'Matrix');},
-               beforeDigest=>\&before_alignment,
-               afterDigestBegin=>sub { MergeFont(size=>'script'); return; },
-               afterDigest=>\&after_alignment);
 DefEnvironment('{pmatrix}',
 	       sub { my($document,%props)=@_;
 		     my $n=$props{trailer}->getProperty('n_columns');
@@ -403,6 +394,21 @@ DefEnvironment('{Vmatrix}',
 			       parseTabularPattern('c' x $n),0,
 			       name=>'Matrix',open=>"\x{2225}",close=>"\x{2225}");},
 	       beforeDigest=>\&before_alignment,
+	       afterDigest=>\&after_alignment);
+
+DefEnvironment('{smallmatrix}',
+	       sub { my($document,%props)=@_;
+		     my $n=$props{trailer}->getProperty('n_columns');
+		     alignment($document,$props{body},
+			       parseTabularPattern('c' x $n),0,
+			       name=>'Matrix', style=>'script');},
+#	       beforeDigest=>\&before_alignment,
+#	       afterDigestBegin=>sub { MergeFont(size=>'script'); return; },
+	       beforeDigest=>[
+			      sub { MergeFont(size=>'script'); return; },
+			      sub { AssignValue(mathstyle=>'script'); },
+			      \&before_alignment
+],
 	       afterDigest=>\&after_alignment);
 
 #======================================================================
@@ -494,7 +500,7 @@ DefConstructor('\overset{}{}',
 	       ."</ltx:XMApp>");
 DefConstructor('\underset{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMWrap role='UNDERACCENT>#1</ltx:XMWrap>"
+	       . "<ltx:XMWrap role='UNDERACCENT'>#1</ltx:XMWrap>"
 	       . "<ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>");
 
@@ -676,8 +682,6 @@ DefConstructor('\sideset{}{}{}', sub {
 # Section 7.3 Placement of subscripts and limits
 # \limits and \nolimits; already in TeX
 
-DefPrimitive('\notag', undef);
-
 #======================================================================
 # Section 7.4 Multiple integral signs
 
@@ -722,9 +726,8 @@ DefMacro('\varXi',      '\mathit{\Xi}');
 DefMacro('\varOmega',   '\mathit{\Omega}');
 DefMacro('\varPi',      '\mathit{\Pi}');
 
-
 #======================================================================
-# Redefined accents
+# And some random other weird naming
 Let('\Hat', '\hat');
 Let('\Check', '\check');
 Let('\Tilde', '\tilde');
@@ -736,5 +739,9 @@ Let('\Breve', '\breve');
 Let('\Bar', '\bar');
 Let('\Vec', '\vec');
 
+# And where does this go?
+DefPrimitive('\notag', undef);
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 1;
+
