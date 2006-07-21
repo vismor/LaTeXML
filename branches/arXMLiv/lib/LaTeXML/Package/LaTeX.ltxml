@@ -800,9 +800,8 @@ DefPrimitive('\newtheorem {}[]{}[]', sub {
                               scope => 'global');
              });
 
-DefConstructor('\thm@header@{}{}{}', "<ltx:caption position='#1' separator='#2'>#3</ltx:caption>",
-               mode=>'text');
-
+DefConstructor('\thm@header@{}{}{}',
+	       "<ltx:text class='caption' position='#1' separator='#2'>#3</ltx:text>");
 
 #======================================================================
 # C.8.4 Numbering
@@ -1225,8 +1224,8 @@ DefPrimitive('\input', sub {
     while(($token = $gullet->readXToken) && ($token->getCatcode != CC_SPACE)){
       push(@tokens,$token); }
     $file = Tokens(@tokens); }
-  $file =~ s/\.sty$//i;
-  $gullet->input($file,['ltxml','tex','','sty']);
+#  $file =~ s/\.sty$//i;
+  $gullet->input($file,['tex','']);
   return; });
 
 # Note that even excluded files SHOULD have the effects of their inclusion

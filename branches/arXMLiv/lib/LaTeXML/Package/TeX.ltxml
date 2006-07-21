@@ -271,8 +271,8 @@ DefExpandable('\input',sub {
     push(@tokens,$token); }
   my $path = Tokens(@tokens)->toString;
   $path = $1 if $path =~ /^\{(.*)\}$/; # just in case
-  $path =~ s/\.sty$//i;
-  $gullet->input($path,['ltxml','tex','','sty']);
+#  $path =~ s/\.sty$//i;
+  $gullet->input($path,['tex','']);
   return; });
 
 DefExpandable('\endinput',sub { $_[0]->closeMouth(1); return; });

@@ -34,7 +34,7 @@ DefPrimitive('\newtheorem OptionalMatch:* {}[]{}[]', sub {
 
 	       # @HELP: Extend LaTeXML.dtd for this new tag ?
 	       DefEnvironment("{$thmset}[]",
-			      "<ltx:theorem id='#id' refnum='#refnum' ?#1(for='#1')()>#body</ltx:theorem>",
+			      "<ltx:block clas='theorem' id='#id' refnum='#refnum' ?#1(for='#1')()>#body</ltx:block>",
 			      afterDigestBegin => sub {
 				my @res = $text ? Digest(TokenizeInternal('{'.$headerfont
 									  .'\thm@header@{'.$numberpos.'}{'.$punctuation
@@ -47,8 +47,7 @@ DefPrimitive('\newtheorem OptionalMatch:* {}[]{}[]', sub {
 			      scope => 'global');
 	     });
 
-DefConstructor('\thm@header@{}{}{}', "<ltx:caption position='#1' separator='#2'>#3</ltx:caption>",
-	       mode=>'text');
+DefConstructor('\thm@header@{}{}{}', "<ltx:text class='caption' position='#1' separator='#2'>#3</ltx:text>");
 
 AssignValue('THM:numberpos' => 'right');
 DefMacro('\swapnumbers', sub {
@@ -117,7 +116,7 @@ DefMacro('\qed', '');    # mark somehow end of proof ? I think no.
 DefMacro('\qedhere', '');
 
 foreach my $env(qw(proof pf)) {
-  DefEnvironment("{$env} []", "<ltx:proof ?#1(display='#1')(display='Proof')>#body</ltx:proof>"); }
+  DefEnvironment("{$env} []", "<ltx:block class='proof' ?#1(display='#1')(display='Proof')>#body</ltx:block>"); }
 
 
 # from older versions of amsthm.sty
