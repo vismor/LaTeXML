@@ -1224,7 +1224,6 @@ DefPrimitive('\input', sub {
     while(($token = $gullet->readXToken) && ($token->getCatcode != CC_SPACE)){
       push(@tokens,$token); }
     $file = Tokens(@tokens); }
-#  $file =~ s/\.sty$//i;
   $gullet->input($file,['tex','']);
   return; });
 

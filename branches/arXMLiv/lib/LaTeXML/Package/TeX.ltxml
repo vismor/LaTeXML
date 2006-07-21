@@ -271,7 +271,6 @@ DefExpandable('\input',sub {
     push(@tokens,$token); }
   my $path = Tokens(@tokens)->toString;
   $path = $1 if $path =~ /^\{(.*)\}$/; # just in case
-#  $path =~ s/\.sty$//i;
   $gullet->input($path,['tex','']);
   return; });
 
