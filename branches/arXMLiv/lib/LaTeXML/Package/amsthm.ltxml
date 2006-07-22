@@ -12,80 +12,35 @@ package LaTeXML::Package::Pool;
 use strict;
 use LaTeXML::Package;
 
-DefPrimitive('\newtheorem OptionalMatch:* {}[]{}[]', sub {
-	       my ($stomach, $flag, $thmset, $otherthmset, $text, $reset) = @_;
-	       $thmset = $thmset->toString;
-	       $text = $text->toString;
-	       $reset = $reset ? $reset->toString : undef;
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-	       # compute the counter for this theorem set:
-	       my $counter = $otherthmset ? LookupValue('THM:counter:'.$otherthmset->toString) : undef;
-	       unless ($counter) {
-		 $counter = 'THM@'.$thmset;
-		 NewCounter($counter, $reset,
-			    idprefix => 'Thm'); }
+# Core is defined in LaTeX.ltxml
 
-	       AssignValue('THM:counter:'.$thmset => $counter);
-	       my $bodyfont = LookupValue('THM:bodyfont');
-	       my $headerfont = LookupValue('THM:headerfont');
-	       $headerfont = $headerfont ? $headerfont->toString : '';
-	       my $punctuation = LookupValue('THM:punctuation');
-	       my $numberpos = LookupValue('THM:numberpos');
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Theorem Styles.
 
-	       # @HELP: Extend LaTeXML.dtd for this new tag ?
-	       DefEnvironment("{$thmset}[]",
-			      "<ltx:block clas='theorem' id='#id' refnum='#refnum' ?#1(for='#1')()>#body</ltx:block>",
-			      afterDigestBegin => sub {
-				my @res = $text ? Digest(TokenizeInternal('{'.$headerfont
-									  .'\thm@header@{'.$numberpos.'}{'.$punctuation
-									  .'}{'.$text.'}}')) : ();
-				# so that we generate a <header> tag and the new font is activated for the #body
-				return (@res, $bodyfont ? Digest($bodyfont) : ()); },
-			      properties => sub {
-				if ($counter) {
-				  $flag ? refStepID($counter) : refStepCounter($counter) ; }},
-			      scope => 'global');
-	     });
-
-DefConstructor('\thm@header@{}{}{}', "<ltx:text class='caption' position='#1' separator='#2'>#3</ltx:text>");
-
-AssignValue('THM:numberpos' => 'right');
 DefMacro('\swapnumbers', sub {
-	   my $pos = LookupValue('THM:numberpos') || 'right';
-	   if ($pos eq 'right') { $pos = 'left'; }
-	   else { $pos = 'right'; }
-	   AssignValue('THM:numberpos' => $pos);
-	   return; });
+  AssignValue('thm@swap' =>(LookupValue('thm@swap') eq 'N' ? 'S' : 'N')); });
+
 
 # activate a certain theorem style
-DefMacro('\theoremstyle{}', sub { T_CS('\@thm@style@'.$_[1]->toString) });
+DefPrimitive('\theoremstyle{}', sub { 
+  AssignValue('thm@style'=>ToString($_[1]));});
 
 # the default theorem styles
-sub PlainThmStyle {
-  AssignValue('THM:headerfont' => T_CS('\bfseries'));
-  AssignValue('THM:bodyfont' => T_CS('\itshape'));
-  AssignValue('THM:punctuation', '.');
-  return; }
-DefMacro('\@thm@style@plain', \&PlainThmStyle);
+# plain is defined in LaTeX.
 
-# activate plain style by default:
-PlainThmStyle;
+DefPrimitive('\th@definition', sub {
+  AssignValue('\thm@headfont' => T_CS('\bfseries'));
+  AssignValue('\thm@bodyfont' => T_CS('\normalfont'));
+  AssignValue('\thm@headpunct'=> T_OTHER('.'));
+  return; });
 
-sub DefinitionThmStyle {
-  AssignValue('THM:headerfont' => T_CS('\bfseries'));
-  AssignValue('THM:bodyfont' => T_CS('\normalfont'));
-  AssignValue('THM:punctuation', '.');
-  return; }
-
-DefMacro('\@thm@style@definition', \&DefinitionThmStyle);
-
-sub RemarkThmStyle {
-  AssignValue('THM:headerfont' => T_CS('\itshape'));
-  AssignValue('THM:bodyfont' => T_CS('\normalfont'));
-  AssignValue('THM:punctuation', '.');
-  return; }
-
-DefMacro('\@thm@style@remark', \&RemarkThmStyle);
+DefPrimitive('\th@remark', sub {
+  AssignValue('\thm@headfont' => T_CS('\itshape'));
+  AssignValue('\thm@bodyfont' => T_CS('\normalfont'));
+  AssignValue('\thm@headpunct'=> T_OTHER('.'));
+  return; });
 
 #\newtheoremstyle{note}% name
 #  {3pt}%      Space above
@@ -99,30 +54,57 @@ DefMacro('\@thm@style@remark', \&RemarkThmStyle);
 #  {}%         Thm head spec (can be left empty, meaning `normal')
 
 DefPrimitive('\newtheoremstyle{}{}{}{}{}{}{}{}{}', sub {
-	       my $name = $_[1]->toString;
-	       my $bodyfont = $_[4];
-	       my $headerfont = $_[6];
-	       my $punctuation = $_[7]->toString;
-	       # we ignore the rest of the parameters
+  my($stomach,$name,$spaceabove,$spacebelow,$bodyfont,
+     $indent,$headfont,$headpunct,$spaceafter,$headspec)=@_;
+  DefMacro('\th@'.ToString($name), sub {
+	     AssignValue('\thm@bodyfont' => $bodyfont);
+	     AssignValue('\thm@headfont' => $headfont);
+	     AssignValue('\thm@headpunct'=> $headpunct);
+	     return; });
+});
 
-	       DefMacro('\@thm@style@'.$name, sub {
-			  AssignValue('THM:bodyfont', $bodyfont);
-			  AssignValue('THM:headerfont', $headerfont);
-			  AssignValue('THM:punctuation', $punctuation);
-			  return; });
-	     });
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Proofs
 
-DefMacro('\qed', '');    # mark somehow end of proof ? I think no.
-DefMacro('\qedhere', '');
+AssignValue('QED@stack',[]);
+# Should mark this as somehow ignorable for math,
+# but we DO want to keep it in the formula...
+DefConstructor('\qed',
+	       "?#isMath(<ltx:XMTok role='PUNCT'>\x{220E}</ltx:XMTok>)(\x{220E})");
+DefExpandable('\qedhere', sub {
+  my $t = PopValue('QED@stack');
+  PushValue('QED@stack',Tokens());
+  $t; });
 
-foreach my $env(qw(proof pf)) {
-  DefEnvironment("{$env} []", "<ltx:block class='proof' ?#1(display='#1')(display='Proof')>#body</ltx:block>"); }
+DefMacro('\proofname','Proof');
+DefEnvironment("{proof} []",
+	       "<ltx:proof>"
+	       ."<ltx:title>#title</ltx:title>"
+	       ."#body"
+	       ."</ltx:proof>",
+
+		 afterDigestBegin=> sub {
+		   my($stomach,$whatsit)=@_;
+		   my $name = $whatsit->getArg(1);
+		   my @toks=(T_BEGIN,T_CS('\itshape'),
+			    ($name ? $name->revert : (T_CS('\proofname'))),
+			     T_OTHER('.'),
+			     T_END);
+		   $whatsit->setProperties(title=>Digest(Tokens(@toks)));
+
+		   PushValue('QED@stack',T_CS('\qed'));
+		   Digest(Tokens(T_CS('\the'),T_CS('\thm@bodyfont'))); },
+	       beforeDigestEnd=>sub {
+		 Digest(PopValue('QED@stack')); }
+	      );
 
 
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # from older versions of amsthm.sty
-DefPrimitive('\theorembodyfont{}', sub { AssignValue('THM:bodyfont' => $_[1]); });
-DefPrimitive('\theoremheaderfont{}', sub { AssignValue('THM:headerfont' => $_[1]); });
+DefPrimitive('\theorembodyfont{}', sub { AssignValue('\thm@bodyfont' => $_[1]); });
+DefPrimitive('\theoremheaderfont{}', sub { AssignValue('\thm@headfont' => $_[1]); });
 DefMacro('\theorempreskipamount', '');
 DefMacro('\theorempostskipamount', '');
+
 
 1;
