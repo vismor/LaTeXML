@@ -1,0 +1,28 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PostScript Draftstamp Style
+% 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newif\ifshowstamp\showstampfalse
+\DeclareOption{show}{\showstamptrue}
+\DeclareOption{hide}{\showstampfalse}
+\ProcessOptions
+
+\def\draftenglish{\special{! userdict begin /StampText (Draft) def
+  /StampDate (\number\day/\number\month/\number\year) def end}}
+
+\def\draftgerman{\special{! userdict begin /StampText (Entwurf) def
+  /StampDate (\number\day.\number\month.\number\year) def end}}
+
+\def\draftfrench{\special{! userdict begin /StampText (Concepte) def
+  /StampDate (\number\day.\number\month.\number\year) def end}}
+
+\ifshowstamp\special{header=stamp.pro}
+
+\ifcase\language
+  \draftenglish \or % US English
+  \draftgerman  \or % German
+  \draftgerman  \or % Austrian
+  \draftfrench  \or % French
+  \draftenglish \fi % English
+\fi
