@@ -290,6 +290,26 @@ DefExpandable('\the Variable',sub {
   else {
     @tokens; }});
 
+# Equivalent to \\ ?
+DefConstructor('\cr',
+	       "?#isMath(<ltx:XMHint name='\\'/>)(\n)", alias=>"\\cr\n");
+
+#**********************************************************************
+# TeX Matrices
+# See The TeXBook, Chapter 18.8, page 176
+#**********************************************************************
+
+# This is just \left(\matrix{...}\right)
+DefExpandable('\pmatrix{}', sub {
+		my ($stomach, $content) = @_;
+		(T_CS('\left'), T_OTHER('('), T_CS('\matrix'), T_BEGIN,
+		 $content->unlist, T_END, T_CS('\right'), T_OTHER(')')); });
+
+DefConstructor('\matrix{}', sub { 
+		 my($document, $body, %props)=@_;
+		 # do we move things from LaTeXML.ltxml here so we can use the alignment stuff?
+		 return; });
+
 #**********************************************************************
 # Primitives
 # See The TeXBook, Chapter 24, Summary of Vertical Mode
