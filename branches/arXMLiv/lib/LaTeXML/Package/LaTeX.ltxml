@@ -581,8 +581,6 @@ DefExpandable('\ensuremath{}', sub {
   if(LookupValue('IN_MATH')){ @$stuff; }
   else { (T_MATH,@$stuff,T_MATH); }});
 
-DefPrimitive('\lefteqn', undef);
-
 # NOTE: The numbering isn't right.
 # And the parseability will have to be worked on!
 DefEnvironment('{eqnarray}',

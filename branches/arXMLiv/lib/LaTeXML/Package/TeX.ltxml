@@ -810,6 +810,17 @@ DefPrimitive('\ignorespaces SkipSpaces',undef);
 # \aftergroup<token>
 # \uppercase<general text>, \lowercase<general text>
 # \message<general text>
+
+DefMacro('\uppercase{}', sub {
+	   my ($stomach, $text) = @_;
+	   $text = ref $text ? uc($text->toString) : '';
+	   Explode($text); });
+
+DefMacro('\lowercase{}', sub {
+	   my ($stomach, $text) = @_;
+	   $text = ref $text ? lc($text->toString) : '';
+	   Explode($text); });
+
 DefPrimitive('\message{}',sub {
   my($stomach,$stuff)=@_;
   print STDERR ToString(Expand($stuff));
