@@ -94,7 +94,6 @@ DefExpandable('\protect',undef);
 # In math, \\ is just a formatting hint, unless within an array, cases, .. environment.
 DefConstructor("\\\\ OptionalMatch:* [Dimension]",
 	       "?#isMath(<ltx:XMHint name='\\'/>)(\n)", alias=>"\\\\\n");
-DefMacro('\cr', "\\\\"); # we don't want Let() because meaning of \\ may change
 
 #**********************************************************************
 # C.2. The Structure of the Document
