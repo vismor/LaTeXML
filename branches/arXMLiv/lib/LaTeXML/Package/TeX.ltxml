@@ -442,8 +442,12 @@ sub parseDefParameters {
 	Fatal("Parameters for \"".ToString($cs)."\" not in order in ".ToSting($params))
 	  unless $n == (ord($t->getString)-ord('0'));
       my @delim=();
+      while(@tokens && ($tokens[0]->getCatcode == CC_SPACE)){
+	shift(@tokens); }
       while(@tokens && ($tokens[0]->getCatcode != CC_PARAM)){
 	push(@delim,shift(@tokens)); }
+      while(@tokens && ($tokens[0]->getCatcode == CC_SPACE)){
+	shift(@tokens); }
       if(@delim){ 
 	my $expected=Tokens(@delim);
 	push(@params, LaTeXML::Parameters::newParameter('Until','Until:'.$expected->toString, extra=>[$expected])); }
@@ -1572,8 +1576,19 @@ DefRegister('\jot'  => Dimension('3pt'));
 DefRegister('\interdisplaylinepenalty' => Number(100));
 DefRegister('\interfootnotelinepenalty' => Number(100));
 
+# From The TeX book, page 349
 DefMacro('\magstephalf','1095');
-# \magstep ??
+DefMacro('\magstep Number', sub {
+	   my ($stomach, $nr) = @_;
+	   $nr = $nr->valueOf; my $m;
+	   if   ($nr == 1) { $m = 1200; }
+	   elsif($nr == 2) { $m = 1440; }
+	   elsif($nr == 3) { $m = 1728; }
+	   elsif($nr == 4) { $m = 2074; }
+	   elsif($nr == 5) { $m = 2488; }
+	   else            { $m = 1000; } # used for 0 or erroneous input
+	   return Explode($m) if $m;
+	   return; });
 
 #======================================================================
 # TeX Book, Appendix B, p. 350

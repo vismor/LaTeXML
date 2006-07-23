@@ -441,7 +441,7 @@ DefRegister('\labelsep'      => Dimension(0));
 
 # NOTE: Eventually use \makelabel to construct the list ?
 #\makelabel{label}
-# \usecounter{ctr}
+DefPrimitive('\usecounter{}', undef);
 
 #======================================================================
 # C.6.4 Verbatim
@@ -975,7 +975,17 @@ sub number_para {
   $node->setAttribute(id=>$prefix."p$n"); }
 
 Tag('ltx:para',afterOpen=>\&number_para);
- 
+
+DefEnvironment('{sloppypar}', "<ltx:para>#body</ltx:para>");
+
+# we have \samepage defined for use within some environment
+# and the environment {samepage}
+# DefEnvironment installs definitions for \samepage and \endsamepage as well
+# To get the desired effect, we use the definitions:
+DefEnvironment('{samepage}', "#body");
+DefPrimitive('\samepage', undef);
+DefPrimitive('\endsamepage', undef);
+
 DefPrimitive('\newcounter{}[]',sub { shift; NewCounter(map($_ && $_->toString,@_)); return;});
 
 DefPrimitive('\setcounter{}{Number}',sub {
@@ -1233,6 +1243,7 @@ DefPrimitive('\input', sub {
     while(($token = $gullet->readXToken) && ($token->getCatcode != CC_SPACE)){
       push(@tokens,$token); }
     $path = Tokens(@tokens); }
+  $path = $path->toString if ref $path;
   # Special case HACK.  If filename ends .sty, we're probably really
   # trying to load a style file!  Look for .ltxml!
   if($path =~ s/\.sty$//){

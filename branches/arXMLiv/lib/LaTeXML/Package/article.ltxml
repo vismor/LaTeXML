@@ -71,6 +71,9 @@ DefConstructor('\\@@appendix[][][]{}',
 	       . "?#3(<ltx:toctitle>#3</ltx:toctitle>)",
 	       bounded=>1);
 
+# math italic
+DefConstructor('\mit', '', requireMath=>1, font=>{shape=>'italic'});
+DefConstructor('\and', ' ');
 
 #**********************************************************************
 1;
