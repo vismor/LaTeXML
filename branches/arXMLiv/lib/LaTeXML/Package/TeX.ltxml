@@ -844,6 +844,11 @@ DefConstructor('\vrule', "<ltx:text height='#height' depth='#depth' width='#widt
 	       reversion=>sub { (T_CS('\vbox'),revert_spec($_[0],'height'),
 				 revert_spec($_[0],'depth'),revert_spec($_[0],'width')); });
 
+DefConstructor('\hrule', "<ltx:text height='#height' depth='#depth' width='#width'/>",
+	       afterDigest=>sub { read_rule_spec(@_); },
+	       reversion=>sub { (T_CS('\hbox'),revert_spec($_[0],'height'),
+				 revert_spec($_[0],'depth'),revert_spec($_[0],'width')); });
+
 #======================================================================
 # Remaining Mode independent primitives in Ch.24, pp.279-280
 # \relax was done as expandable (isn't that right?)
