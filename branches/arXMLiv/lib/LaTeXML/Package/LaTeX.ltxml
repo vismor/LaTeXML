@@ -997,8 +997,6 @@ sub number_para {
 
 Tag('ltx:para',afterOpen=>\&number_para);
 
-DefEnvironment('{sloppypar}', "<ltx:para>#body</ltx:para>");
-
 # we have \samepage defined for use within some environment
 # and the environment {samepage}
 # DefEnvironment installs definitions for \samepage and \endsamepage as well
@@ -1264,9 +1262,9 @@ DefPrimitive('\input', sub {
     while(($token = $gullet->readXToken) && ($token->getCatcode != CC_SPACE)){
       push(@tokens,$token); }
     $path = Tokens(@tokens); }
-  $path = $path->toString if ref $path;
   # Special case HACK.  If filename ends .sty, we're probably really
   # trying to load a style file!  Look for .ltxml!
+  $path = $path->toString if ref $path;
   if($path =~ s/\.sty$//){
     $gullet->input($path,['ltxml','sty']); }
   else {
@@ -1377,6 +1375,7 @@ DefPrimitive('\-',undef);	# We don't do hyphenation.
 
 DefPrimitive('\sloppy',undef);
 DefPrimitive('\fussy',undef);
+DefEnvironment('{sloppypar}','#body');
 
 #======================================================================
 # C.12.2 Page Breaking
