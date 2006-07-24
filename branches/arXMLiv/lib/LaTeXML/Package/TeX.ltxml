@@ -734,6 +734,12 @@ DefMacro('\hyphenation{}',''); # Well, what ?
 # <family member> | <font range><4bit>
 # <font range> = \textfont | \scriptfont | \scriptscriptfont
 
+DefMacro('\textfont Number SkipMatch:= Token', sub {
+	   # do something useful here (?)
+	   return; });
+DefMacro('\scriptfont Number SkipMatch:= Token', sub { return; });
+DefMacro('\scriptscriptfont Number SkipMatch:= Token', sub { return; });
+
 # <internal dimen> = <dimen parameter> | <special dimen> | \lastkern
 #    | <dimendef token> | \dimen<8bit> | <box dimension><8bit> | \fontdimen<number><font>
 # <box dimension> = \ht | \wd | \dp
