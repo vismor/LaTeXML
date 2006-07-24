@@ -64,6 +64,11 @@ sub convertString {
   return unless $digested;
   $self->convertDocument($digested); }
 
+
+sub getStatus {
+  my($self)=@_;
+  $$self{state}->getStatus; }
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Mid-level API.
 
@@ -138,7 +143,6 @@ sub convertDocument {
 
   LaTeXML::MathParser->new()->parseMath($document) unless $$self{nomathparse};
   my $xml = $document->finalize();
-  NoteProgress("\nConversion complete.\n");
   $xml; }
 
 sub writeDOM {

@@ -461,6 +461,7 @@ DefRegister('\labelsep'      => Dimension(0));
 
 # NOTE: Eventually use \makelabel to construct the list ?
 #\makelabel{label}
+# Could do something with this, but it's a headache.
 DefPrimitive('\usecounter{}', undef);
 
 #======================================================================
@@ -757,29 +758,27 @@ DefPrimitive('\DeclareRobustCommand OptionalMatch:* {Token}[][]{}', sub {
 
 # The next font declaration commands are based on
 # http://tex.loria.fr/general/new/fntguide.html
-
 # we ignore font encoding
 DefPrimitive('\DeclareSymbolFont{}{}{}{}{}', sub {
-	       my ($stomach, $name, $enc, $family, $series, $shape) = @_;
-	       AssignValue('fontdeclaration@'.$name->toString,
-			   {family=>$family->toString,
-			    series=>$series->toString,
-			    shape =>$shape->toString}); });
+  my ($stomach, $name, $enc, $family, $series, $shape) = @_;
+  AssignValue('fontdeclaration@'.$name->toString,
+	      {family=>$family->toString,
+	       series=>$series->toString,
+	       shape =>$shape->toString}); });
 DefPrimitive('\DeclareSymbolFontAlphabet{}{}', sub {
-	       my ($stomach, $cs, $name) = @_;
-	       my $font = LookupValue('fontdeclarations@'.$name->toString) || {};
-	       DefConstructor($cs->toString, '', font=>$font); });
+  my ($stomach, $cs, $name) = @_;
+  my $font = LookupValue('fontdeclarations@'.$name->toString) || {};
+  DefConstructor($cs->toString, '', font=>$font); });
 
 DefPrimitive('\DeclareMathAlphabet{}{}{}{}{}', sub {
-	       my ($stomach, $cs, $enc, $family, $series, $shape) = @_;
-	       DefConstructor($cs, '', font=>{family=>$family,
-					      series=>$series,
-					      shape =>$shape}); });
+  my ($stomach, $cs, $enc, $family, $series, $shape) = @_;
+  DefConstructor($cs, '', font=>{family=>$family,
+				 series=>$series,
+				 shape =>$shape}); });
 
 DefPrimitive('\DeclareFontShape{}{}{}{}{}{}', undef);
 DefPrimitive('\DeclareFontFamily{}{}{}', undef);
 DefPrimitive('\DeclareSizeFunction{}{}', undef);
-
 
 #======================================================================
 # C.8.2 Defining Environments
@@ -996,15 +995,7 @@ sub number_para {
   $node->setAttribute(id=>$prefix."p$n"); }
 
 Tag('ltx:para',afterOpen=>\&number_para);
-
-# we have \samepage defined for use within some environment
-# and the environment {samepage}
-# DefEnvironment installs definitions for \samepage and \endsamepage as well
-# To get the desired effect, we use the definitions:
-DefEnvironment('{samepage}', "#body");
-DefPrimitive('\samepage', undef);
-DefPrimitive('\endsamepage', undef);
-
+ 
 DefPrimitive('\newcounter{}[]',sub { shift; NewCounter(map($_ && $_->toString,@_)); return;});
 
 DefPrimitive('\setcounter{}{Number}',sub {
@@ -1387,6 +1378,8 @@ DefPrimitive('\enlargethispage OptionalMatch:* {}',undef);
 DefPrimitive('\clearpage',undef); # Could possibly mean something?
 DefPrimitive('\cleardoublepage',undef);
 
+DefPrimitive('\samepage',undef);
+
 #**********************************************************************
 # C.13 Lengths, Spaces and Boxes
 #**********************************************************************
@@ -1741,6 +1734,8 @@ DefPrimitive('\mathversion{}',sub {
     AssignValue(mathfont=>LookupValue('mathfont')->merge(forcebold=>0), 'local'); }
   else { Fatal("Unknown math verison \"$version\""); }});
 
+DefMacro('\newfont{}{}', '\font#1=#2\relax');
+
 #======================================================================
 # C.15.2 Changing the Type Size
 #======================================================================
@@ -1936,7 +1931,6 @@ DefMacro('\fontsize{}{}','');
 DefMacro('\math@fontsfalse','');
 DefMacro('\math@fontstrue','');
 DefMacro('\selectfont','');
-DefMacro('\newfont{}{}', '\font#1=#2');
 
 #======================================================================
 # Various symbols, accents, etc from Chapter 3 defined in Primitives.pm
