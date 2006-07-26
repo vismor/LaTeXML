@@ -395,6 +395,7 @@ foreach my $p (keys %sp_dparms){
   DefRegister("\\$p",Dimension($sp_dparms{$p})); }
 
 DefRegister('\pageno', Number(0));
+DefPrimitive('\nopagenumbers', undef);
 
 #======================================================================
 # Glue registers; TeXBook p.274
