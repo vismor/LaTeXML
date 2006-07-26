@@ -1774,6 +1774,8 @@ DefMacro('\strut','');
 #======================================================================
 # TeX Book, Appendix B. p. 354
 
+DefMacro('\settabs', undef);
+
 # TODO: Not yet done!!
 # \ialign, and tabbing stuff!!!
 
