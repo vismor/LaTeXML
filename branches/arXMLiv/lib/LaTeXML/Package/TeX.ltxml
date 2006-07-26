@@ -1495,6 +1495,7 @@ DefConstructor('\LARGE',         '', font=>{size=>'LARGE'});
 DefConstructor('\huge',          '', font=>{size=>'huge'});
 DefConstructor('\Huge',          '', font=>{size=>'Huge'});
 DefConstructor('\cal', '', requireMath=>1, font=>{family=>'caligraphic'});
+DefConstructor('\mit',       '',   requireMath=>1, font=>{family=>'italic'});
 
 DefConstructor('\@end@emph','</ltx:emph>');
 DefConstructor('\em',"<ltx:emph>", 
