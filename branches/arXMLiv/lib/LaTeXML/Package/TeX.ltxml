@@ -394,6 +394,8 @@ our %sp_dparms=(prevdepth=>0, pagegoal=>0, pagetotal=>0, pagestretch=>0, pagefil
 foreach my $p (keys %sp_dparms){
   DefRegister("\\$p",Dimension($sp_dparms{$p})); }
 
+DefRegister('\pageno', Number(0));
+
 #======================================================================
 # Glue registers; TeXBook p.274
 our %gparms=(baselineskip=>0, lineskip=>0, 
@@ -1783,6 +1785,8 @@ DefPrimitive('\hang',undef);
 # This could probably be adopted from LaTeX, if the <itemize> could auto-open
 # and close!
 # DefPrimitive('\item',undef);
+DefMacro('\item{}', '#1');
+DefMacro('\itemitem{}', '#1');
 
 DefMacro('\textindent{}','#1');
 
@@ -2605,6 +2609,22 @@ DefConstructor('\leqalignno{}',
 			       name=>'eqalign'); },
 	       beforeDigest=>\&before_alignment,
 	       afterDigest=>\&after_alignment);
+
+# page 363
+# if the mark is not simple, we add it to the content of the note
+# otherwise, to the attribute.
+DefConstructor('\footnote{}{}',
+	       "<ltx:note class='foot' ?#mark(mark='#mark')()>?#prenote(#prenote )()#2</ltx:note>",
+	       afterDigest=>sub {
+		 my ($stomach, $whatsit) = @_;
+		 my $mark = $whatsit->getArg(1);
+		 my $change = 0;
+		 foreach my $token($mark->revert) {
+		   unless ($token->getCatcode == CC_LETTER || $token->getCatcode == CC_SPACE ||
+			   $token->getCatcode == CC_OTHER) {
+		     $change = 1; last; }}
+		 $whatsit->setProperty(($change ? 'prenote' : 'mark')=>$mark);
+		 return; });
 
 #======================================================================
 # End of TeX Book definitions.

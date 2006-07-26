@@ -153,9 +153,9 @@ DefPrimitive('\linespread{}', undef);
 #======================================================================
 # C.3.3 Footnotes
 #======================================================================
-# NOTE: probably should default the mark to some counter?
 DefConstructor('\footnote[]{}',
 	       "<ltx:note class='foot' ?#1(mark='#1')>#2</ltx:note>");
+
 # NOTE: DOM should reattach the footnotetext to the footnotemark ?
 #  Hmm, in general the mark & text _could_ come in either order...
 DefConstructor('\footnotemark[]',""); # ????
