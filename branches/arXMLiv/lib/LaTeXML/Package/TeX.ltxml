@@ -73,7 +73,7 @@ DefParameterType('MoveableBox', sub{
 
 DefParameterType('BalancedParen', sub {
   my ($gullet) = @_;
-  my $tok = $gullet->readToken;
+  my $tok = $gullet->readXToken;
   if (ref $tok && $tok->toString eq '(') {
     $gullet->readUntil(T_OTHER(')'));
   } else {
