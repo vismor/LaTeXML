@@ -591,12 +591,14 @@ our @font_size_map=(0.60=>'tiny',   0.75=>'script', 0.85=>'footnote',0.95=>'smal
 		    2.25=>'huge',   1000.0=>'Huge');
 sub abstract_font_size {
   my($size)=@_;
-  my $scaled = $size/10.0;	# ASSUMED nominal font 10pt!!! Set from doc!!!
+  my $scaled = defined $size ? $size/10.0 : undef;	# ASSUMED nominal font 10pt!!! Set from doc!!!
   my @map = @font_size_map;
-  while(@map){
-    return shift(@map) if($scaled <= shift(@map));
-    shift(@map); }
-  'Huge'; }
+  if (defined $scaled) {
+    while(@map){
+      return shift(@map) if($scaled <= shift(@map));
+      shift(@map); }
+    'Huge'; } 
+  else { 'normal'; }}
 
 # Need to handle "at" too!!!
 DefPrimitive('\font Token SkipMatch:=', sub {
