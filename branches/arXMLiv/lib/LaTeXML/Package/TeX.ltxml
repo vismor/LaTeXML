@@ -1018,6 +1018,9 @@ sub after_alignment {
   $_[0]->egroup;		     # Outer grouping for non-environments.
   return; }
 
+# force \cr
+DefMacro('\crcr', '\cr');
+DefConstructor('\cr', "\n"); # default value, that should be redefined
 
 # TODO: This needs implementation!!! See Chap 22.
 # \halign<box specification>{<alignment material>}
@@ -1220,8 +1223,8 @@ sub replace_node {
 
 # May need further work to integrate; probably needs to be displayed,
 # and should be added as refnum attribute to some container.
-DefPrimitive('\eqno BalancedParen', undef);
-DefPrimitive('\leqno BalancedParen', undef);
+DefConstructor('\eqno BalancedParen', "^ refnum='#1'");
+DefConstructor('\leqno BalancedParen', "^ refnum='#1'");
 
 #======================================================================
 # Scripts are a bit of a strange beast, with respect to when the arguments
