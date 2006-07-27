@@ -78,7 +78,9 @@ DefParameterType('BalancedParen', sub {
     $gullet->readUntil(T_OTHER(')'));
   } else {
     $gullet->unread($tok) if ref $tok;
-    undef; }});
+    undef; }},
+  reversion=> sub {
+    (T_OTHER('('), $_[0]->revert, T_OTHER(')')); });
 
 # In addition to the standard TeX Dimension, there are various LaTeX constructs
 # (particularly, the LaTeX picture environment, and the various pstricks packages)
