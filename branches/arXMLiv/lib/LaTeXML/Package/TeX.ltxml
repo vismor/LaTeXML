@@ -1032,6 +1032,7 @@ DefConstructor('\cr', "\n"); # default value, that should be redefined
 #----------------------------------------------------------------------
 DefConstructor('\indent', "");
 DefConstructor('\noindent', "");
+DefPrimitive('\noalign', undef);
 
 # <ltx:para> represents a Logical Paragraph, whereas <ltx:p> is a `physical paragraph'.
 # A para can contain both p and displayed equations and such.
