@@ -1794,7 +1794,7 @@ DefConstructor('\centerline{}',"<ltx:centering>#1</ltx:centering>");
 DefMacro('\llap{}','\hbox{#1}');
 DefMacro('\rlap{}','\hbox{#1}');
 DefMacro('\m@th','\mathsurround=0pt ');
-Let('\underbar','\underline');	# Will anyone notice?
+# \underbar defined _after_ \underline
 
 # \strutbox
 DefMacro('\strut','');
@@ -2313,6 +2313,7 @@ DefMath('\math@overleftarrow{}', "\x{2190}", operator_role=>'OVERACCENT',
 	name=>'overleftarrow', alias=>'\overleftarrow');
 
 DefMacro('\underline{}',      '\ifmmode\math@underline{#1}\else\text@underline{#1}\fi');
+Let('\underbar','\underline');	# Will anyone notice?
 DefMacro('\overrightarrow{}', '\ifmmode\math@overrightarrow{#1}\else$\math@overrightarrow{#1}$\fi');
 DefMacro('\overleftarrow{}',  '\ifmmode\math@overleftarrow{#1}\else$\math@overleftarrow{#1}$\fi');
 
