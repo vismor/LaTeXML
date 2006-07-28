@@ -1066,6 +1066,7 @@ DefEnvironment('{table*}[]',
 
 
 DefPrimitive('\suppressfloats[]', undef);
+DefPrimitive('\flushbottom', undef);
 
 NewCounter('topnumber');
 DefMacro('\topfraction',"0.25");
