@@ -2639,6 +2639,10 @@ DefConstructor('\leqalignno{}',
 			       name=>'eqalign'); },
 	       beforeDigest=>\&before_alignment,
 	       afterDigest=>\&after_alignment);
+# page 362
+DefPrimitive('\folio', undef);
+DefPrimitive('\headline OptionalMatch:= {}', undef);
+DefPrimitive('\footline OptionalMatch:= {}', undef);
 
 # page 363
 # if the mark is not simple, we add it to the content of the note
@@ -2655,6 +2659,8 @@ DefConstructor('\footnote{}{}',
 		     $change = 1; last; }}
 		 $whatsit->setProperty(($change ? 'prenote' : 'mark')=>$mark);
 		 return; });
+
+DefPrimitive('\footstrut', undef);
 
 #======================================================================
 # End of TeX Book definitions.
