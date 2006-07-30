@@ -849,6 +849,8 @@ DefConstructor('\vbox', "<ltx:vbox valign='bottom' height='#to' pad-height='#spr
 	       reversion=>sub { (T_CS('\vbox'),revert_spec($_[0],'to'),revert_spec($_[0],'spread'),
 				 T_BEGIN,$_[0]->getProperty('body')->revert); }); # body has }
 
+Let('\vcenter', '\vbox');
+
 DefConstructor('\vtop', "<ltx:vbox valign='top' height='#to' pad-height='#spread'>#body</ltx:vbox>",
 	       afterDigest=>sub { read_box_spec(@_); read_box_contents(@_); },
 	       mode=>'text',

@@ -30,6 +30,7 @@ use encoding 'utf8';
 RequirePackage('amsbsy');
 RequirePackage('amstext');
 RequirePackage('amsopn');
+RequirePackage('amsthm');
 
 # Optional packages
 #   amscd
