@@ -1365,6 +1365,7 @@ DefPrimitive('\nolinebreak[]',undef);
 DefConstructor('\newline',"\n");
 DefPrimitive('\-',undef);	# We don't do hyphenation.
 # \hyphenation in Primitives.pm
+DefPrimitive('\allowdisplaybreaks', undef);
 
 DefPrimitive('\sloppy',undef);
 DefPrimitive('\fussy',undef);
