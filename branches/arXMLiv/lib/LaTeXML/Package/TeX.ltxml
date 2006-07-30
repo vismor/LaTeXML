@@ -1808,6 +1808,7 @@ DefMacro('\settabs', undef);
 
 # TODO: Not yet done!!
 # \ialign, and tabbing stuff!!!
+DefPrimitive('\ialign', undef);
 
 #======================================================================
 # TeX Book, Appendix B. p. 355
