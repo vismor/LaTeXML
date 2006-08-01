@@ -41,7 +41,7 @@ sub new {
   $state->assignValue(SEARCHPATHS=> [ @{$options{searchpaths} || []} ],'global');
   bless {state   => $state, 
 	 nomathparse=>$options{nomathparse}||0,
-	 preload=>$options{preload}
+	 preload=>$options{preload},
 	}, $class; }
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

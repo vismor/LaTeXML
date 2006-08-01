@@ -24,7 +24,7 @@ our @EXPORT = (qw(&DefExpandable &DefMacro
 		  &DefEnvironment
 		  &DefRewrite &DefMathRewrite
 		  &DefLigature &DefMathLigature
-		  &RequirePackage &IfFileExists
+		  &RequirePackage &FindFile
 		  &RawTeX
 		  &Tag &DocType &RegisterNamespace
 		  &convertLaTeXArgs
@@ -572,14 +572,14 @@ sub RequirePackage {
   $STATE->getStomach->getGullet->input($package,['ltxml','sty'],%options); 
   return; }
 
-sub IfFileExists {
-  my ($base,$ext)=@_;
+sub FindFile {
+  my ($file,$ext)=@_;
+  $file = ToString($file);
   $ext = [$ext] unless ref $ext;
-  if(my $file = pathname_find($base,paths=>LookupValue('SEARCHPATHS'),
-			      types=>$ext,
-			      installation_subdir=>'Package')){
-      return $file; }
-  return; }
+  my $pkg = ($file =~ /\.ltxml$/) || ($ext && grep('ltxml',@$ext));
+  pathname_find($file,paths=>LookupValue('SEARCHPATHS'),
+		types=>$ext,
+		($pkg ? (installation_subdir=>'Package'):())); }
 
 sub RawTeX {
   my($text)=@_;

@@ -26,7 +26,6 @@ package LaTeXML::Package::Pool;
 use strict;
 use LaTeXML::Package;
 use XML::LibXML;
-use LaTeXML::Util::Pathname;
 use LaTeXML::Util::LibXML;
 no warnings 'redefine';
 
@@ -1066,7 +1065,6 @@ DefEnvironment('{table*}[]',
 
 
 DefPrimitive('\suppressfloats[]', undef);
-DefPrimitive('\flushbottom', undef);
 
 NewCounter('topnumber');
 DefMacro('\topfraction',"0.25");
@@ -1365,7 +1363,6 @@ DefPrimitive('\nolinebreak[]',undef);
 DefConstructor('\newline',"\n");
 DefPrimitive('\-',undef);	# We don't do hyphenation.
 # \hyphenation in Primitives.pm
-DefPrimitive('\allowdisplaybreaks', undef);
 
 DefPrimitive('\sloppy',undef);
 DefPrimitive('\fussy',undef);
@@ -1954,11 +1951,11 @@ DefMacro('\@ifundefined{}{}{}',sub {
 
 DefMacro('\IfFileExists{}{}{}', sub{
   my($gullet,$file,$if,$else)=@_;
-  (pathname_find($file->toString,paths=>LookupValue('SEARCHPATHS')) ? $if->unlist : $else->unlist); });
+  (FindFile($file) ? $if->unlist : $else->unlist); });
 
 DefMacro('\InputIfFileExists{}{}{}', sub{
   my($gullet,$file,$if,$else)=@_;
-  if(pathname_find($file->toString,paths=>LookupValue('SEARCHPATHS'))){
+  if(FindFile($file)){
     $gullet->input($file);
     $if->unlist; }
   else { $else->unlist; }});
