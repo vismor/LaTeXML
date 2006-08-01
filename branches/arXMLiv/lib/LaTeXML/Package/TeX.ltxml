@@ -1789,7 +1789,7 @@ DefMacro('\supereject','\par');
 DefPrimitive('\removelastskip',undef);
 DefMacro('\smallbreak','\par');
 DefMacro('\medbreak','\par');
-DefMacro('\bibbreak','\par');
+DefMacro('\bigbreak','\par');
 
 DefMacro('\line','\hbox to \hsize');
 DefMacro('\leftline{}','\line{#1\hss}');
