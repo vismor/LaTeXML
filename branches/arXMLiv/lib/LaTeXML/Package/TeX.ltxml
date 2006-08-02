@@ -1843,6 +1843,7 @@ DefConstructor('\beginsection{}',
 # TeX Book, Appendix B. p. 356
 
 DefPrimitive('\raggedright',undef);
+DefPrimitive('\raggedleft',undef);  # this is actually LaTeX
 DefPrimitive('\ttraggedright',undef);
 DefPrimitive('\leavevmode',undef);
 
