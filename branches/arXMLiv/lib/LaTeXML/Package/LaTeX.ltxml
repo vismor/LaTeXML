@@ -1947,7 +1947,7 @@ DefMacro('\@ifnextchar Token {}{}', sub {
 DefMacro('\@ifundefined{}{}{}',sub {
   my($gullet,$name,$if,$else)=@_;
   my $cs = T_CS('\\'.ToString($name));
-  (LookupMeaning($cs) ne $cs ? $if->unlist : $else->unlist); });
+  (LookupMeaning($cs) ? $else->unlist : $if->unlist); });
 
 DefMacro('\IfFileExists{}{}{}', sub{
   my($gullet,$file,$if,$else)=@_;
