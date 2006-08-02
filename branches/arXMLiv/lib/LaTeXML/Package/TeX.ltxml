@@ -1735,6 +1735,8 @@ DefMacro('\null','\hbox{}');
 Let('\bgroup',T_BEGIN);
 Let('\egroup',T_END);
 
+DefPrimitive('\endline', undef);
+
 #======================================================================
 # TeX Book, Appendix B, p. 352
 
@@ -2694,6 +2696,7 @@ DefRegister('\footins'=>Dimension(0));
 DefPrimitive('\topinsert',undef);
 DefPrimitive('\midinsert',undef);
 DefPrimitive('\pageinsert',undef);
+DefPrimitive('\endinsert',undef);
 # \topins ?
 
 #======================================================================
