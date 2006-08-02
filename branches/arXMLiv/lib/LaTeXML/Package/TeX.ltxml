@@ -2671,7 +2671,7 @@ DefRegister('\footline'=>Tokens());
 DefExpandable('\folio', sub {
   Explode(LookupValue($_[1]->toString)->valueOf); });
 
-DefPrimitive('\nopagenumber',undef);
+DefPrimitive('\nopagenumbers',undef);
 DefMacro('\advancepageno','\advance\pageno1\relax');
 
 #======================================================================
