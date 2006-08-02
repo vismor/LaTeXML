@@ -746,6 +746,8 @@ DefRegister('\catcode Number',Number(0),
 # \sfcode
 # \delcode
 DefRegister('\hyphenchar{}',Number(ord('-')));
+DefRegister('\skewchar{}',Number(0)); # no idea what the default is here
+
 # \parshape !?!??
 #DefRegister('\inputlineno',Number(0),
 #            readonly=>1,
