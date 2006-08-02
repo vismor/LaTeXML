@@ -332,7 +332,7 @@ DefExpandable('\the Variable',sub {
 #======================================================================
 # Integer registers; TeXBook p. 272-273
 our %iparms= (pretolerance=>100, tolerance=>200, hbadness=>1000, vbadness=>1000,
-	      linepenalty=>10, hypenpenalty=>50, exhyphenpenalty=>50,
+	      linepenalty=>10, hyphenpenalty=>50, exhyphenpenalty=>50,
 	      binoppenalty=>700, relpenalty=>500,
 	      clubpenalty=>150, widowpenalty=>150, displaywidowpenalty=>50,
 	      brokenpenalty=>100, predisplaypenalty=>10000,
@@ -1619,6 +1619,7 @@ DefPrimitive('\newcount  Token',sub { DefRegister($_[1]->toString=>Number(0)); }
 DefPrimitive('\newdimen  Token',sub { DefRegister($_[1]->toString=>Dimension(0)); });
 DefPrimitive('\newskip   Token',sub { DefRegister($_[1]->toString=>Glue(0)); });
 DefPrimitive('\newmuskip Token',sub { DefRegister($_[1]->toString=>MuGlue(0)); });
+DefPrimitive('\newbox    Token',sub { DefRegister($_[1]->toString=>Tokens()); });
 DefPrimitive('\newhelp Token {}',sub { AssignValue($_[1]->toString=>$_[2]); });
 DefPrimitive('\newtoks   Token',sub { DefRegister($_[1]->toString=>Tokens(0)); });
 DefPrimitive('\newread Token',  sub { DefRegister($_[1]->toString=>Number(0)); });
@@ -1805,6 +1806,7 @@ DefMacro('\m@th','\mathsurround=0pt ');
 
 # \strutbox
 DefMacro('\strut','');
+DefRegister('\strutbox'=>Tokens());
 
 #======================================================================
 # TeX Book, Appendix B. p. 354
