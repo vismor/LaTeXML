@@ -1076,6 +1076,7 @@ DefPrimitive('\end',sub { $_[0]->getGullet->flush; return; });
 #    | \accent | \discretionary | \- | \<space> | $
 
 DefPrimitive('\hskip Glue',undef);
+DefPrimitive('\mskip MuGlue', undef);
 DefPrimitive('\hss',undef);
 DefConstructor('\hfil',"?#isMath(<ltx:XMHint name='hfil'/>)( )",
 	      properties=>{isSpace=>1});
