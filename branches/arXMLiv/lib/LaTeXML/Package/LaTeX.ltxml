@@ -130,13 +130,6 @@ DefEnvironment('{document}',
 # \TeX is in Primitives.pm
 DefConstructor('\LaTeX', 'LaTeX');
 
-our @MonthNames=(qw( January February March April May June
-		     July August September October November December));
-DefExpandable('\today',sub { 
-   Explode($MonthNames[LookupValue('\month')->valueOf-1]
-	   ." ".LookupValue('\day')->valueOf
-	   .', '.LookupValue('\year')->valueOf); });
-
 DefConstructor('\emph{}', "<ltx:emph>#1</ltx:emph>", mode=>'text');
 
 #======================================================================

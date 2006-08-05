@@ -53,7 +53,7 @@ DefParameterType('Variable', sub {
   ((defined $defn) && $defn->isRegister && !$defn->isReadonly
    ? [$defn,$defn->readArguments($gullet)] : undef); });
 
-DefParameterType('Filename', sub {
+DefParameterType('UntilSpace', sub {
   my($gullet)=@_;
   my($token,@tokens)=();
   while(($token = $gullet->readXToken()) && ($token->getCatcode != CC_SPACE)){
@@ -289,7 +289,7 @@ DefExpandable('\botmark',        sub { return; });
 DefExpandable('\splitfirstmark', sub { return; });
 DefExpandable('\splitbotmark',   sub { return; });
 
-DefExpandable('\input Filename',sub {
+DefExpandable('\input UntilSpace',sub {
   my($gullet,$path)=@_;
   $path = $path->toString;
   $path = $1 if $path =~ /^\{(.*)\}$/; # just in case
@@ -922,8 +922,8 @@ DefPrimitive('\message{}',sub {
 ## I'm thinking we want to mostly ignore the I/O stuff.
 ## Generally, it's used to move info around for multiple passes
 ## of aux, index, etc.
-DefPrimitive('\openin Number SkipMatch:= Filename', undef);
-DefPrimitive('\openout Number SkipMatch:= Filename', undef);
+DefPrimitive('\openin Number SkipMatch:= UntilSpace', undef);
+DefPrimitive('\openout Number SkipMatch:= UntilSpace', undef);
 DefPrimitive('\closein Number',undef);
 DefPrimitive('\closeout Number',undef);
 DefPrimitive('\immediate',undef);
@@ -1912,6 +1912,16 @@ sub insertFrontMatter {
   return; }
 
 Tag('ltx:document', afterOpen=>\&insertFrontMatter);
+
+# \today is actually part of LaTeX, but we would like to use it here as well
+our @MonthNames=(qw( January February March April May June
+		     July August September October November December));
+DefExpandable('\today',sub { 
+   Explode($MonthNames[LookupValue('\month')->valueOf-1]
+	   ." ".LookupValue('\day')->valueOf
+	   .', '.LookupValue('\year')->valueOf); });
+
+RawTeX('\@add@frontmatter{ltx:date}[role=conversion]{\today}');
 
 DefConstructor('\beginsection{}',
 	       "<ltx:section><ltx:title>#1</ltx:title>");
