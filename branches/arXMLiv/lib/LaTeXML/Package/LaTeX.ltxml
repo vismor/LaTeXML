@@ -130,6 +130,8 @@ DefEnvironment('{document}',
 # \TeX is in Primitives.pm
 DefConstructor('\LaTeX', 'LaTeX');
 
+DefExpandable('\today',sub { Explode(today()); });
+
 DefConstructor('\emph{}', "<ltx:emph>#1</ltx:emph>", mode=>'text');
 
 #======================================================================
@@ -302,6 +304,7 @@ DefConstructor('\LoadClass[]{}[]',
 # C.5.3 Page Styles
 #======================================================================
 # Ignored
+NewCounter('page');
 DefPrimitive('\pagestyle{}',    undef);
 DefPrimitive('\thispagestyle{}',undef);
 DefPrimitive('\markright{}',    undef);
