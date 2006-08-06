@@ -2912,7 +2912,7 @@ sub loadLaTeXClass {
     NoteEnd($msg); }
   return; }
 
-DefConstructor('\documentclass[]{}[]',
+DefConstructor('\documentclass[] Semiverbatim []',
 	       "<?latexml class='#2' ?#1(options='#1')?>",
   afterDigest=>sub {
     my($stomach,$whatsit)=@_;
