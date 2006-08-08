@@ -1,0 +1,49 @@
+\section{The {\latexml} {\LaTeX} to {\xml} Converter}\label{sec:latexml}
+
+\begin{oldpart}{@BRUCE, This is an old overview, this is where your part comes in.}
+The {\latexml} system, consists of a {\TeX} parser, an {\xml} emitter, and a
+post-processing pipeline. To cope with {\LaTeX} documents, the system needs to
+supply {\twindef{\latexml}{bindings}} (i.e. special directives for the {\xml}
+emitter) for the {\LaTeX} packages. So every {\LaTeX} package {\tt{package.sty}}
+comes with a {\latexml} binding file {\tt{package.ltxml}}, a {\perl} file which
+contains {\latexml} constructor-, abbreviation-, and environment definitions, e.g.
+
+\begin{footnotesize}
+\begin{verbatim}
+DefConstructor("\Reals","<XMTok name='Reals'/>");
+DefConstructor("\SmoothFunctionsOn{}","<XMApp><XMTok name='SmoothFunctionsOn'/>#1</XMApp>");
+DefMacro("\SmoothFunctionsOnReals","\SmoothFunctionsOn\Reals");
+\end{verbatim}
+\end{footnotesize}  
+
+{\tt{DefConstructor}} is used for semantic macros, whereas {\tt{DefMacro}} is used
+for abbreviative macros. The latter is used, since the {\tt{latexml}} program does
+not read {\tt{package.sty}} and needs to be told, which sequence of tokens to
+recurse on. The {\latexml} distribution contains {\latexml} bindings for the most
+common base {\LaTeX} packages.
+
+For the {\xml} conversion, the {\tt{latexml}} program is run, say on a file
+{\tt{doc.tex}}. {\tt{latexml}} loads the {\latexml} bindings for the {\LaTeX}
+packages used in {\tt{doc.tex}} and generates an {\xml} file {\tt{doc.tex.xml}},
+which closely mimics the structure of the parse tree of the {\LaTeX} source. The
+structure of this file is determined by the {\latexml} packages and must
+correspond to a format-specific document type definition (DTD), which is usually a
+relatively simple extension of Bruce Miller's {\LaTeX} DTD.
+
+In the semantic post-processing phase, the {\LaTeX}-near representation in
+{\tt{doc.tex.xml}} is transformed into the target format by the {\tt{latexmlpost}}
+program. This program applies a pipeline of intelligent filters to
+{\tt{doc.tex.xml}}. The {\latexml} program supplies various filters, e.g. for
+processing {\html} tables, including graphics, or converting formulae to
+{\pmathml}. Other filters like transformation to {\openmath} and {\cmathml} are
+currently under development. The filters can also consist of regular
+{\xml}-to-{\xml} transformation process, e.g.  an {\xslt} style sheet. Eventually,
+post-processing will include semantic disambiguation information like types,
+part-of-speech analysis, etc. to alleviate the semantic markup density for
+authors.
+\end{oldpart}
+
+%%% Local Variables: 
+%%% mode: stex
+%%% TeX-master: "main"
+%%% End: 

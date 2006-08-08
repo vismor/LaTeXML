@@ -1,0 +1,101 @@
+\documentclass{article}
+\usepackage[show]{ed,draftstamp}
+\usepackage{a4wide,url,amssymb,myref,moreverb}
+\usepackage{stex} % assuming that you have sTeX styles on the TEXINPUTS
+\def\blue{\bf}\def\cM{{\cal M}}
+\def\phi{\varphi}
+\def\lec#1{\hfill(#1)}
+\def\interpret#1#2#3{{\left[\kern-0.18em\left[#1\right]\kern-0.18em\right]^{#2}_{#3}}}
+\def\intermp#1{\interpret{#1}{{\cal M}}{\phi}}\def\interoo#1{\interpret{#1}{}{}}
+\def\interm#1{\interpret{#1}{\cM}{}}\def\interp#1{\interpret{#1}{}{\phi}}
+
+%\usepackage[savemem]{listings} 
+%\usepackage{lstpatch}
+\usepackage{graphicx,hyperref}
+\usepackage{float}
+\floatstyle{boxed}
+\newfloat{exfig}{thp}{lop}
+\floatname{exfig}{Example}
+
+\def\twindef#1#2{{\defemph{\twintoo{#1}{#2}}}}
+\def\twintoo#1#2{{#1} {#2}}  %mock index
+\def\twin#1#2{}%mock index
+\def\defemph#1{{\bf{#1}}}
+\def\ttin#1{{\tt{#1}}}
+\def\defin#1{{\defemph{#1}}}
+
+\def\sys#1{{{#1}}\index{#1@{#1}}}
+\def\scsys#1{{{\sc #1}}\index{#1@{\sc #1}}}
+\def\hermes{\scsys{Hermes}}
+\def\xml{\scsys{xml}}
+\def\ppt{\scsys{PPT}}
+\def\mathematica{\scsys{Mathematica}}
+\def\css{\scsys{css}}
+\def\xslt{\scsys{xslt}}
+\def\html{\scsys{html}}
+\def\xhtml{\scsys{xhtml}}
+\def\openmath{\scsys{OpenMath}}
+\def\activemath{\scsys{ActiveMath}}
+\def\cpoint{\scsys{CPoint}}
+\def\cmathml{\scsys{CMathML}}
+\def\pmathml{\scsys{PMathML}}
+\def\mathml{\scsys{MathML}}
+\def\omdoc{OMDoc}
+\def\latexml{\scsys{LaTeXML}}
+\def\texfourht{\scsys{TeX4HT}}
+\def\perl{\scsys{Perl}}
+\def\connexions{\scsys{Connexions}}
+\def\cnxml{\scsys{CnXML}}
+\def\excdot#1#2{\exists #1.#2}
+\def\allcdot#1#2{\forall #1.#2}
+
+\title{Transforming {\TeX/\LaTeX} into XML}
+\author{Michael Kohlhase\\Computer Science\\
+  International University
+  Bremen\\{\tiny\url{http://www.faculty.iu-bremen.de/mkohlhase}}
+\and
+Bruce Miller\\
+DLMF\\
+NIST}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+  \begin{oldpart}{extend this by LaTeXML}
+  We present a collection of {\TeX} macro packages that allow to markup
+  {\TeX/\LaTeX} documents semantically without leaving the document format,
+  essentially turning {\TeX/\LaTeX} into a document format for mathematical
+  knowledge management (MKM).
+  
+  We analyze the current practice of semi-semantic markup in {\LaTeX} documents
+  and supply a definition mechanism for semantic macros and a non-standard scoping
+  construct for them, which is oriented at the semantic depency relation rather
+  than the document structure.
+  
+  We evaluate the {\stex} macro collection on a large case study: the course
+  materials of a a two-semester course in Computer Science was annotated
+  semantically and converted to the {\omdoc} MKM format Bruce Miller's {\latexml}
+  system.
+\end{oldpart}
+\end{abstract}
+
+\include{intro}
+\include{related}
+\include{latexml}
+\include{stex}
+\include{case-studies}
+\include{concl}
+
+\begin{small}
+\bibliographystyle{alpha}
+\bibliography{kwarc,omdoc}
+\end{small}
+\ednotemessage
+\end{document}
+
+%%% Local Variables: 
+%%% mode: stex
+%%% TeX-master: t
+%%% End: 
+

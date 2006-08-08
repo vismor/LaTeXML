@@ -1,0 +1,165 @@
+\section{Semantic Preloading of {\TeX}/{\LaTeX} Documents}\label{sec:preloading}
+
+Let us now re-consider why the conversion of {\TeX/\LaTeX} documents to MKM formats is a
+non-trivial task. We can distinguish two different --- albeit interrelated --- problems:
+
+\begin{description}
+\item[The Notation/Context Problem] Mathematicians have idiosyncratic notations
+  that are introduced, extended, and discarded on the fly. Generally, this means
+  that the parsing and semantics construction process has to be adapted on the fly
+  as well. In particular, it depends on the context, what a piece of notation
+  means. To go into only a few examples: The Greek letter $\alpha$ is used for
+  numbering, as a variable name, as a type, and as a name for an operation, etc.
+  In the formula
+  \begin{equation}\label{alphaeq}
+    \lambda{X_\alpha}.X=_\alpha\lambda{Y_\alpha}.Y\hat=\bf{I}^\alpha
+  \end{equation}
+  the first and third occurrence of the symbol $\alpha$ is as a type of the bound
+  variables $X$ and $Y$, whereas the second one is an indicator that the equality
+  operation is that of $\alpha$-equality (the name is derived from the process of
+  ``alphabetic renaming''); the final and fourth occurrence of $\alpha$ --- as an
+  upper index on the combinator $\bf I$ --- selects one of an infinite collection
+  of identity combinators (identity function on type $\alpha$, which incidentally
+  as an operation has type $\alpha\to\alpha$). This example also shows that the
+  notion of context can be extremely fine-granular in mathematics. Notation can
+  also depend on other forms of context: We have varied ``standard notations'' for
+  binomial coefficients: $\left(n\atop k\right)$, $_nC^k$, $C^n_k$, and $C^k_n$
+  all mean the same thing: $n!\over k!(n-k)!$; the third notation is the French
+  standard, whereas the last one is the Russian one, so the context for
+  determining the notation must in some cases include the cultural background of
+  the author (whatever that means in practice).
+  
+  The admissibility of symbols and notations in mathematical documents follows
+  complex rules. In principle, a notation or symbol (more precisely a certain
+  glyph that stands for a mathematical object or concept) must be introduced
+  before it can be used. A notation can be introduced explicitly by a statement
+  like ``{\em{We will write $\wp(S)$ for the set of subsets of $S$}}'', or by
+  reference as in ``{\em{We will use the notation of [BrHa86] in the following,
+      with the exception\ldots}}''. The scope of a notation can be local, e.g. in
+  a definition which begins with ``{\em{Let $S$ be a set\ldots}}'' or even only in
+  the immediately preceding formula, if it is followed by ``{\em{where $w$ is
+      the\ldots}}''. Finally, notation can be given by convention: If we open a
+  book on group theory in the Bourbaki series on Algebra, we expect notation
+  introduced in~\cite{Bourbaki:a74}.
+
+\item[The Reconstruction Problem] Mathematical communication and notation relies
+  on the inferential capability of the reader. Often, semantically relevant
+  arguments are left out (or left ambiguous) to save notational overload relying
+  on the reader to disambiguate or fill in the details. Of course the size of the
+  gaps to be filled in varies greatly with the intended readership and the space
+  constraints. It can be so substantial, that only a few specialists in the field
+  can understand (e.g.  enough to translate) a given piece of mathematical
+  document.
+\end{description}
+Both of these problems have to be solved for a successful transformation into an
+MKM format, in which the meaning has to be made explicit, and all ambiguities have
+to be resolved. Of course, this is impossible in the general case except for the
+solution of the general ``{\twintoo{artificial intelligence}{problem}}'' of
+achieving human-like intelligence in machines. Since we cannot rely on this
+problem to be solved anytime soon, we will burden the author with marking up the
+source documents with additional information that helps the transformation process
+determine the semantics.
+
+We will make use the {\TeX} macro mechanism for this markup: {\TeX} allows to
+define so-called {\defin{macros}}, which are expanded in the formatting process
+that transforms a {\TeX} source file {\tt{doc.tex}} into a document {\tt{doc.dvi}}
+in the (device-independent) presentation format, which can be directly rendered
+for the screen- or printer output. This basic and very simple mechanism can be put
+to various uses in documents: macros can be used to compute values for section
+numbers or footnotes and make {\TeX} sources more portable, they can be used as
+abbreviations to save the author typing effort, and they can be used for semantic
+annotation, which is what we will explore here. All of these uses are
+common\footnote{Of course, the actual frequency and distribution of macros among
+  the categories below depends on the tastes of the individual author and the
+  purpose of the document.} in {\LaTeX} documents.
+\begin{description}
+\item[Abbreviative Macros] define a new name (as a control sequence) for a sequence of
+  {\TeX} tokens, in essence, the macro just stands for the sequence of tokens; this is the
+  traditional function of {\LaTeX}.
+\item[Semantic Macros] stand for semantic objects and expand to a presentation
+  (technically a sequence of {\TeX} tokens of course) of the object. For instance
+  ${\cal C}^\infty({\mathbb R})$ stands for the set of arbitrarily differentiable
+  (``smooth'') functions on the real numbers. So a {\TeX} definition
+  \begin{footnotesize}
+\begin{verbatim}
+\def\SmoothFunctionsOnReals{{\cal C}^\infty({\mathbb R})}
+\end{verbatim}
+\end{footnotesize}
+not only abbreviates the more complicated expression in the definiens, but also
+encapsulates the information that this expression represents a distinct
+mathematical object. A variant macro definition for ${\cal C}^\infty({\mathbb R})$
+would be
+\begin{center}\footnotesize
+\begin{verbatim}
+\def\Reals{{\mathbb R}}
+\def\SmoothFunctionsOn#1{{\cal C}^\infty(#1)}
+\def\SmoothFunctionsOnReals{\SmoothFunctionsOn\Reals}
+\end{verbatim}
+\end{center}
+Here, we characterize the first two definitions as ``semantic'' and the third one
+as ``abbreviative''.
+ 
+Semantic macros are commonly used to enhance the maintainability and reusability
+of source code. If we for instance use three different semantic macros for the
+glyph $\alpha$ in example (\ref{alphaeq}), we can readily distinguish them (e.g.
+in searches, or for replacement) in the {\LaTeX} source. If we use the semantic
+macro {\verb|\binomcoeff{n}{k}|} instead of the presentation markup
+{\verb|\left(n\atop k\right)|} for a binomial coefficient, then we can change the
+notational standard by just changing the definition of the control sequence
+{\verb|\binomcoeff|}.
+
+\item[Elliptive Macros] Finally, there are uses of macros that we will call
+  {\defemph{elliptive}}, since they are used to elide (i.e. leave out) ``obvious''
+  arguments.  Consider the family of macros in {\myfigref{elliptive-macros}}:
+  {\verb|\interpret|} introduces the notation $\intermp{A}$ for the denotation of
+  a formula $A$ in a model $\cM$ under a variable assignment $\phi$. The macro
+  {\verb|\intermp|} is abbreviative (it just saves typing).  The case of
+  {\verb|\interm|}, {\verb|\interp|}, and {\verb|\interoo|} is interesting. In the
+  expressions $\interm{A}$, $\interp{A}$, and $\interoo{A}$ we do not abbreviate
+  information, but really elide it, i.e. the information that is left out (the
+  assignment $\phi$ for {\verb|\interm{A}|}, the model $\cM$ for
+  {\verb|\interp{A}|}, and both for {\verb|\interoo{A}|}) is relevant
+  semantically, we just do not present it, since it can be inferred by the reader.
+
+\begin{myfig}{elliptive-macros}{Elliptive Macros}\footnotesize
+\begin{boxedverbatim}
+\def\interpret#1#2#3{{\left[\kern-0.18em\left[#1\right]\kern-0.18em\right]^{#2}_{#3}}}
+\def\intermp#1{\interpret{#1}{{\cal M}}{\phi}}
+\def\interm#1{\interpret{#1}{{\cal M}}{}}
+\def\interp#1{\interpret{#1}{}{\phi}}
+\def\interoo#1{\interpret{#1}{}{}}
+\end{boxedverbatim}  
+\end{myfig}
+Elliptive macros are often used to specialize semantic macros as in our example.
+However, in contrast to semantic macros, they are not semantically complete, since
+they do not specify the full semantic information behind the mathematical object.
+\end{description}
+
+Obviously, to use {\TeX/\LaTeX} as an MKM format, we need to maximize the use of
+semantic macros over the use of direct presentational notations. We call the
+process of converting presentation markup into semantic markup in the form of
+suitable semantic macros {\twintoo{semantic}{preloading}} of a document. For an
+existing {\TeX/\LaTeX} document, this is a relatively tedious process, as it
+involves heavy editing of the document\footnote{although tools like regular
+  expression replacement facilities e.g. in the {\tt{emacs}} editor or one-shot
+  conversion programs e.g. in {\tt{perl}} can be a great help on uniformly marked
+  up document corpora.}, but if well-designed collections of semantic conventions
+are used during document creation, the notational overhead is easily outweighed by
+the inherent manageability and reusability benefits discussed above.
+
+For the use of elliptive macros, the case is not so clear, since the presentation
+system in {\TeX/\LaTeX} is rather inflexible, as it was originally designed for
+printed documents. In the case of other MKM formats, where the presentation engine
+may vary, we can make use of a complex user interaction during presentation, for
+instance, the user could request to see the elided arguments, or change the
+notation on the fly. So, if we look at {\TeX/\LaTeX} as an MKM format, we can see
+an added value in supplying the elided arguments (via an upgraded presentation
+engine based on e.g. dvi specials, PDF, or dynamic {\xhtml}+{\mathml}). In any
+case, we assume that semantic pre-loading makes all elliptive notations explicit
+in elliptive macros.
+
+
+%%% Local Variables: 
+%%% mode: stex
+%%% TeX-master: "main"
+%%% End: 

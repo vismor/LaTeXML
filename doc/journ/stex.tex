@@ -1,0 +1,588 @@
+\section{Semantic Preloading of {\TeX}/{\LaTeX} Documents}\label{sec:preloading}
+
+\subsection{Problems in Semantical Analysis}
+
+Let us now re-consider why the conversion of {\TeX/\LaTeX} documents to MKM formats is a
+non-trivial task. We can distinguish two different --- albeit interrelated --- problems:
+
+\begin{description}
+\item[The Notation/Context Problem] Mathematicians have idiosyncratic notations
+  that are introduced, extended, and discarded on the fly. Generally, this means
+  that the parsing and semantics construction process has to be adapted on the fly
+  as well. In particular, it depends on the context, what a piece of notation
+  means. To go into only a few examples: The Greek letter $\alpha$ is used for
+  numbering, as a variable name, as a type, and as a name for an operation, etc.
+  In the formula
+  \begin{equation}\label{alphaeq}
+    \lambda{X_\alpha}.X=_\alpha\lambda{Y_\alpha}.Y\hat=\bf{I}^\alpha
+  \end{equation}
+  the first and third occurrence of the symbol $\alpha$ is as a type of the bound
+  variables $X$ and $Y$, whereas the second one is an indicator that the equality
+  operation is that of $\alpha$-equality (the name is derived from the process of
+  ``alphabetic renaming''); the final and fourth occurrence of $\alpha$ --- as an
+  upper index on the combinator $\bf I$ --- selects one of an infinite collection
+  of identity combinators (identity function on type $\alpha$, which incidentally
+  as an operation has type $\alpha\to\alpha$). This example also shows that the
+  notion of context can be extremely fine-granular in mathematics. Notation can
+  also depend on other forms of context: We have varied ``standard notations'' for
+  binomial coefficients: $\left(n\atop k\right)$, $_nC^k$, $C^n_k$, and $C^k_n$
+  all mean the same thing: $n!\over k!(n-k)!$; the third notation is the French
+  standard, whereas the last one is the Russian one, so the context for
+  determining the notation must in some cases include the cultural background of
+  the author (whatever that means in practice).
+  
+  The admissibility of symbols and notations in mathematical documents follows
+  complex rules. In principle, a notation or symbol (more precisely a certain
+  glyph that stands for a mathematical object or concept) must be introduced
+  before it can be used. A notation can be introduced explicitly by a statement
+  like ``{\em{We will write $\wp(S)$ for the set of subsets of $S$}}'', or by
+  reference as in ``{\em{We will use the notation of [BrHa86] in the following,
+      with the exception\ldots}}''. The scope of a notation can be local, e.g. in
+  a definition which begins with ``{\em{Let $S$ be a set\ldots}}'' or even only in
+  the immediately preceding formula, if it is followed by ``{\em{where $w$ is
+      the\ldots}}''. Finally, notation can be given by convention: If we open a
+  book on group theory in the Bourbaki series on Algebra, we expect notation
+  introduced in~\cite{Bourbaki:a74}.
+
+\item[The Reconstruction Problem] Mathematical communication and notation relies
+  on the inferential capability of the reader. Often, semantically relevant
+  arguments are left out (or left ambiguous) to save notational overload relying
+  on the reader to disambiguate or fill in the details. Of course the size of the
+  gaps to be filled in varies greatly with the intended readership and the space
+  constraints. It can be so substantial, that only a few specialists in the field
+  can understand (e.g.  enough to translate) a given piece of mathematical
+  document.
+\end{description}
+Both of these problems have to be solved for a successful transformation into an
+MKM format, in which the meaning has to be made explicit, and all ambiguities have
+to be resolved. Of course, this is impossible in the general case except for the
+solution of the general ``{\twintoo{artificial intelligence}{problem}}'' of
+achieving human-like intelligence in machines. Since we cannot rely on this
+problem to be solved anytime soon, we will burden the author with marking up the
+source documents with additional information that helps the transformation process
+determine the semantics.
+
+\subsection{A Phenomenology of {\TeX/\LaTeX} Macros}
+
+We will make use the {\TeX} macro mechanism for this markup: {\TeX} allows to
+define so-called {\defin{macros}}, which are expanded in the formatting process
+that transforms a {\TeX} source file {\tt{doc.tex}} into a document {\tt{doc.dvi}}
+in the (device-independent) presentation format, which can be directly rendered
+for the screen- or printer output. This basic and very simple mechanism can be put
+to various uses in documents: macros can be used to compute values for section
+numbers or footnotes and make {\TeX} sources more portable, they can be used as
+abbreviations to save the author typing effort, and they can be used for semantic
+annotation, which is what we will explore here. All of these uses are
+common\footnote{Of course, the actual frequency and distribution of macros among
+  the categories below depends on the tastes of the individual author and the
+  purpose of the document.} in {\LaTeX} documents.
+\begin{description}
+\item[Abbreviative Macros] define a new name (as a control sequence) for a sequence of
+  {\TeX} tokens, in essence, the macro just stands for the sequence of tokens; this is the
+  traditional function of {\LaTeX}.
+\item[Semantic Macros] stand for semantic objects and expand to a presentation
+  (technically a sequence of {\TeX} tokens of course) of the object. For instance
+  ${\cal C}^\infty({\mathbb R})$ stands for the set of arbitrarily differentiable
+  (``smooth'') functions on the real numbers. So a {\TeX} definition
+  \begin{footnotesize}
+\begin{verbatim}
+\def\SmoothFunctionsOnReals{{\cal C}^\infty({\mathbb R})}
+\end{verbatim}
+\end{footnotesize}
+not only abbreviates the more complicated expression in the definiens, but also
+encapsulates the information that this expression represents a distinct
+mathematical object. A variant macro definition for ${\cal C}^\infty({\mathbb R})$
+would be
+\begin{center}\footnotesize
+\begin{verbatim}
+\def\Reals{{\mathbb R}}
+\def\SmoothFunctionsOn#1{{\cal C}^\infty(#1)}
+\def\SmoothFunctionsOnReals{\SmoothFunctionsOn\Reals}
+\end{verbatim}
+\end{center}
+Here, we characterize the first two definitions as ``semantic'' and the third one
+as ``abbreviative''.
+ 
+Semantic macros are commonly used to enhance the maintainability and reusability
+of source code. If we for instance use three different semantic macros for the
+glyph $\alpha$ in example (\ref{alphaeq}), we can readily distinguish them (e.g.
+in searches, or for replacement) in the {\LaTeX} source. If we use the semantic
+macro {\verb|\binomcoeff{n}{k}|} instead of the presentation markup
+{\verb|\left(n\atop k\right)|} for a binomial coefficient, then we can change the
+notational standard by just changing the definition of the control sequence
+{\verb|\binomcoeff|}.
+
+\item[Elliptive Macros] Finally, there are uses of macros that we will call
+  {\defemph{elliptive}}, since they are used to elide (i.e. leave out) ``obvious''
+  arguments.  Consider the family of macros in {\myfigref{elliptive-macros}}:
+  {\verb|\interpret|} introduces the notation $\intermp{A}$ for the denotation of
+  a formula $A$ in a model $\cM$ under a variable assignment $\phi$. The macro
+  {\verb|\intermp|} is abbreviative (it just saves typing).  The case of
+  {\verb|\interm|}, {\verb|\interp|}, and {\verb|\interoo|} is interesting. In the
+  expressions $\interm{A}$, $\interp{A}$, and $\interoo{A}$ we do not abbreviate
+  information, but really elide it, i.e. the information that is left out (the
+  assignment $\phi$ for {\verb|\interm{A}|}, the model $\cM$ for
+  {\verb|\interp{A}|}, and both for {\verb|\interoo{A}|}) is relevant
+  semantically, we just do not present it, since it can be inferred by the reader.
+
+\begin{myfig}{elliptive-macros}{Elliptive Macros}\footnotesize
+\begin{boxedverbatim}
+\def\interpret#1#2#3{{\left[\kern-0.18em\left[#1\right]\kern-0.18em\right]^{#2}_{#3}}}
+\def\intermp#1{\interpret{#1}{{\cal M}}{\phi}}
+\def\interm#1{\interpret{#1}{{\cal M}}{}}
+\def\interp#1{\interpret{#1}{}{\phi}}
+\def\interoo#1{\interpret{#1}{}{}}
+\end{boxedverbatim}  
+\end{myfig}
+Elliptive macros are often used to specialize semantic macros as in our example.
+However, in contrast to semantic macros, they are not semantically complete, since
+they do not specify the full semantic information behind the mathematical object.
+\end{description}
+
+Obviously, to use {\TeX/\LaTeX} as an MKM format, we need to maximize the use of semantic
+macros over the use of direct presentational notations. We call the process of converting
+presentation markup into semantic markup in the form of suitable semantic macros
+{\twintoo{semantic}{preloading}} of a document. For an existing {\TeX/\LaTeX} document,
+this is a relatively tedious process, as it involves heavy editing of the
+document\footnote{although tools like regular expression replacement facilities e.g. in
+  the {\tt{emacs}} editor or one-shot conversion programs e.g. in {\tt{perl}} can be a
+  great help on uniformly marked up document corpora.}, but if well-designed collections
+of semantic conventions are used during document creation, the notational overhead is
+easily outweighed by the inherent manageability and reusability benefits discussed above.
+
+For the use of elliptive macros, the case is not so clear, since the presentation system
+in {\TeX/\LaTeX} is rather inflexible, as it was originally designed for printed
+documents. In the case of other {\xml}-based formats, where the presentation engine may
+vary, we can make use of a complex user interaction during presentation, for instance, the
+user could request to see the elided arguments, or change the notation on the fly. So, if
+we look at {\TeX/\LaTeX} as an MKM format, we can see an added value in supplying the
+elided arguments (via an upgraded presentation engine based on e.g. dvi specials, PDF, or
+dynamic {\xhtml}+{\mathml}). In any case, we assume that semantic pre-loading makes all
+elliptive notations explicit in elliptive macros.
+
+\begin{oldpart}{some kind of transition is missing here. }
+  In the following, we will shortly preview the packages and classes in the {\stex}
+  collection. They all provide part of the solution of representing semantic structure in
+  the {\TeX/\LaTeX} workflow. We will group them by the conceptual level they
+  address\ednote{come up with a nice overview figure here!}
+\end{oldpart}
+
+\subsection{Preloading Mathematical Formulae in {\TeX/\LaTeX}}
+
+The underlying problem is that run-of-the-mill {\TeX/\LaTeX} only specifies the
+presentation (i.e. what formulae look like) and not their content (their functional
+structure). Unfortunately, there are no good methods (yet) to infer the latter from the
+former, but there are ways to get presentation from content.
+ 
+Consider for instance the following ``standard notations''\footnote{The first one is
+  standard e.g. in Germany and the US, the third one in France, and the last one in
+  Russia} for binomial coefficients: $\left(n\atop k\right)$, $_nC^k$, ${\cal C}^n_k$, and
+${\cal C}^k_n$ all mean the same thing: $n!\over k!(n-k)!$. This shows that we cannot hope
+to reliably recover the functional structure (in our case the fact that the expression is
+constructed by applying the binomial function to the arguments $n$ and $k$) from the
+presentation alone.
+ 
+The solution to this problem is to dump the extra work on the author (after all she knows
+what she is talking about) and give them the chance to specify the intended structure. The
+markup infrastructure supplied by the {\stex} collection lets the author do this without
+changing\footnote{However, semantic annotation will make the author more aware of the
+  functional structure of the document and thus may in fact entice the author to use
+  presentation in a more consistent way than she would usually have.} the visual
+appearance, so that the {\LaTeX} workflow is not disrupted. . We speak of
+{\twintoo{semantic}{preloading}} for this process and call our collection of macro
+packages {\stex} (Semantic {\TeX}). For instance, we can now write
+\begin{equation}\label{cmatthml-sum}
+  \verb|\CSumlLimits{k}1\infty{\Cexp{x}k}| \qquad\hbox{instead of}\qquad
+  \verb|\sum_{k=1}^\infty x^k|
+\end{equation}
+
+In the first form, we specify that you are applying a function (\verb|CSumLimits| $\hat=$ Sum
+with Limits) to 4 arguments: ({\sl{i}}) the bound variable $k$ (that runs from)
+({\sl{ii}}) the number 1 (to) ({\sl{iii}}) $\infty$ (to infinity summing the terms)
+({\sl{iv}}) \verb|\Cexp{x}k| (i.e. x to the power k).  In the second form, we merely specify
+hat {\LaTeX} should draw a capital Sigma character ($\sigma$) with a lower index which is
+an equation $k=1$ and an upper index $\infty$. Then it should place next to it an $x$ with
+an upper index $k$.
+
+Of course human readers (that understand the math) can infer the content structure from
+this presentation, but the {\latexml} converter (who does not understand the math) cannot,
+but we want to have the content {\mathml} expression in Figure~\ref{fig:mathml-sum}
+\begin{exfig}\scriptsize
+\begin{verbatim}
+ <math xmlns="http://www.w3.org/1998/Math/MathML">
+   <apply> 
+     <sum>
+       <bvar><ci>k</ci></bvar>
+       <lowlimit><cn>1</cn></lowlimit>
+       <uplimit><infinit/></cn></uplimit>
+       <apply><exp/><ci>x</ci><ci>k</ci></apply>
+    </apply>
+ </math>
+\end{verbatim}\vspace*{-.6cm}
+  \caption{Content {\mathml} Form of $\sum_{k=1}^\infty x^k$}\label{fig:mathml-sum}
+\end{exfig}
+ 
+Obviously, a converter can infer this from the first {\LaTeX} structure with the help of
+the curly braces that indicate the argument structure, but not from the second (because it
+does not understand the math).
+
+The \verb|cmathml| package~\cite{Kohlhase:tbscml06} provides a set of macros that
+correspond to the K-14 fragment of mathematics (Kindergarten to undergraduate college
+level ($\hat=14^{th}$ grade)). We have already seen an example above in
+(\ref{cmathml-sum}), where the content markup in {\TeX} corresponds to a content
+{\mathml}-expression (and can actually be translated to this by the {\latexml} system.)
+However, the content {\mathml} vocabulary is fixed in the {\mathml} specification and
+limited to the K-14 fragment; the notation of mathematics of course is much larger and
+extensible on the fly.
+
+The \verb|presentation| package~\cite{Kohlhase:ipsmsl06} supplies an infrastructure that
+allows to specify the presentation of semantic macros, including preference-based bracket
+elision. This allows us to define and utilize semantic without having to
+renounce\ednote{verzichten} traditional mathematical notation. For instance $n$-ary
+associative operators like set union take an unspecified number of arguments.  So a
+semantic macro for an $n$-ary operator will be applied as \verb|\nunion{S_1,S_2,S_3}|, where
+the sequence of $n$ logical arguments are supplied as one {\TeX} argument which contains a
+comma-separated list. We can use the \verb|\assoc| macro to control sequences, that behave like
+$n$-ary associative operators. The \verb|\assoc| macro takes two arguments: the presentation of
+a binary operator, and a comma-separated list of arguments, it replaces the commas in the
+second argument with the operator in the first one. For instance \verb|\assoc\cup{S_1,S_2,S_3}|
+will be formatted to $S_1\cup S_2\cup S_3$. Thus we can use
+\verb|\def\nunioin#1{\assoc\cup{#1}}| or even \verb|\def\nunion{\assoc\cup}|, to define the $n$-ary
+operator for set union in {\TeX}. 
+
+With the infrastructure supplied by the \verb|\assoc| macro we could now try to combine set
+union and set intersection in one formula.  Then, writing
+\begin{equation}\label{capcup}
+\verb|\ninters{\nunion{a,b},\nunion{c,d}}|
+\end{equation}
+would yield $a\cup b\cap c\cup d$, and not $(a\cup b)\cap(c\cup d)$ as we would
+like. Adding2 explicit brackets to the presentations of the presentation of the operators
+will not help: \verb|\symdef{nunion}[1]{(\assoc\cup{#1})}| and an analogous declaration
+for \verb|\ninters| will result in $((a\cup b)\cap(c\cup d))$ for (\ref{capcup}) and
+$((a\cap b)\cup(c\cap d))$ for (\ref{cupcap}), where we would have liked $a\cap b\cup
+c\cap d$, since $\cap$ binds stronger than $\cup$.
+\begin{equation}\label{cupcap}
+\verb|\nunion{\ninters{a,b},\ninters{c,d}}|
+\end{equation}
+In mathematics, brackets are elided, whenever the author anticipates that the reader can
+understand the formula without them, and would be overwhelmed with them. To achieve
+this, there are set of common conventions that govern bracket elision. The most common
+is to assign precedences to all operators, and elide brackets, if the
+{\index*{precedence}} of the operator is lower than that of the context it is presented
+in. In our example above, we would assign $\cap$ a lower precedence than $\cup$ (and
+both a lower precedence than the initial precedence). To compute the presentation of
+(\ref{capcup}) we start out with the \verb|\ninters|, elide its brackets (since the
+precedence $n$ of $\cup$ is lower than the initial precedence $i$), and set the context
+precedence for the arguments to $n$. When we present the arguments, we present the
+brackets, since the precedence of \verb|nunion| is lower than the context precedence $n$.
+
+This algorithm, which we call {\defemph{precedence-based bracket elision}} goes a long way
+towards approximating mathematical practice. Note that full bracket elision in
+mathematical practice is a reader-oriented process, it cannot be fully mechanical, e.g. in
+$(a\cap b\cap c\cap d\cap e\cap f\cap g)\cup h$ we better put the brackets around the
+septary intersection to help the reader even thoug they could have been elided by our
+algorithm. Therefore, the author has to retain full control over bracketing in a bracket
+elision architecture (otherwise it would becomme impossible to ven explain the concept of
+associativity).\ednote{think about how to implement that}.
+
+\begin{figure}[htb]
+\begin{center}
+  \begin{tabular}{|l|l|l|}\hline
+    Precedence & Operators                  & Comment\\\hline\hline
+    200    & +,-                        & unary \\\hline
+    200    & $\hat{}$                   & exponentiation \\\hline
+    400    & $*,\land,\cap$             & multiplicative \\\hline
+    500    & $+,-,\lor,\cup$            & additive\\\hline
+    600    & /                          & fraction \\\hline
+    700    & $=, \ne, \leq, <, >, \geq$ & relation\\\hline
+  \end{tabular}
+\end{center}
+\caption{Common Operator Precedences}\label{fig:precedence}
+\end{figure}
+
+\DescribeMacro{\Assoc} In {\stex} we add a variant to the presentational macros like
+\verb|\assoc| that allows to specify the precedence of the operator (\verb|\assoc| uses the
+default precedence 1000). Figure~\ref{fig:precedence} gives an overview of commonly used
+precedences. Note that most operators have precedences lower than the default precedence
+of 1000, otherwise the brackets would not be elided.  For our examples above, we would
+define
+\begin{verbatim}
+\newcommand{\nunion}[1]{\Assoc{500}{\cup}{#1}}
+\newcommand{\ninters}[1]{\Assoc{400}{\cap}{#1}}
+\end{verbatim}
+to get the desired behavior.
+
+\subsection{Mathematical Statements}
+
+ 
+This \verb|statements| package~\cite{Kohlhase:smms06} provides semantic markup facilities
+for mathematical statements like Theorems, Lemmata, Axioms, Definitions, etc. in {\stex}
+files. This structure can be used by MKM systems for added-value services, either directly
+from the {\sTeX} sources, or after translation.\ednote{copy here}
+
+This \verb|sproof| package~\cite{Kohlhase:smp06} supplies macros and environment that
+allow to annotate the structure of mathematical proofs in {\stex} files. This structure
+can be used by MKM systems for added-value services, either directly from the {\sTeX}
+sources, or after translation.\ednote{copy here}
+
+\subsection{Context Markup for Mathematics}
+ 
+The \verb|modules| package~\cite{KohAmb:smmssl06} supplies a definition mechanism for
+semantic macros and a non-standard scoping construct for them, which is oriented at the
+semantic depency relation rather than the document structure. This structure can be used
+by MKM systems for added-value services, either directly from the {\sTeX} sources, or
+after translation.
+
+
+\begin{oldpart}{This is very outdated, I will rework this totally}
+
+In {\mysecref{preloading}}, we have identified two problems, the {\em{reconstruction
+    problem}}, we have evaded by enlisting the author to preload the document with
+semantic macros. The {\em{Notation/Context problem}}, can partially be solved by semantic
+macros as well, since they can be used to disambiguate between different semantic usages
+of notations. For the context problem we note that {\em{the context of notations coincides
+    with the context of the concepts they denote}}. Thus the main idea for solving the
+context problem is to adapt the mechanism for concept scoping known from MKM languages to
+{\TeX/\LaTeX}. In {\stex}, we inherit our intuition from the {\omdoc} format, which in
+turn builds on work in computational logic~\cite{FaGu:lt92,Farmer:aifir00}, and algebraic
+specification (see e.g.~\cite{CoFI98,AutHut:tefsduc00}). In these framework, scoping of
+concepts is governed by a grouping in collections of mathematical statements called
+``{\em{theories}}'' or ``{\em{modules}}'', where the inheritance of concepts in theories
+is explicitly expressed in an inheritance relation.
+
+Note that the scoping facilities offered by the {\TeX/\LaTeX} format do not allow
+us to model these scoping rules. The visibility of semantic macros, like any
+{\TeX} macros, is governed by the (hierarchical) grouping facility in {\TeX}. In a
+nutshell, a {\TeX} macro is either globally defined or defined exactly inside the
+group given by the group induced curly braces hierarchy.
+
+In {\stex}, the package {\tt{statements}} provides the {\LaTeX} environment
+{\tt{module}} for specifying the theory structure and uses the macros
+{\verb|\symdef|}, {\verb|\abbrdef|} {\verb|elldef|} for defining macros; the three
+definition mechanisms correspond to the three classes of macros discussed in
+{\mysecref{preloading}}. Like theories in {\omdoc}, the {\tt{module}} environment
+governs the visibility of semantic macros in {\LaTeX}. A semantic macro is visible
+in its ``home module'' and in all modules that import macros from it. To get an
+intuition for the situation, let us consider the example in
+{\myfigref{modules}}.
+
+\begin{myfig}{modules}{The Module Structure}\footnotesize
+\begin{boxedverbatim}
+\begin{module}[id=pairs]
+  \symdef{pair}[2]{\langle#1,#2\rangle}
+  ...
+\end{module}
+
+\begin{module}[id=sets]
+  \symdef{member}[2]{#1\in #2}          % set membership
+  \symdef{mmember}[2]{#1\in #2}         % aggregated set membership
+  ...
+\end{module}
+
+\begin{module}[id=setoid,uses={pairs,sets}]
+  \symdef{sset}{{\cal S}}                % the base set
+  \symdef{sopa}{\circ}                   % the operation symbol
+  \symdef{sop}[2]{(#1\sopa #2)}            % the operation applied
+  \begin{definition}[id=setoid-def]
+    A pair $\pair\sset\sopa$ is called a setoid, if $\sset$ is closed under
+    $\sopa$, i.e. if $\member{\sop{a}{b}}\sset$ for all $\mmember{a,b}\sset$.
+  \end{definition}
+\end{module}
+
+\begin{module}[id=semigroup,uses=setoid]
+  \begin{definition}[id=setoid-def]
+    A setoid $\pair\sset\sopa$ is called a monoid, if $\sopa$ is associative on
+    $\sset$, i.e. if $\sop{a}{\sop{b}{c}}=\sop{\sop{a}{b}}{c}$ for all
+    $\mmember{a,b,c}\sset$.
+  \end{definition}
+\end{module}
+\end{boxedverbatim}
+\end{myfig}
+
+Here we have four modules: {\tt{pairs}}, {\tt{sets}}, {\tt{setoid}}, and {\tt{semigroup}}
+where {\tt{setoid}} imports semantic macros from the first two, and the last imports from
+it. We can see that macro visibility is governed by the {\tt{uses}} relation specified in
+the keyword arguments to the {\tt{module}} environment. In particular, the macros
+{\verb|\pair|} and {\verb|\sset|} are defined in modules {\tt{setoid}} and
+{\tt{semigroup}} (since the {\tt{uses}} relation is transitive). With these symbol
+definitions, we get the text in {\myfigref{result}}.
+
+Note that the inheritance hierarchy does allow multiple inheritance. Generally, the
+{\tt{uses}} relation on modules should be a directed acyclic graph (no inheritance
+cycles). In a case of a {\verb|\symdef|} conflict, the first (leftmost in the inheritance
+tree induced by the {\tt{uses}} relation) is taken.
+
+\begin{myfig}{result}{The Result of Modules in {\myfigref{modules}}}
+\fbox{\begin{minipage}{14cm}
+\begin{module}[id=pairs]
+  \symdef{pair}[1]{\langle#1\rangle}
+\end{module}
+
+\begin{module}[id=sets]
+  \symdef{member}[2]{#1\in #2}          % set membership
+  \symdef{mmember}[2]{#1\in #2}         % aggregated set membership
+\end{module}
+
+\begin{module}[id=setoid,uses={pairs,sets}]
+  \symdef{sset}{{\cal S}}                % the base set
+  \symdef{sopa}{\circ}                   % the operation symbol
+  \symdef{sop}[2]{(#1\sopa #2)}            % the operation applied
+  \begin{definition}[id=setoid-def]
+    A pair $\pair{\sset,\sopa}$ is called a setoid, if $\sset$ is closed under
+    $\sopa$, i.e. if $\member{\sop{a}{b}}\sset$ for all $\mmember{a,b}\sset$.
+  \end{definition}
+\end{module}
+
+\begin{module}[id=semigroup,uses={setoid}]
+  \begin{definition}[id=setoid-def]
+    A setoid $\pair{\sset,\sopa}$ is called a monoid, if $\sopa$ is associative on
+    $\sset$, i.e. if $\sop{a}{\sop{b}{c}}=\sop{\sop{a}{b}}{c}$ for all
+    $\mmember{a,b,c}\sset$.
+  \end{definition}
+\end{module}
+\end{minipage}}
+\end{myfig}
+
+Note that the use of {\stex} modules moves macro definitions that have traditionally been
+moved into separate files in the {\TeX/\LaTeX} community back into the documents
+themselves. This is akin to the organization of functionality in object-oriented
+programming. The main reason for this is what is often called the ``{\em{late binding}}''
+in programming. Depending on the viewpoint, late binding can be a problem or feature: in
+content-oriented document management, late binding of style information is used to adapt
+presentation, in programming, late binding of program (changing) modules may cause
+problems with program semantics.  We view late binding for semantic macros as a problem
+(we do not want to change the semantics), so we advise to use the modules approach
+presented here for semantic preloading. In particular in our experience, modules are the
+ideal candidates for re-use in semantically marked-up mathematical documents, as they are
+semantically and ontologically self-contained and the remaining dependency on context is
+made explicit by the inheritance relation.
+
+\subsection{{\latexml} Bindings for Semantic and Elliptive Macros}
+
+Let us finally come to elliptive macros, these differ from truly semantic macros
+only in their {\latexml} binding, which must reflect the elision, as we have
+argued in {\mysecref{preloading}}. Let us consider the concrete examples of the
+elliptive macros in {\myfigref{elliptive-macros}}. 
+
+\begin{footnotesize}
+\begin{verbatim}
+\symdef{cM}{{\cal M}}\symdef{assign}{\phi} % constant, but unspecified model, assignment
+\symdef{interpret}[3]{{\left[\kern-0.18em\left[#1\right]\kern-0.18em\right]^{#2}_{#3}}}
+\latexmlconstructor{\interpret}[args=3,cd=booleval,name=interpret]
+\abbrdef{\intermp}[1]{\interpret{#1}{\cM}{\phi}}
+\elldef{\interm}[2]{\interpret{#1}{\cM}{}}\latexmlelide{\interm}{3}{\interpret}
+\elldef{\interp}[2]{\interpret{#1}{}{\assign}}\latexmlelide{\interp}{2}{\interpret}
+\def{\interoo}[3]{\interpret{#1}{}{}}\latexmlelide{\interp}{2,3}{\interpret}
+\end{verbatim}
+\end{footnotesize}
+Here the {\verb|\latexmlelide|} macro takes three arguments, the first is the
+control sequence for the elliptive macro, the second is a comma-separated list of
+arguments to be elided, and the third is the control sequence of the semantic
+macro, that this macro is an elliptive variant of. In our example, the macro
+{\verb|\latexmlelide{\interp}{2}{\interpret}|} is equivalent to the declaration
+\begin{footnotesize}
+\begin{verbatim}
+ \latexmldef{\interm}[2]{%
+  <XMApp>
+    <XMTok cd='booeaneval' name='interpret'/>
+    <XMArg>#1</XMArg>
+    <XMArg elide='yes'>#2</XMArg>
+    <XMArg><XMTok cd='booleaneval' name='assign'/></XMArg>
+  </XMApp>}
+\end{verbatim}
+\end{footnotesize}
+Here, the additional attribute elide on the {\tt{XMArg}} element in the
+{\TeX}-near representation (see {\mysecref{latexml}}) gives the hint to the
+post-processing that this argument should be elided in the target format. For
+instance, in a situation, where the model $\cM$ is clear from the context, we
+would semantically mark up the formula $\interp{A}$ (which actually stands for
+$\interpret{A}\cM\phi$) as {\verb|\interm{A}{\cM}|} in the {\TeX/\LaTeX} source.
+Note that the macro {\verb|\interm|} is mixed elliptive and abbreviative; the
+variable assignment $\phi$ is abbreviated by the macro, and the model is elided.
+Note furthermore, that this approach to elliptive macros assumes that the target
+format has a hinting system for the presentation engine. In the case of {\omdoc},
+we can just make use of the {\css} system; {\latexml} post-processing would result
+in the {\omdoc}/{\openmath} representation
+\begin{footnotesize}
+\begin{verbatim}
+<OMA>
+  <OMS cd='booeaneval' name='interpret'/>
+  <OMV name="A"/>
+  <OMS style="display:none" cd="booeaneval" name="themodel"/>
+  <OMS cd="booeaneval" name="assign"/>
+</OMA>
+\end{verbatim}
+\end{footnotesize}
+for the elliptive notation {\verb|\interm{A}{\cM}|}. In the simplest form of the
+{\omdoc} presentation, the {\css} {\tt{style}} attribute is copied to the
+resulting {\xhtml}+{\mathml} output, where it instructs the user agent not to
+display the element.
+
+\subsection{Identify/Reference}
+
+Instead of using Copy and Paste in the source document it is better to share the
+document content and let the formatter do the copying. We have also used the
+author's {\tt{structuresharing}} package, which provides the macros
+{\verb|\STRlabel|} and {\verb|\STRcopy|}, and extended it with
+{\verb|\STRsemantics|}.  The {\verb|\STRlabel|} macro takes two arguments: a label
+and the content and stores the the content for later use by
+{\verb|\STRcopy{label}|}, which expands to the previously stored content.  The
+{\verb|\STRlabel|} macro has a variant {\verb|\STRsemantics|}, where the label
+argument is optional, and which takes a third argument, which is ignored in LaTeX.
+This allows to specify the meaning of the content (whatever that may mean) in
+cases, where the source document is not formatted for presentation, but is
+transformed into some content markup format.
+
+\subsection{Crossreferences for Defined Symbols}
+
+The information annotated in semantic pre-loading can be put to use already in the
+{\TeX/\LaTeX} workflow with a little extra work. For instance, it can be used to generate
+cross-references on defined symbols: If we have module that starts with 
+\begin{verbatim}
+\begin{module}[id=boolexp]
+\symdef{tvtrue}{\mathsf{T}}
+\end{verbatim}
+then {\verb|\semtrue|} is a semantic macro for the truth value ${\mathsf{T}}$. If we now
+change this to 
+\begin{verbatim}
+\symdef{semtrue}{\hrcr{semtrue}{\sem{T}}}
+\end{verbatim}
+i.e. just wrap the relevant (user-visible) part of the body (the second  argument of
+{\verb|\symdef|}) with a {\verb|\hrcr{|$\langle name\rangle$\verb|}{|$\cdot$\verb|}|}, where
+Here $\langle name\rangle$ is the name  of the  macro in the first
+argument of {\verb|\symdef|}, then the resulting glyph  ${\mathsf{T}}$ will carry a
+hyperlink to\ednote{OK to where? still need to do this!}\footnote{this assumes that the
+document uses the {\LaTeX} package {\tt{hyperref.sty}}.}
+
+For functions the situation is a little more complex, since we have to  deal with their
+arguments as well. If we have the semantic macro 
+{\verb|\symdef{badd}[2]{(#1+#2)}|} for Boolean addition, then the {\verb|#1|} and
+{\verb|#2|} are the placeholders for the arguments, so they should not carry
+cross-references. The only part  that is user-visible is the $+$ character here. Thus we
+would add the cross reference only to it, and the semantic macro definition
+should be  {\verb|\symdef{badd}[2]{(#1\hrcr{badd}{+}#2)}|}, which only adds the  cross-reference
+on the $+$. 
+
+Note that there are cases, where the  function has more than one part,
+e.g. in the pair constructor, where we  have {\verb|\symdef{pair}[2]{\langle#1,#2\rangle}|}
+originally. Here we would  like to place the cross-references on all three parts the
+pointy  brackets and the comma. This gives us
+\begin{verbatim}
+\symdef{pair}[2]{\hrcr{pair}{\langle}#1\hrcr{pair}{,}#2\hrcr{pair}{\rangle}}
+\end{verbatim}
+Of course this is more work, but we only have to do it at  define-time. 
+Actually, very often we have the following situation:
+
+\begin{verbatim}
+\symdef{baddFN}{+} % function name;
+\symdef{badd}[2]{(#1\baddFN #2)}
+\end{verbatim}
+
+Here, we have added another level of indirection by defining a semantic  macro for the +
+operator (this is needed, if we want to speak about the  function itself). Here we only
+need to add the crossref on the  operator, as in {\verb|\symdef{baddFN}{\hrcr{baddFN}{+}}|}. 
+\end{oldpart}
+%%% Local Variables: 
+%%% mode: stex
+%%% TeX-master: "main"
+%%% End: 

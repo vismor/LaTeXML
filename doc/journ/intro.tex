@@ -1,0 +1,171 @@
+\section{Introduction}\label{sec:intro}
+
+\begin{newpart}{reworked the intro, this is still too much content oriented. We need to
+    talk about presentation as well. }
+The last few years have seen the emergence of various content-oriented {\xml}-based,
+markup languages for mathematics on the web, e.g.  {\openmath}~\cite{BusCapCar:2oms04},
+{\cmathml}~\cite{CarIon:MathML03}, or our own {\omdoc}~\cite{Kohlhase:omdoc1.2}. These
+representation languages for mathematics, that make the structure of the mathematical
+knowledge in a document explicit enough that machines can operate on it. Other examples of
+content-oriented formats for mathematics include the various logic-based languages found
+in automated reasoning tools (see~\cite{RobVor:hoar01} for an overview), program
+specification languages (see e.g.~\cite{Bergstra:as89}).
+
+The promise if these content-oriented approaches is that various tasks involved in ``doing
+mathematics'' (e.g. search, navigation, cross-referencing, quality control, user-adaptive
+presentation, proving, simulation) can be machine-supported, and thus the working
+mathematician is relieved to do what humans can still do infinitely better than machines:
+The creative part of mathematics --- inventing interesting mathematical objects,
+conjecturing about their properties and coming up with creative ideas for proving these
+conjectures. However, before these promises can be delivered upon (there is even a
+conference series~\cite{MKM-IG-Meetings:web} studying ``Mathematical Knowledge Management
+(MKM)''), large bodies of mathematical knowledge have to be converted into content form.
+
+Even though {\mathml} is viewed by most as the coming standard for representing
+mathematics on the web and in scientific publications, it has not not fully taken off in
+practice. One of the reasons for that may be that the technical communities that need
+high-quality methods for publishing mathematics already have an established method which
+yields excellent results: the {\TeX/\LaTeX} system: and a large part of mathematical
+knowledge is prepared in the form of {\TeX}/{\LaTeX} documents.
+
+{\TeX}~\cite{Knuth:ttb84} is a document presentation format that combines complex
+page-description primitives with a powerful macro-expansion facility, which is utilized in
+{\LaTeX} (essentially a set of {\TeX} macro packages, see~\cite{Lamport:ladps94}) to
+achieve more content-oriented markup that can be adapted to particular tastes via
+specialized document styles. It is safe to say that {\LaTeX} largely restricts content
+markup to the document structure\footnote{supplying macros e.g. for sections, paragraphs,
+  theorems, definitions, etc.}, and graphics, leaving the user with the presentational
+{\TeX} primitives for mathematical formulae. Therefore, even though {\LaTeX} goes a great
+step into the direction of an MKM format, it is not, as it lacks infrastructure for
+marking up the functional structure of formulae and mathematical statements, and their
+dependence on and contribution to the mathematical context.
+
+\subsection{The {\xml} vs. {\TeX/\LaTeX} Formats and Workflows}
+
+{\mathml} is an {\xml}-based markup format for mathematical formulae, it is standardized
+by the World Wide Web Consortium in {\cite{CarIon:MathML03}}, and is supported by the
+major browsers. The {\mathml} format comes in two integrated components: presentation
+{\mathml}\twin{presentation}{MathML} and content {\mathml}\twin{content}{MathML}. The
+former provides a comprehensive set of layout primitives for presenting the visual
+appearance of mathematical formulae, and the second one the functional/logical structure
+of the conveyed mathematical objects. For all practical concerns, presentation {\mathml}
+is equivalent to the math mode of {\TeX}. The text mode facilitates of {\TeX} (and the
+multitude of {\LaTeX} classes) are relegated to other {\xml} formats, which embed
+{\mathml}.
+ 
+The programming language constructs of {\TeX} (i.e. the macro definition
+facilities\footnote{We count the parser manipulation facilities of {\TeX}, e.g. category
+  code changes into the programming facilities as well, these are of course impossible for
+  {\mathml}, since it is bound to {\xml} syntax.}) are relegated to the {\xml}
+transformation language {\xslt}~\cite{Deach:exls99,Kay:xslt} or proper {\xml}-enabled
+programming languages that can be used to develop language extensions.
+
+The {\xml}-based syntax and the separation of the presentational-, functional- and
+programming/extensibility concerns in {\mathml} has some distinct advantages over the
+integrated approach in {\TeX/\LaTeX} on the services side: {\mathml} gives us better
+\begin{itemize}
+\item integration with web-based publishing,
+\item accessibility to disabled persons, e.g. (well-written) {\mathml} contains enough
+  structural information to supports screen readers.
+\item reusability, searchabiliby and integration with mathematical software systems
+  (e.g. copy-and-paste to computer algebra systems), and
+\item validation and plausibility checking.
+\end{itemize}
+ 
+On the other hand, {\TeX/\LaTeX}/s adaptable syntax and tightly integrated programming
+features within has distinct advantages on the authoring side:
+ 
+\begin{itemize}
+\item The {\TeX/\LaTeX} syntax is much more compact than {\mathml} (see the difference in
+  Figures~\ref{fig:mathml-sum} and~\ref{fig:mathml-eip}), and if needed, the community
+  develops {\LaTeX} packages that supply new functionality in with a succinct and intuitive
+  syntax.
+\item The user can define ad-hoc abbreviations and bind them to new control sequences to
+  structure the source code.
+\item The {\TeX/\LaTeX} community has a vast collection of language extensions and best
+  practice examples for every conceivable publication purpose and an established and very
+  active developer community that supports these.
+\item There is a host of software systems centered around the {\TeX/\LaTeX} language that
+  make authoring content easier: many editors have special modes for {\LaTeX}, there are
+  spelling/style/grammar checkers, transformers to other markup formats, etc.
+\end{itemize}
+ 
+In other words, the technical community is is heavily invested in the whole
+{\index*{workflow}}, and technical know-how about the format permeates the
+community. Since all of this would need to be re-established for a {\mathml}-based
+workflow, the technical community is slow to take up {\mathml} over {\TeX/\LaTeX}, even in
+light of the advantages detailed above.
+ 
+\subsection{A {\LaTeX}-based Workflow for {\xml}-based Mathematical Documents}
+ 
+An elegant way of sidestepping most of the problems inherent in transitioning from a
+{\LaTeX}-based to an {\xml}-based workflow is to combine both and take advantage of the
+respective advantages.
+ 
+The key ingredient in this approach is a system that can transform {\TeX\LaTeX} documents
+to their corresponding {\xml}-based counterparts. That way, {\xml}-documents can be
+authored and prototyped in the {\LaTeX} workflow, and transformed to {\xml} for
+publication and added-value services, combining the two workflows.
+ 
+There are various attempts to solve the {\TeX/\LaTeX} to {\xml} transformation problem; the
+most mature is probably Bruce Miller's {\latexml} system~\cite{Miller:latexml}. It
+consists of two parts: a re-implementation of the {\TeX} {\index*{analyzer}} with all of
+it's intricacies, and a extensible {\xml} emitter (the component that assembles the output
+of the parser). Since the {\LaTeX} style files are (ultimately) programmed in {\TeX}, the
+{\TeX} analyzer can handle all {\TeX} extensions, including all of {\LaTeX}. Thus the
+{\latexml} parser can handle all of {\TeX/\LaTeX}, if the emitter is extensible, which is
+guaranteed by the {\latexml} binding language: To transform a {\TeX/\LaTeX} document to a
+given {\xml} format, all {\TeX} extensions\footnote{i.e. all macros, environments, and
+  syntax extensions used int the source document} must have ``{\latexml}
+bindings''\index{LaTeXML}{binding}, i.e. a directive to the {\latexml} emitter that
+specifies the target representation in {\xml}.
+\end{newpart}
+
+\begin{oldpart}{this has to go somewhere}
+
+One of the great problems of mathematical knowledge management (MKM) systems is to
+obtain access to a sufficiently large corpus of mathematical knowledge to allow
+the management/search/navigation techniques developed by the community to display
+their strength. Such systems usually expect the mathematical knowledge they
+operate on in the form of semantically enhanced documents.
+
+We will use the term {\defemph{MKM format}} for a content-oriented representation language
+for mathematics, that makes the structure of the mathematical knowledge in a document
+explicit enough that machines can operate on it. Examples of MKM formats include the
+various logic-based languages found in automated reasoning tools (see~\cite{RobVor:hoar01}
+for an overview), program specification languages (see e.g.~\cite{Bergstra:as89}), and the
+various {\xml}-based, content-oriented markup languages for mathematics on the web, e.g.
+{\openmath}~\cite{BusCapCar:2oms04}, {\cmathml}~\cite{CarIon:MathML03}, or our own
+{\omdoc} (see {\mysecref{omdoc}}).
+
+In this paper, we will investigate how we can use the macro language of {\TeX} to
+make it into an MKM format by supplying specialized macro packages, which will
+enable the author to add semantic information to the document in a way that does
+not change the visual appearance\footnote{However, semantic annotation will make
+  the author more aware of the functional structure of the document and thus may
+  in fact entice the author to use presentation in a more consistent way than she
+  would usually have.}. We speak of {\twindef{semantic}{preloading}} for this
+process and call our collection of macro packages {\stex} (Semantic {\TeX}). Thus,
+{\stex} can serve as a conceptual interface between the document author and MKM
+systems: Technically, the semantically preloaded {\LaTeX} documents are
+transformed into the (usually {\xml}-based) MKM representation formats, but
+conceptually, the ability to semantically annotate the source document is
+sufficient.
+
+Concretely, we will present the {\stex} macro packages together with a case study,
+where we semantically preload the course materials for a two-semester course in
+Computer Science at International University Bremen and transform them to the
+{\omdoc} MKM format (see section~\ref{sec:omdoc}) with the {\latexml} system (see
+section~\ref{sec:latexml}), so that they can be used in the {\activemath}
+system~\cite{activemathAIEDJ01}.  For this case study, we have added {\latexml}
+bindings for the {\stex} macros, and a post-processor for the {\omdoc} language,
+but the {\stex} package should in principle be independent of these two choices,
+since it only supplies a general interface for semantic annotation in
+{\TeX}/{\LaTeX}. Furthermore, we have semantically preloaded the {\LaTeX} sources
+for the course slides (380 slides, 8200 lies of {\LaTeX} code with 336kb). Almost
+all examples in this paper come from this case study.
+\end{oldpart}
+%%% Local Variables: 
+%%% mode: stex
+%%% TeX-master: "main"
+%%% End: 

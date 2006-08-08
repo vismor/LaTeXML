@@ -1,0 +1,77 @@
+\section{Conclusion and Future Work}\label{sec:concl}
+
+We have presented a system {\stex} of macro-packages for semantic annotation of
+{\TeX/\LaTeX} documents and an extension of the {\latexml} system with bindings
+for the {\stex} package. This allows us to semantically pre-load {\TeX/\LaTeX}
+documents and transform them into {\xml} and ultimately into the {\omdoc} format.
+
+The system is being tested on a first-year computer science course at
+International University Bremen. The next case study will be the {\omdoc} 1.2
+report~\cite{Kohlhase:omdoc1.2}.
+
+In essence, the {\stex} package together with its {\latexml} bindings forms an
+invasive editor for {\omdoc} in the sense discussed in~\cite{KohKoh:cdad04}: The
+author can stay in her accustomed work-flow; in the case of {\TeX/\LaTeX}, she can
+use the preferred text editor to ``program'' documents consisting of text,
+formulae, and control sequences for macros. The documents can even be presented in
+by the {\TeX} formatter in the usual way. Only with the semantic preloading, they
+can be interpreted as MKM formats that contain the necessary semantic information,
+and can even be transformed into explicit MKM formats like {\omdoc}.
+
+Thus the {\stex}/{\latexml} combination extends the available invasive editors
+for {\omdoc} to three ({\cpoint}~\cite{KohKoh:cdad04} and
+{\sc{nb2omdoc}}~\cite{Sutner:cmnto04} being those for {\ppt} and {\mathematica}).
+This covers the paradigmatic examples of scientific document creation formats
+(with the exception of MS Word a possible porting target of the VBA-based
+application {\cpoint}).
+
+In the future, we plan to extend the system with a {\cnxml} back-end, which
+produces the input format for {\connexions} and e-learning document management
+system at Rice University. In particular, we will include the {\LaTeX}
+package~\cite{WillHenBar:clsfflc03} developed there.
+
+
+\subsection*{Acknowledgments} This work has profited significantly from
+discussions with Bruce Miller and Ioan Sucan. The former is the author of the
+{\latexml} system and has extended his system readily to meet the new demands from
+our project. The latter is a student a IUB who has faithfully carried the brunt of
+the editing load involved with semantic pre-loading the {\LaTeX} slides. Finally I
+am indebted to David Carlisle who helped me with the non-trivial hacking involved
+in getting the modules to work.
+
+\begin{oldpart}{another conclusion, use parts of this}
+\subsection{Conclusion}\label{sec:concl}
+
+The {\stex} collection provides a set of semantic macros that extends the familiar and
+time-tried {\LaTeX} workflow in academics until the last step of Internet publication of
+the material. For instance, a {\connexions} module can be authored and maintained in
+{\LaTeX} using a simple text editor, a process most academics in technical subjects are
+well familiar with. Only in a last publishing step (which is fully automatic) does it get
+transformed into the {\xml} world, which is unfamiliar to most academics. 
+
+Thus, {\stex} can serve as a conceptual interface between the document author and MKM
+systems: Technically, the semantically preloaded {\LaTeX} documents are transformed into
+the (usually {\xml}-based) MKM representation formats, but conceptually, the ability to
+semantically annotate the source document is sufficient.
+
+ 
+The {\stex} macro packages have been validated together with a case
+study~\cite{Kohlhase:smtl05}, where we semantically preload the course materials for a
+two-semester course in Computer Science at International University Bremen and transform
+them to the {\omdoc} MKM format, so that they can be used in the {\activemath}
+system~\cite{activemathAIEDJ01}. Another study of converting {\LaTeX} materials for the
+{\connexions} project is under way.\ednote{say some more}
+\end{oldpart}
+
+\begin{oldpart}{use somewhere}
+  The nice thing about the infrastructure is that you can still run {\LaTeX} over the
+  first form and get the same formula in the DVI file that you would have gotten from
+  running it over the second form. That means, if the author is prepared to write the
+  mathematical formulae a little differently in her {\LaTeX} sources, then she can use
+  them in {\xml} and {\LaTeX} at the same time.
+\end{oldpart}
+
+%%% Local Variables: 
+%%% mode: stex
+%%% TeX-master: "main"
+%%% End: 
