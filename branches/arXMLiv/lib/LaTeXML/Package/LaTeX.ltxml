@@ -1145,6 +1145,7 @@ DefEnvironment('{tabular*}{}[] TabularPattern',
 DefConstructor('\multicolumn{Number} TabularPattern {}', \&alignment_multicol);
 
 ##DefConstructor('\hline',sub { alignment_hline($_[0],0); });
+DefPrimitive('\hline', undef);
 
 DefConstructor('\cline{}', sub {
   my($document,$cols)=@_;
