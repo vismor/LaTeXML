@@ -735,6 +735,7 @@ DefConstructor('\mathsf{}',  '#1', bounded=>1, requireMath=>1, font=>{family=>'s
 DefConstructor('\mathtt{}',  '#1', bounded=>1, requireMath=>1, font=>{family=>'typewriter'});
 DefConstructor('\mathcal{}', '#1', bounded=>1, requireMath=>1, font=>{family=>'caligraphic'});
 DefConstructor('\mathscr{}', '#1', bounded=>1, requireMath=>1, font=>{family=>'script'});
+Let('\mathnormal', '\mathit');
 
 #**********************************************************************
 # C.8 Definitions, Numbering and Programming
