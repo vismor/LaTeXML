@@ -190,7 +190,7 @@ sub pmml {
   my $c = $node->getAttribute('close');
   my $p = $node->getAttribute('punctuation');
   # Do the core conversion.
-  my $result = ($node->nodeName eq 'XMRef'
+  my $result = ($node->localname eq 'XMRef'
 		? pmml(realize($node))
 		: pmml_internal($node));
   # Handle generic things: open/close delimiters, punctuation
@@ -201,7 +201,7 @@ sub pmml {
 sub pmml_internal {
   my($node)=@_;
   return ['merror',{},['mtext',{},"Missing Subexpression"]] unless $node;
-  my $tag = $node->nodeName;
+  my $tag = $node->localname;
   my $role = $node->getAttribute('role');
   if($tag eq 'XMath'){
     pmml_row(map(pmml($_), element_nodes($node))); } # Really multiple nodes???
@@ -392,8 +392,8 @@ sub cmml_top {
 sub cmml {
   my($node)=@_;
   return ['merror',{},['mtext',{},"Missing Subexpression"]] unless $node;
-  $node = realize($node) if $node->nodeName eq 'XMRef';
-  my $tag = $node->nodeName;
+  $node = realize($node) if $node->localname eq 'XMRef';
+  my $tag = $node->localname;
   if($tag eq 'XMath'){
     my($item,@rest)=  element_nodes($node);
     print STDERR "Warning! got extra nodes for content!\n" if @rest;
@@ -755,7 +755,7 @@ DefMathML('Apply:?:AT', sub {
 # AND, the propogation of style is likely wrong...
 sub do_cfrac {
   my($numer,$denom)=@_;
-  if($denom->nodeName eq 'XMApp'){ # Denominator is some kind of application
+  if($denom->localname eq 'XMApp'){ # Denominator is some kind of application
     my ($denomop,@denomargs)=element_nodes($denom);
     if(($denomop->getAttribute('role')||'') eq 'ADDOP'){ # Is it a sum or difference?
       my $last = pop(@denomargs);			# Check last operand in denominator.
@@ -765,7 +765,7 @@ sub do_cfrac {
 		   pmml_smaller($denomop)]];
       if(getTokenMeaning($last) eq 'cdots'){ # Denom ends w/ \cdots
 	return ($curr,pmml($last));}		   # bring dots up to toplevel
-      elsif($last->nodeName eq 'XMApp'){	   # Denom ends w/ application --- what kind?
+      elsif($last->localname eq 'XMApp'){	   # Denom ends w/ application --- what kind?
 	my($lastop,@lastargs)=element_nodes($last);
 	if(getTokenMeaning($lastop) eq 'cfrac'){ # Denom ends w/ cfrac, pull it to toplevel
 #	  return ($curr,do_cfrac(@lastargs)); }

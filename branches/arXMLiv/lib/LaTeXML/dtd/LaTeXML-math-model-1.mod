@@ -37,7 +37,8 @@
 <!ELEMENT %LaTeXML.XMath.qname; (%LaTeXML.XMath.class;)*>
 <!ATTLIST %LaTeXML.XMath.qname;
 	  %LaTeXML.Common.attrib;
-	  status CDATA #IMPLIED>
+	  status CDATA #IMPLIED
+	  %LaTeXML.ID.attrib;>
 
 <!ELEMENT %LaTeXML.XMApp.qname; (%LaTeXML.XMath.class;)*>
 <!ATTLIST %LaTeXML.XMApp.qname;
@@ -52,6 +53,7 @@
 <!ATTLIST %LaTeXML.XMDual.qname;
 	  %LaTeXML.Common.attrib;
 	  %LaTeXML.XMath.attrib;
+	  possibleFunction CDATA #IMPLIED
 	  %LaTeXML.ID.attrib;>
 
 <!ELEMENT %LaTeXML.XMTok.qname; (#PCDATA)*>

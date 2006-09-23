@@ -77,7 +77,7 @@ sub DefOpenMath {
 sub Expr {
   my($node)=@_;
   return OMError("Missing Subexpression") unless $node;
-  my $tag = $node->nodeName;
+  my $tag = $node->localname;
   if($tag eq 'XMDual'){
     my($content,$presentation) = element_nodes($node);
     Expr($content); }

@@ -46,9 +46,7 @@
 <![%LaTeXML-tabular.module;[
   <!ENTITY % LaTeXML-tabular-qname.mod   SYSTEM "LaTeXML-tabular-qname-1.mod">
   %LaTeXML-tabular-qname.mod;
-]]>
-
-<!-- ==================== Graphics module ====================-->
+]]><!-- ==================== Graphics module ====================-->
 <!ENTITY % LaTeXML-graphics.module  "INCLUDE" >
 <![%LaTeXML-graphics.module;[
   <!ENTITY % LaTeXML-graphics-qname.mod   SYSTEM "LaTeXML-graphics-qname-1.mod">
