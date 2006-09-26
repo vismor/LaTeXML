@@ -60,7 +60,8 @@
 <!ATTLIST %LaTeXML.XMTok.qname;
 	  %LaTeXML.Common.attrib;
 	  %LaTeXML.XMath.attrib;
-	  %LaTeXML.ID.attrib;
+	  %LaTeXML.ID.attrib;	
+	  definitionURL CDATA #IMPLIED
           name    CDATA #IMPLIED
           meaning CDATA #IMPLIED
 	  omcd    CDATA #IMPLIED
