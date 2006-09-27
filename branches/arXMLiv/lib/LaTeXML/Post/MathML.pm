@@ -442,22 +442,22 @@ sub cmml_ci {
 DefMathML("Token:?:?",           \&pmml_mi, \&cmml_ci);
 
 DefMathML("Token:ADDOP:?",       \&pmml_mo);
-DefMathML("Token:ADDOP:+",       undef,     sub { ['plus'];});
-DefMathML("Token:ADDOP:-",       undef,     sub { ['minus'];});
+DefMathML("Token:ADDOP:plus",    undef,     sub { ['m:plus'];});
+DefMathML("Token:ADDOP:minus",   undef,     sub { ['m:minus'];});
 
 DefMathML("Token:MULOP:?",       \&pmml_mo);
-DefMathML("Token:MULOP:*",       undef,     sub { ['times'];});
-DefMathML("Token:MULOP:\x{2062}",undef,     sub { ['times'];});
-DefMathML("Token:MULOP:/",       undef,     sub { ['divide'];});
+DefMathML("Token:MULOP:times",   undef,     sub { ['m:times'];});
+DefMathML("Token:MULOP:\x{2062}",undef,     sub { ['m:times'];});
+DefMathML("Token:MULOP:div",     undef,     sub { ['m:divide'];});
 DefMathML("Token:SUPOP:?",       \&pmml_mo);
 
 DefMathML("Token:RELOP:?",      \&pmml_mo);
-DefMathML("Token:RELOP:=",       undef,     sub { ['eq'];});
-DefMathML("Token:RELOP:\x{2260}",undef,     sub { ['neq'];}); # \ne, not-eq .. ???
-DefMathML("Token:RELOP:>",       undef,     sub { ['gt'];});
-DefMathML("Token:RELOP:<",       undef,     sub { ['lt'];});
-DefMathML("Token:RELOP:leq",     undef,     sub { ['leq'];}); # NOTE: Unify \le and \leq
-DefMathML("Token:RELOP:geq",     undef,     sub { ['geq'];}); # NOTE: Unify \ge and \geq
+DefMathML("Token:RELOP:eq",      undef,     sub { ['m:eq'];});
+DefMathML("Token:RELOP:\x{2260}",undef,     sub { ['m:neq'];}); # \ne, not-eq .. ???
+DefMathML("Token:RELOP:greater", undef,     sub { ['m:gt'];});
+DefMathML("Token:RELOP:less",    undef,     sub { ['m:lt'];});
+DefMathML("Token:RELOP:less-eq", undef,     sub { ['m:leq'];});
+DefMathML("Token:RELOP:greater-eq",undef,   sub { ['m:geq'];});
 
 DefMathML("Token:PUNCT:?",       \&pmml_mo);
 DefMathML("Token:PERIOD:?",      \&pmml_mo);
@@ -544,6 +544,170 @@ DefMathML("Token:OPFUNCTION:arctanh",  undef, sub { ['arctanh']; });
 #   integers, reals, rationals, naturalnumbers, complexes, primes,
 #   exponentiale, imaginaryi, notanumber, true, false, emptyset, pi,
 #   eulergamma, infinity
+
+
+# ******************************************************************
+# MIKO ADDITION
+# the next block of stuff tries to get the XMToks generated 
+# in cmathml.ltxml right. I hope they do not hinder the rest. 
+# ******************************************************************
+
+DefMathML("Token:NUMBER:#2",undef,sub{['m:#2'];}); 
+DefMathML("Token:ID:#2",undef,sub{['m:#2'];}); 
+DefMathML("Token:CSYMBOL:#2",undef,sub{['m:#2'];}); 
+DefMathML("Token:CONSTRUCTOR:ccinterval",undef,sub{['m:ccinterval'];}); 
+DefMathML("Token:CONSTRUCTOR:cointerval",undef,sub{['m:cointerval'];}); 
+DefMathML("Token:CONSTRUCTOR:ocinterval",undef,sub{['m:ocinterval'];}); 
+DefMathML("Token:CONSTRUCTOR:oointerval",undef,sub{['m:oointerval'];}); 
+DefMathML("Token:OPFUNCTION:inverse",undef,sub{['m:inverse'];}); 
+DefMathML("Token:BINDER:lambda",undef,sub{['m:lambda'];}); 
+DefMathML("Token:BINDER:lambda",undef,sub{['m:lambda'];}); 
+DefMathML("Token:BINDER:lambda",undef,sub{['m:lambda'];}); 
+DefMathML("Token:MULOP:compose",undef,sub{['m:compose'];}); 
+DefMathML("Token:ID:ident",undef,sub{['m:ident'];}); 
+DefMathML("Token:OPFUNCTION:domain",undef,sub{['m:domain'];}); 
+DefMathML("Token:OPFUNCTION:codomain",undef,sub{['m:codomain'];}); 
+DefMathML("Token:OPFUNCTION:image",undef,sub{['m:image'];}); 
+DefMathML("Token:OPFUNCTION:piecewise",undef,sub{['m:piecewise'];}); 
+DefMathML("Token:OPFUNCTION:piece",undef,sub{['m:piece'];}); 
+DefMathML("Token:OPFUNCTION:otherwise",undef,sub{['m:otherwise'];}); 
+DefMathML("Token:OPFUNCTION:quotient",undef,sub{['m:quotient'];}); 
+DefMathML("Token:OPFUNCTION:factorial",undef,sub{['m:factorial'];}); 
+DefMathML("Token:OPFUNCTION:divide",undef,sub{['m:divide'];}); 
+DefMathML("Token:OPFUNCTION:max",undef,sub{['m:max'];}); 
+DefMathML("Token:OPFUNCTION:min",undef,sub{['m:min'];}); 
+DefMathML("Token:ADDOP:minus",undef,sub{['m:minus'];}); 
+DefMathML("Token:OPFUNCTION:uminus",undef,sub{['m:uminus'];}); 
+DefMathML("Token:ADDOP:plus",undef,sub{['m:plus'];}); 
+DefMathML("Token:OPFUNCTION:power",undef,sub{['m:power'];}); 
+DefMathML("Token:OPFUNCTION:rem",undef,sub{['m:rem'];}); 
+DefMathML("Token:MULOP:times",undef,sub{['m:times'];}); 
+DefMathML("Token:OPFUNCTION:root",undef,sub{['m:root'];}); 
+DefMathML("Token:OPFUNCTION:gcd",undef,sub{['m:gcd'];}); 
+DefMathML("Token:CONNECTIVE:and",undef,sub{['m:and'];}); 
+DefMathML("Token:CONNECTIVE:or",undef,sub{['m:or'];}); 
+DefMathML("Token:CONNECTIVE:xor",undef,sub{['m:xor'];}); 
+DefMathML("Token:CONNECTIVE:not",undef,sub{['m:not'];}); 
+DefMathML("Token:CONNECTIVE:implies",undef,sub{['m:implies'];}); 
+DefMathML("Token:BINDER:And",undef,sub{['m:And'];}); 
+DefMathML("Token:BINDER:And",undef,sub{['m:And'];}); 
+DefMathML("Token:BINDER:Or",undef,sub{['m:Or'];}); 
+DefMathML("Token:BINDER:Or",undef,sub{['m:Or'];}); 
+DefMathML("Token:BINDER:Xor",undef,sub{['m:Xor'];}); 
+DefMathML("Token:BINDER:Xor",undef,sub{['m:Xor'];}); 
+DefMathML("Token:BINDER:forall",undef,sub{['m:forall'];}); 
+DefMathML("Token:BINDER:forall",undef,sub{['m:forall'];}); 
+DefMathML("Token:BINDER:exists",undef,sub{['m:exists'];}); 
+DefMathML("Token:BINDER:exists",undef,sub{['m:exists'];}); 
+DefMathML("Token:OPFUNCTION:abs",undef,sub{['m:abs'];}); 
+DefMathML("Token:OPFUNCTION:conjugate",undef,sub{['m:conjugate'];}); 
+DefMathML("Token:OPFUNCTION:arg",undef,sub{['m:arg'];}); 
+DefMathML("Token:OPFUNCTION:real",undef,sub{['m:real'];}); 
+DefMathML("Token:OPFUNCTION:imaginary",undef,sub{['m:imaginary'];}); 
+DefMathML("Token:OPFUNCTION:lcm",undef,sub{['m:lcm'];}); 
+DefMathML("Token:OPFUNCTION:floor",undef,sub{['m:floor'];}); 
+DefMathML("Token:OPFUNCTION:ceiling",undef,sub{['m:ceiling'];}); 
+DefMathML("Token:RELOP:eq",undef,sub{['m:eq'];}); 
+DefMathML("Token:RELOP:neq",undef,sub{['m:neq'];}); 
+DefMathML("Token:RELOP:gt",undef,sub{['m:gt'];}); 
+DefMathML("Token:RELOP:lt",undef,sub{['m:lt'];}); 
+DefMathML("Token:RELOP:geq",undef,sub{['m:geq'];}); 
+DefMathML("Token:RELOP:leq",undef,sub{['m:leq'];}); 
+DefMathML("Token:RELOP:equivalent",undef,sub{['m:equivalent'];}); 
+DefMathML("Token:RELOP:approx",undef,sub{['m:approx'];}); 
+DefMathML("Token:RELOP:factorof",undef,sub{['m:factorof'];}); 
+DefMathML("Token:BINDER:int",undef,sub{['m:int'];}); 
+DefMathML("Token:BINDER:int",undef,sub{['m:int'];}); 
+DefMathML("Token:BINDER:int",undef,sub{['m:int'];}); 
+DefMathML("Token:BINDER:int",undef,sub{['m:int'];}); 
+DefMathML("Token:OPFUNCTION:diff",undef,sub{['m:diff'];}); 
+DefMathML("Token:OPFUNCTION:diff",undef,sub{['m:diff'];}); 
+DefMathML("Token:OPFUNCTION:diff",undef,sub{['m:diff'];}); 
+DefMathML("Token:OPFUNCTION:degree",undef,sub{['m:degree'];});
+DefMathML("Token:OPFUNCTION:limit",undef,sub{['m:limit'];}); 
+DefMathML("Token:OPFUNCTION:limit",undef,sub{['m:limit'];}); 
+DefMathML("Token:RELOP:tendsto",undef,sub{['m:tendsto'];}); 
+DefMathML("Token:OPFUNCTION:divergence",undef,sub{['m:divergence'];}); 
+DefMathML("Token:OPFUNCTION:grad",undef,sub{['m:grad'];}); 
+DefMathML("Token:OPFUNCTION:url",undef,sub{['m:url'];}); 
+DefMathML("Token:OPFUNCTION:laplacian",undef,sub{['m:laplacian'];}); 
+DefMathML("Token:CONSTRUCTOR:set",undef,sub{['m:set'];}); 
+DefMathML("Token:CONSTRUCTOR:list",undef,sub{['m:list'];}); 
+DefMathML("Token:OPFUNCTION:union",undef,sub{['m:union'];}); 
+DefMathML("Token:OPFUNCTION:intersect",undef,sub{['m:intersect'];}); 
+DefMathML("Token:RELOP:in",undef,sub{['m:in'];}); 
+DefMathML("Token:RELOP:notin",undef,sub{['m:notin'];}); 
+DefMathML("Token:RELOP:subset",undef,sub{['m:subset'];}); 
+DefMathML("Token:RELOP:prsubset",undef,sub{['m:prsubset'];}); 
+DefMathML("Token:RELOP:notsubset",undef,sub{['m:notsubset'];}); 
+DefMathML("Token:RELOP:notprsubset",undef,sub{['m:notprsubset'];}); 
+DefMathML("Token:OPFUNCTION:setdiff",undef,sub{['m:setdiff'];}); 
+DefMathML("Token:OPFUNCTION:card",undef,sub{['m:card'];}); 
+DefMathML("Token:OPFUNCTION:cartesianproduct",undef,sub{['m:cartesianproduct'];}); 
+DefMathML("Token:BINDER:Union",undef,sub{['m:Union'];}); 
+DefMathML("Token:BINDER:Union",undef,sub{['m:Union'];}); 
+DefMathML("Token:BINDER:Intersect",undef,sub{['m:Intersect'];}); 
+DefMathML("Token:BINDER:Intersect",undef,sub{['m:Intersect'];}); 
+DefMathML("Token:BINDER:Cartesianproduct",undef,sub{['m:Cartesianproduct'];}); 
+DefMathML("Token:BINDER:Cartesianproduct",undef,sub{['m:Cartesianproduct'];}); 
+DefMathML("Token:BINDER:sum",undef,sub{['m:sum'];}); 
+DefMathML("Token:BINDER:prod",undef,sub{['m:prod'];}); 
+DefMathML("Token:TRIGFUNCTION:sin",undef,sub{['m:sin'];}); 
+DefMathML("Token:TRIGFUNCTION:cos",undef,sub{['m:cos'];}); 
+DefMathML("Token:TRIGFUNCTION:tan",undef,sub{['m:tan'];}); 
+DefMathML("Token:TRIGFUNCTION:sec",undef,sub{['m:sec'];}); 
+DefMathML("Token:TRIGFUNCTION:csc",undef,sub{['m:csc'];}); 
+DefMathML("Token:TRIGFUNCTION:cot",undef,sub{['m:cot'];}); 
+DefMathML("Token:TRIGFUNCTION:sinh",undef,sub{['m:sinh'];}); 
+DefMathML("Token:TRIGFUNCTION:cosh",undef,sub{['m:cosh'];}); 
+DefMathML("Token:TRIGFUNCTION:tanh",undef,sub{['m:tanh'];}); 
+DefMathML("Token:TRIGFUNCTION:sech",undef,sub{['m:sech'];}); 
+DefMathML("Token:TRIGFUNCTION:csch",undef,sub{['m:csch'];}); 
+DefMathML("Token:TRIGFUNCTION:coth",undef,sub{['m:coth'];}); 
+DefMathML("Token:OPFUNCTION:arcsin",undef,sub{['m:arcsin'];}); 
+DefMathML("Token:OPFUNCTION:arccos",undef,sub{['m:arccos'];}); 
+DefMathML("Token:OPFUNCTION:arctan",undef,sub{['m:arctan'];}); 
+DefMathML("Token:OPFUNCTION:arcsec",undef,sub{['m:arcsec'];}); 
+DefMathML("Token:OPFUNCTION:arccsc",undef,sub{['m:arccsc'];}); 
+DefMathML("Token:OPFUNCTION:arccot",undef,sub{['m:arccot'];}); 
+DefMathML("Token:OPFUNCTION:arcsinh",undef,sub{['m:arcsinh'];}); 
+DefMathML("Token:OPFUNCTION:arccosh",undef,sub{['m:arccosh'];}); 
+DefMathML("Token:OPFUNCTION:arctanh",undef,sub{['m:arctanh'];}); 
+DefMathML("Token:OPFUNCTION:arcsech",undef,sub{['m:arcsech'];}); 
+DefMathML("Token:OPFUNCTION:arccsch",undef,sub{['m:arccsch'];}); 
+DefMathML("Token:OPFUNCTION:arccoth",undef,sub{['m:arccoth'];}); 
+DefMathML("Token:OPFUNCTION:exp",undef,sub{['m:exp'];}); 
+DefMathML("Token:OPFUNCTION:ln",undef,sub{['m:ln'];}); 
+DefMathML("Token:OPFUNCTION:log",undef,sub{['m:log'];}); 
+DefMathML("Token:OPFUNCTION:mean",undef,sub{['m:mean'];}); 
+DefMathML("Token:OPFUNCTION:sdev",undef,sub{['m:sdev'];}); 
+DefMathML("Token:OPFUNCTION:var",undef,sub{['m:var'];}); 
+DefMathML("Token:OPFUNCTION:median",undef,sub{['m:median'];}); 
+DefMathML("Token:OPFUNCTION:mode",undef,sub{['m:mode'];}); 
+DefMathML("Token:OPFUNCTION:moment",undef,sub{['m:moment'];}); 
+DefMathML("Token:CONSTRUCTOR:vector",undef,sub{['m:vector'];}); 
+DefMathML("Token:CONSTRUCTOR:matrix",undef,sub{['m:matrix'];}); 
+DefMathML("Token:OPFUNCTION:determinant",undef,sub{['m:determinant'];}); 
+DefMathML("Token:OPFUNCTION:transpose",undef,sub{['m:transpose'];}); 
+DefMathML("Token:OPFUNCTION:selector",undef,sub{['m:selector'];}); 
+DefMathML("Token:OPFUNCTION:vectorproduct",undef,sub{['m:vectorproduct'];}); 
+DefMathML("Token:OPFUNCTION:scalarproduct",undef,sub{['m:scalarproduct'];}); 
+DefMathML("Token:OPFUNCTION:outerproduct",undef,sub{['m:outerproduct'];}); 
+DefMathML("Token:ID:integers",undef,sub{['m:integers'];}); 
+DefMathML("Token:ID:reals",undef,sub{['m:reals'];}); 
+DefMathML("Token:ID:rationals",undef,sub{['m:rationals'];}); 
+DefMathML("Token:ID:naturalnumbers",undef,sub{['m:naturalnumbers'];}); 
+DefMathML("Token:ID:complexes",undef,sub{['m:complexes'];}); 
+DefMathML("Token:ID:primes",undef,sub{['m:primes'];});
+DefMathML("Token:ID:exponentiale",undef,sub{['m:exponentiale'];}); 
+DefMathML("Token:ID:imaginaryi",undef,sub{['m:imaginaryi'];}); 
+DefMathML("Token:ID:notanumber",undef,sub{['m:notanumber'];}); 
+DefMathML("Token:ID:true",undef,sub{['m:true'];}); 
+DefMathML("Token:ID:false",undef,sub{['m:false'];}); 
+DefMathML("Token:ID:emptyset",undef,sub{['m:emptyset'];}); 
+DefMathML("Token:ID:pi",undef,sub{['m:pi'];}); 
+DefMathML("Token:ID:eulergamma",undef,sub{['m:eulergamma'];}); 
+DefMathML("Token:ID:infinit",undef,sub{['m:infinit'];}); 
 
 # ================================================================================
 # Hints
