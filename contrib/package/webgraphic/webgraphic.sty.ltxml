@@ -1,1 +1,6 @@
+package LaTeXML::Package::Pool;
+use strict;
+use LaTeXML::Package;
+RequirePackage('graphicx');
+DefConstructor('\webgraphic[]{}','');
 1;

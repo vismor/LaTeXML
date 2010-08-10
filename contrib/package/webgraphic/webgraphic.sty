@@ -8,6 +8,9 @@
 %% 
 \NeedsTeXFormat{LaTeX2e}[1999/12/01]
 \ProvidesPackage{webgraphic}[2010/08/10 v0.1 Web Graphics]
+\RequirePackage{graphicx}
+\define@key{Gin}{local}{\def\Gin@local{#1}}
+\newcommand{\webgraphic}[2][]{\setkeys{Gin}{#1}\includegraphics[#1]{\Gin@local}}
 \endinput
 %%
 %% End of file `webgraphic.sty'.

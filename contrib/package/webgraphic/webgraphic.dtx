@@ -21,7 +21,8 @@
 \usepackage[eso-foot,today]{svninfo}
 \svnInfo $Id: omdoc.dtx 1502 2010-07-20 08:17:00Z kohlhase $
 \svnKeyword $HeadURL: https://svn.kwarc.info/repos/stex/trunk/sty/omdoc/omdoc.dtx $
-\usepackage{stex-logo}
+\usepackage{latexml}
+\usepackage{webgraphic}
 %\usepackage{../ctansvn}
 \usepackage{hyperref}
 \makeindex
@@ -32,7 +33,7 @@
 %</driver>
 % \fi
 % 
-%\CheckSum{275}
+%\iffalse\CheckSum{275}\fi
 % 
 % \changes{v0.1}{2010/8/10}{First Version}
 %
@@ -43,28 +44,94 @@
 %
 % \title{{\texttt{webgraphic.sty}}: Graphics from the Web for XML Conversion from {\LaTeX}\thanks{Version {\fileversion} (last revised
 %        {\filedate})}}
-%    \author{Michael Kohlhase\\
+%    \author{Michael Kohlhase, Deyan Ginev\\
 %            Jacobs University, Bremen\\
-%            \url{http://kwarc.info/kohlhase}}
+%            \url{http://kwarc.info/{kohlhase,dginev}}}
 % \maketitle
 %
 % \begin{abstract}
 %   This package supplies an infrastructure for including web graphics in {\LaTeX}
-%   documents written for transformation to web formats.
+%   documents written for transformation to web formats.\ednote{extend}
 % \end{abstract}
 %
-% \newpage\tableofcontents\newpage
+% \tableofcontents\newpage
 % 
-% \section{Introduction}\label{sec:into}
+% \section{Introduction}\label{sec:intro}
+%
+% The {\LaTeXML} system~\cite{Miller:latexml:online} can be used to generate various web
+% formats from {\LaTeX}, most prominently XHTML+MathML that can directly be used for web
+% pages. AS {\LaTeXML} covers a wide range of {\LaTeX} classes and packages, almost all
+% {\LaTeX} documents can be converted. But not all XHTML+MathML can be produced; the main
+% problem is that XHTML allows the inclusion of images located by URLs and {\LaTeX} only
+% allows the inclusion of images from the local file system. The |webgraphic| package
+% provides a simple markup structure to change this.
+%
+% \section{User Interface}\label{sec:user}
+%
+% The |webgraphic| package provides a single macro:
+% \DescribeMacro{\webgraphic}|\webgraphic|. It works exactly like the |\incldegraphics|
+% macro from the |graphicx| package~\cite{CarRah:tpp99}, except that the image file may be
+% a URL~\cite{DueSui:iri05} and that |\webgraphic| has an additioncal key
+% \DescribeMacro{local}|local| that can be used to specify a local copy of the image file
+% (\LaTeX) cannot fetch files from the web. If the |local| attribute is not given {\LaTeX}
+% tries to interpret the second argument as a file path to an image file and to include
+% it. The normal usage is 
+% \begin{verbatim}
+% \webgraphic[width=3cm,local=LWebComp]
+%            {http://www.tug.org/books/LWebComp.jpg}
+% \end{verbatim}
+% which results in the following picture given that a file |LWebComp.*| in a format that
+% |graphicx| can handle (here |LWebComp.png|) is present.
+% \begin{center}
+% \webgraphic[width=3cm,local=LWebComp]
+%            {http://www.tug.org/books/LWebComp.jpg}
+% \end{center}
+% {\LaTeXML} converts this into a suitable web representation, e.g.
+% \begin{verbatim}
+% <img src="http://www.tug.org/books/LWebComp.jpg" style="width:3cm"/>
+% \end{verbatim}
+% 
+%
 %
 % \StopEventually{\newpage\PrintIndex\newpage\PrintChanges\printbibliography}\newpage
 %
 % \section{Implementation}\label{sec:impl}
+% We first set up header information for the {\LaTeXML} binding file. 
+%    \begin{macrocode}
+%<*ltxml>
+package LaTeXML::Package::Pool;
+use strict;
+use LaTeXML::Package;
+%</ltxml>
+%    \end{macrocode}
+% 
+% Then we need to include the |graphicx| package we build upon
+%
+%    \begin{macrocode}
+%<package>\RequirePackage{graphicx}
+%<ltxml>RequirePackage('graphicx');
+%    \end{macrocode}
+%
+% \begin{macro}{\webgraphic}
+%   We build the |\webgraphic| macro on |\includegraphics|: for the {\LaTeX}
+%   implementation we first extend its keys by |local|, we fish out its value from
+%   |\webgraphic| and then supply it is the file to |\includegraphics|.\ednote{@Deyan,
+%   please add the binding and describe what you did.}
+%    \begin{macrocode}
+%<*package>
+\define@key{Gin}{local}{\def\Gin@local{#1}}
+\newcommand{\webgraphic}[2][]{\setkeys{Gin}{#1}\includegraphics[#1]{\Gin@local}}
+%</package>
+%<*ltxml>
+DefConstructor('\webgraphic[]{}','');
+%</ltxml>
+%    \end{macrocode}
+% \end{macro}
+%
 % Finally, we need to terminate the file with a success mark for perl.
 %    \begin{macrocode}
 %<ltxml>1;
 %    \end{macrocode}
-% \end{omgroup}
 % \Finale
 % \endinput
 % Local Variables: 
