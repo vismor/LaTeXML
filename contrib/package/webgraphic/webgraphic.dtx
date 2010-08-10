@@ -71,29 +71,48 @@
 % The |webgraphic| package provides a single macro:
 % \DescribeMacro{\webgraphic}|\webgraphic|. It works exactly like the |\incldegraphics|
 % macro from the |graphicx| package~\cite{CarRah:tpp99}, except that the image file may be
-% a URL~\cite{DueSui:iri05} and that |\webgraphic| has an additioncal key
+% a URL~\cite{DueSui:iri05} and that |\webgraphic| has an additional key
 % \DescribeMacro{local}|local| that can be used to specify a local copy of the image file
 % (\LaTeX) cannot fetch files from the web. If the |local| attribute is not given {\LaTeX}
 % tries to interpret the second argument as a file path to an image file and to include
-% it. The normal usage is 
-% \begin{verbatim}
-% \webgraphic[width=3cm,local=LWebComp]
+% it. The normal usage is as given in Figure\ref{fig:local-usage} which results in the
+% picture given that a file |LWebComp.*| in a format that |graphicx| can handle (here
+% |LWebComp.png|) is present.
+% 
+% \begin{figure}[ht]\centering
+% \begin{tabular}{|l|}\hline
+% |\webgraphic[width=3cm,local=LWebComp.png]| \\ 
+% |           {http://www.tug.org/books/LWebComp.jpg}|\\\hline
+% \begin{minipage}{7cm}\vspace*{1ex}
+% \webgraphic[width=3cm,local=LWebComp.png]
 %            {http://www.tug.org/books/LWebComp.jpg}
-% \end{verbatim}
-% which results in the following picture given that a file |LWebComp.*| in a format that
-% |graphicx| can handle (here |LWebComp.png|) is present.
-% \begin{center}
-% \webgraphic[width=3cm,local=LWebComp]
+% \vspace*{1ex}\end{minipage}
+% \\\hline
+% \end{tabular}
+% \caption{Normal usage of \texttt{\textbackslash{webgraphic}}}\label{fig:using-local}
+% \end{figure}
+% If no local file is given, then {\LaTeX} generates a box that contains the URL as a
+% fallback, see Figure~\ref{fig:using-fallback}.
+% 
+% \begin{figure}[ht]\centering
+% \begin{tabular}{|l|}\hline
+% |\webgraphic[width=3cm]| \\ 
+% |           {http://www.tug.org/books/LWebComp.jpg}|\\\hline
+% \begin{minipage}{7cm}\vspace*{1ex}
+% \webgraphic[width=3cm]
 %            {http://www.tug.org/books/LWebComp.jpg}
-% \end{center}
-% {\LaTeXML} converts this into a suitable web representation, e.g.
+% \vspace*{1ex}\end{minipage}
+% \\\hline
+% \end{tabular}
+% \caption{\texttt{\textbackslash{webgraphic}} Fallback Behavior}\label{fig:using-fallback}
+% \end{figure}
+% In both cases, {\LaTeXML} converts this into a suitable web representation, e.g.
 % \begin{verbatim}
 % <img src="http://www.tug.org/books/LWebComp.jpg" style="width:3cm"/>
 % \end{verbatim}
-% 
 %
 %
-% \StopEventually{\newpage\PrintIndex\newpage\PrintChanges\printbibliography}\newpage
+% \StopEventually{\newpage\PrintIndex\newpage\PrintChanges\printbibliography}
 %
 % \section{Implementation}\label{sec:impl}
 % We first set up header information for the {\LaTeXML} binding file. 
@@ -120,7 +139,10 @@ use LaTeXML::Package;
 %    \begin{macrocode}
 %<*package>
 \define@key{Gin}{local}{\def\Gin@local{#1}}
-\newcommand{\webgraphic}[2][]{\setkeys{Gin}{#1}\includegraphics[#1]{\Gin@local}}
+\newcommand{\webgraphic}[2][]{\def\Gin@local{}\setkeys{Gin}{#1}%
+\ifx\Gin@local\@empty%
+\IfFileExists{#2}{\includegraphics[#1]{#2}}{\fbox{#2}}%
+\else\includegraphics[#1]{\Gin@local}\fi}
 %</package>
 %<*ltxml>
 DefConstructor('\webgraphic[]{}','');
@@ -138,3 +160,9 @@ DefConstructor('\webgraphic[]{}','');
 % mode: doctex
 % TeX-master: t
 % End: 
+
+% LocalWords:  iffalse webgraphic webgraphic.dtx texttt fileversion Deyan Ginev
+% LocalWords:  kohlhase dginev maketitle ednote tableofcontents newpage tpp99
+% LocalWords:  incldegraphics graphicx iri05 hline vspace textbackslash impl
+% LocalWords:  printbibliography ltxml includegraphics newcommand setkeys ifx
+% LocalWords:  fbox doctex

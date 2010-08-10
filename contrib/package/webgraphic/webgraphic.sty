@@ -10,7 +10,10 @@
 \ProvidesPackage{webgraphic}[2010/08/10 v0.1 Web Graphics]
 \RequirePackage{graphicx}
 \define@key{Gin}{local}{\def\Gin@local{#1}}
-\newcommand{\webgraphic}[2][]{\setkeys{Gin}{#1}\includegraphics[#1]{\Gin@local}}
+\newcommand{\webgraphic}[2][]{\def\Gin@local{}\setkeys{Gin}{#1}%
+\ifx\Gin@local\@empty%
+\IfFileExists{#2}{\includegraphics[#1]{#2}}{\fbox{#2}}%
+\else\includegraphics[#1]{\Gin@local}\fi}
 \endinput
 %%
 %% End of file `webgraphic.sty'.
