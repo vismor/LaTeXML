@@ -1,0 +1,14 @@
+This is the area of packages contributed to LaTeXML, it is intended as a rough equivalent to CTAN. 
+Some of this material may eventually end up in the LaTeXML distribution if it is mature enouth. 
+
+Manifest
+--------
+README:    this file
+lib: 	   auxiliary files for automation
+Makefile:  automation (only on POSIX system I am afraid)
+<else>:    contributed packages
+
+The contributed packages consist of LaTeXML bindings of existing or new packages with LaTeXML bindings.
+For the latter we recommend to use the LaTeX workflow to self-documenting packages and have the bindings 
+in the same *.dtx file (see the webgraphic package for an example). The Makefiles here give an automated 
+build procedure and prepare inclusion into CTAN. 
