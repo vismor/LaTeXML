@@ -4,7 +4,7 @@ Some of this material may eventually end up in the LaTeXML distribution if it is
 Manifest
 --------
 README:    this file
-lib: 	   auxiliary files for automation
+lib: 	   auxiliary files (make, packages, utilities)
 Makefile:  automation (only on POSIX system I am afraid)
 <else>:    contributed packages
 
