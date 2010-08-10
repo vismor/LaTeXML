@@ -1,0 +1,8 @@
+This is the area of material contributed to LaTeXML, it is intended as a rough equivalent to CTAN. 
+Some of this material may eventually end up in the LaTeXML distribution if it is mature enouth. 
+
+Subdirectories: 
+
+package: LaTeXML bindings of existing or new packages with LaTeXML bindings 
+xsl:     XSLT style sheets for use with LaTeXML
+css:     CSS style sheets for LaTeXML-generated documents
