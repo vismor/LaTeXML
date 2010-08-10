@@ -1,7 +1,7 @@
-PREFIX = ..
+LIBDIR = ../lib
 DTX.sty.base = webgraphic
 PACKAGE = webgraphic
 
-include $(PREFIX)/Makefile.vars
-include $(PREFIX)/Makefile.in
+include $(LIBDIR)/make/Makefile.vars
+include $(LIBDIR)/make/Makefile.in
 
