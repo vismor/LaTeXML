@@ -1,7 +1,6 @@
-This is the area for documentation of LaTeXML bindings for existing LaTeX packages in ../bindings. 
+This is the area for XSLT transformation of LTXML documents.
 
 Manifest
 --------
 README:  this file
-xxx.pdf: documentation for the LaTeXML binding file in ../bindings/xxx.yyy.ltxml
 
