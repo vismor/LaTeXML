@@ -78,6 +78,10 @@
 % it. The normal usage is as given in Figure\ref{fig:local-usage} which results in the
 % picture given that a file |LWebComp.*| in a format that |graphicx| can handle (here
 % |LWebComp.png|) is present.
+%
+% In order to provide styling and description information, the
+% |width|,|height| and |alt| keys are provided, having the obvious
+% meaning in the HTML image world.
 % 
 % \begin{figure}[ht]\centering
 % \begin{tabular}{|l|}\hline
@@ -128,7 +132,6 @@ use LaTeXML::Package;
 %
 %    \begin{macrocode}
 %<package>\RequirePackage{graphicx}
-%<ltxml>RequirePackage('graphicx');
 %    \end{macrocode}
 %
 % \begin{macro}{\webgraphic}
@@ -145,7 +148,17 @@ use LaTeXML::Package;
 \else\includegraphics[#1]{\Gin@local}\fi}
 %</package>
 %<*ltxml>
-DefConstructor('\webgraphic[]{}','');
+DefKeyVal('webgraphic','width','Semiverbatim');
+DefKeyVal('webgraphic','height','Semiverbatim');
+DefKeyVal('webgraphic','local','Semiverbatim');
+DefKeyVal('webgraphic','alt','Semiverbatim');
+DefConstructor('\webgraphic OptionalKeyVals:webgraphic {}',
+	       "<ltx:graphics imagesrc='#2' "
+	       . "?#1("
+	       . "?&KeyVal(#1,'width')(imagewidth='&KeyVal(#1,'width')' )()"
+	       . "?&KeyVal(#1,'height')(imageheight='&KeyVal(#1,'height')' )()"
+	       . "?&KeyVal(#1,'alt')(description='&KeyVal(#1,'alt')' )()"
+	       . ")() />");
 %</ltxml>
 %    \end{macrocode}
 % \end{macro}
