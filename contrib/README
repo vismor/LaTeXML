@@ -3,6 +3,8 @@ Some of this material may eventually end up in the LaTeXML distribution if it is
 
 Subdirectories: 
 
-package: LaTeXML bindings of existing or new packages with LaTeXML bindings 
-xsl:     XSLT style sheets for use with LaTeXML
-css:     CSS style sheets for LaTeXML-generated documents
+package:   LaTeXML bindings of existing or new packages with LaTeXML bindings. 
+bindings:  LaTeXML bindings for existing LaTeX packages. 
+doc: 	   documentation for the bindings.
+xsl:       XSLT style sheets for use with LaTeXML.
+css:       CSS style sheets for LaTeXML-generated documents.

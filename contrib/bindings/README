@@ -1,0 +1,10 @@
+This is the area of LaTeXML bindings for existing LaTeX packages. 
+Some of this material may eventually end up in the LaTeXML distribution if it is mature enouth. 
+
+Manifest
+--------
+README:      this file
+*.sty.ltxml: bindings for LaTeX Packages
+*.cls.ltxml: bindings for LaTeX Classes
+
+Documentation for a binding file xxx.yyy.ltxml can sometimes be found as ../doc/xxx.pdf.
