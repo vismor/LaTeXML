@@ -52,7 +52,7 @@ WriteMakefile(NAME => 'LaTeXML',
 			     'Parse::RecDescent' => 0,
 			    'Image::Magick'=> 0,
 			   },
-	      EXE_FILES => [ 'bin/latexml','bin/latexmlpost','bin/latexmlfind','bin/latexmlmath'],
+	      EXE_FILES => [ 'bin/latexml','bin/latexmlpost','bin/latexmlfind','bin/latexmlmath','bin/latexmls','bin/latexmlc'],
 	      macro => $MORE_MACROS,
 	      );
 
@@ -99,7 +99,7 @@ MakeGrammar
 sub compile_XSLTs {
   my $styledir = 'LaTeXML/style';
   $$MORE_MACROS{XSLTTOHTML}
-    = '$(PERLRUN) -p -e \'s@\s*xmlns\s*=\s*(\"|\'\\\'\')http://www.w3.org/1999/xhtml\1@@\' ';
+    = '$(PERLRUN) -p -e \'s@\s*xmlns\s*=\s*(.)http://www.w3.org/1999/xhtml\1@@\' ';
   opendir(DIR,"lib/$styledir");
   my @xhtmls = grep(/^LaTeXML-(.*)-xhtml.xsl$/,readdir(DIR));
   closedir(DIR);
