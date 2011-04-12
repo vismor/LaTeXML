@@ -55,6 +55,8 @@ sub getProperty {
   else {
     undef; }}
 
+sub getProperties { (); }
+
 #**********************************************************************
 # LaTeXML::MathBox
 #**********************************************************************
@@ -94,15 +96,15 @@ use base qw(LaTeXML::Box);
 
 sub new {
   my($class,@boxes)=@_;
-#  my $box0 = $boxes[0];
-#  bless [[@boxes], ($box0 ? $box0->getFont : undef), ($box0 ? $box0->getLocator : '')],$class; }
   my($b,$font,$locator);
   my @b=@boxes;
-  while(defined ($b=shift(@b)) && (!defined $font) && (!defined $locator)){
-    $font = $b->getFont unless defined $font;
+  while(defined ($b=shift(@b)) && (!defined $locator)){
     $locator = $b->getLocator unless defined $locator; }
+  @b=@boxes;
+  # Maybe the most representative font for a List is the font of the LAST box (that _has_ a font!) ???
+  while(defined ($b=pop(@b)) && (!defined $font)){
+    $font = $b->getFont unless defined $font; }
   bless [[@boxes],$font,$locator||''],$class; }
-
 
 sub isMath     { 0; }			# List's are text mode
 
@@ -199,6 +201,11 @@ sub setBody {
   my $trailer = pop(@body);
   $$self{properties}{body} = ($self->isMath ? LaTeXML::MathList->new(@body) : LaTeXML::List->new(@body));
   $$self{properties}{trailer} = $trailer;
+  # And copy any otherwise undefined properties from the trailer
+  if($trailer){
+    my %trailerhash = $trailer->getProperties;
+    foreach my $prop (keys %trailerhash){
+      $$self{properties}{$prop} = $trailer->getProperty($prop) unless defined $$self{properties}{$prop}; }}
   return; }
 
 sub getTrailer  { $_[0]{properties}{trailer}; }
