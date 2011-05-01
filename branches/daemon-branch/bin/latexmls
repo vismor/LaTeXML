@@ -15,6 +15,7 @@ use Pod::Usage;
 use LaTeXML::Daemon;
 use LaTeXML::Util::Pathname;
 use LaTeXML::Util::ObjectDB;
+use LaTeXML::Util::WWW;
 use LaTeXML::Post;
 use LaTeXML::Post::Writer;
 use LaTeXML::Post::Scan;
@@ -25,6 +26,8 @@ use POSIX qw( setsid );
 use LWP::Simple;
 use LWP;
 use IO::Socket;
+use IO::Prompt; #Authorization
+our $authlist={};
 
 #**********************************************************************
 # Parse command line
@@ -37,7 +40,7 @@ my($_verbosity,$_strict,$_comments,$_noparse,$_includestyles,
    $_errlog,$_post,$_parallelmath,$input_counter,$_input_limit,
    $_local,$_embed)=(0,0,1,0,0,0,0,0,0,0,0,0);
 my $_timeout = 60;
-my ($_format,$_mode,$_destination,$_postdest,$_log,$_postlog,$_basedir,$_procs_post,$_help,$_showversion,$_preamble,$_preamble_loaded)=
+my ($_format,$_mode,$_destination,$_postdest,$_log,$_postlog,$_base,$_procs_post,$_help,$_showversion,$_preamble,$_preamble_loaded)=
    ('xml','standard',q{},q{},q{},q{},q{},{},undef,undef,undef,q{});
 my($_stylesheet,$_defaultcss,$_summary,$_icon,@_css)=(undef,1,0);
 my ($_documentid);
@@ -53,8 +56,8 @@ my($verbosity,$strict,$comments,$noparse,$includestyles,
   ($_verbosity,$_strict,$_comments,$_noparse,$_includestyles,
    $_errlog,$_post,$_parallelmath,$_input_limit,
    $_timeout,$_local);
-my ($format,$mode,$destination,$postdest,$log,$postlog,$basedir,$procs_post,$help,$showversion,$preamble,$embed)=
-  ($_format,$_mode,$_destination,$_postdest,$_log,$_postlog,$_basedir,{},$_help,$_showversion,$_preamble,$_embed);
+my ($format,$mode,$destination,$postdest,$log,$postlog,$base,$procs_post,$help,$showversion,$preamble,$embed)=
+  ($_format,$_mode,$_destination,$_postdest,$_log,$_postlog,$_base,{},$_help,$_showversion,$_preamble,$_embed);
 my($stylesheet,$defaultcss,$summary,$icon,@css)=($_stylesheet,$_defaultcss,$_summary,$_icon,@_css);
 my ($documentid,$port);
 my %portlist = ( math=>3334, fragment=>3344, standard=>3354);
@@ -69,7 +72,7 @@ GetOptions("destination=s" => \$_destination,
 	   "output=s"  => \$_destination,
 	   "preload=s" => \@preload_,
 	   "preamble=s" => \$_preamble,
-           "basedir=s"  => \$_basedir,
+           "base=s"  => \$_base,
 	   "path=s"    => \@paths_,
 	   "quiet"     => sub { $_verbosity--; },
 	   "verbose"   => sub { $_verbosity++; },
@@ -135,8 +138,8 @@ $_input_limit=100 if (!$_input_limit || $_input_limit<=0); #Standard mode
  $errlog,$post,$parallelmath,$input_limit,$timeout,$local)=
   ($_verbosity,$_strict,$_comments,$_noparse,$_includestyles,
    $_errlog,$_post,$_parallelmath,$_input_limit,$_timeout,$_local);
-($format,$mode,$destination,$postdest,$log,$postlog,$basedir,$help,$showversion,$preamble,$documentid,$inputencoding,$type)=
-        ($_format,$_mode,$_destination,$_postdest,$_log,$_postlog,$_basedir,$_help,$_showversion,$_preamble,$_documentid,$_inputencoding,$_type);
+($format,$mode,$destination,$postdest,$log,$postlog,$base,$help,$showversion,$preamble,$documentid,$inputencoding,$type)=
+        ($_format,$_mode,$_destination,$_postdest,$_log,$_postlog,$_base,$_help,$_showversion,$_preamble,$_documentid,$_inputencoding,$_type);
 ($stylesheet,$defaultcss,$summary,$icon,@css)=($_stylesheet,$_defaultcss,$_summary,$_icon,@_css);
 $procs_post = {};
 $embed=$_embed;
@@ -147,8 +150,7 @@ if ($mode eq "math") {
 }
 @paths = @paths_; @preload=@preload_; @debugs=@debugs_;
 
-#Setup browser for URI requests
-my $browser = LWP::UserAgent->new;
+#Setup HTTP::Response var for URI requests
 my $response;
 
 @paths = map {pathname_canonical($_)} @paths;
@@ -176,9 +178,10 @@ print STDERR "\n"; #Sanitize log.
 # Preload the preamble if any (and not loaded)
 if ($preamble) {
   #TODO: It is difficult to digest 2 files via LaTeXML into 1 XML output right now...
-  $response=$browser->get($preamble);
+  $response=auth_get($preamble,$authlist);
   if ($response->is_success) {
-    $latexml->digestURLDaemonized($preamble,"standard");
+    my $content = $response->content;
+    $latexml->digestStringDaemonized($content,"standard",$preamble);
   } else {
     $latexml->digestFileDaemonized($preamble,"standard");
   }
@@ -193,10 +196,9 @@ if ($init_status !~ /error/i) {
 } else {  croak $init_status; } #Demand errorless initialization
 
 #Create restore point
-my $stateRestore;
 $latexml->withState(sub {
   my($state)=@_;
-  $stateRestore = clone $$state{table} if $mode eq "fragment";
+  $state->assignValue('_authlist',$authlist,'global');
 });
 
 #Flush daemon, every $input_limit files:
@@ -204,7 +206,7 @@ exec($0,@ARGV_SAVED)
   or die ("Daemon autoflush Failed!\n") if $input_counter>=$input_limit;
 #Set timeout, if wanted:
 alarm($timeout);              #Timeout if inactive for too long...
-
+print STDERR "\n\nInitialization complete...\n";
 #**********************************************************************
 # Daemon has been set up, now process files on demand:grep($_ !~ /^--/,
 while ( my $client = $server->accept() ) {
@@ -218,13 +220,12 @@ while ( my $client = $server->accept() ) {
      ($_verbosity,$_strict,$_comments,$_noparse,$_includestyles,
       $_errlog,$_post,$_parallelmath,$_input_limit,
       $_timeout,$_local);
-  ($format,$mode,$destination,$postdest,$log,$postlog,$basedir,$help,$showversion,$preamble,$documentid,$inputencoding,$type)=
-    ($_format,$_mode,$_destination,$_postdest,$_log,$_postlog,$_basedir,$_help,$_showversion,$_preamble,$_documentid,$_inputencoding,$_type);
+  ($format,$mode,$destination,$postdest,$log,$postlog,$base,$help,$showversion,$preamble,$documentid,$inputencoding,$type)=
+    ($_format,$_mode,$_destination,$_postdest,$_log,$_postlog,$_base,$_help,$_showversion,$_preamble,$_documentid,$_inputencoding,$_type);
   ($stylesheet,$defaultcss,$summary,$icon,@css)=($_stylesheet,$_defaultcss,$summary,$_icon,@_css);
   $procs_post = {};
   @paths = @paths_; @preload=@preload_; @debugs=@debugs_;
   while (my $line = <$client>) {
-    chomp $line if $line; #We don't need the trailing empty line
     $sockstart=0 unless $line=~/^--/;#Assume no options will be given if the line does not start with --
     if ($sockstart) {
       #Parse overwrites from current input:
@@ -234,7 +235,7 @@ while ( my $client = $server->accept() ) {
            "postdest=s" => \$postdest,
 	   "preload=s" => \@preload,
 	   "preamble=s" => \$preamble,
-           "basedir=s" => \$basedir,
+           "base=s" => \$base,
 	   "path=s"    => \@paths,
 	   "quiet"     => sub { $verbosity--; },
 	   "verbose"   => sub { $verbosity++; },
@@ -272,7 +273,7 @@ while ( my $client = $server->accept() ) {
 	   "help"      => \$help,
       );
       pod2usage(-message=>$identity, -exitval=>1, -verbose=>2, -output=>\*STDOUT) if $help;
-      if ($basedir) { chdir "$basedir" or croak "Can't chdir to $basedir: $!";};
+      if ($base && $base!~/(\w+):\/\//) { chdir "$base" or croak "Can't chdir to $base: $!";};
       if (!$local && ($destination || $log || $postdest || $postlog)) {carp "I/O from filesystem not allowed without --local!\n".
                                                 " Will revert to sockets!\n";
                                             undef $destination; undef $log;
@@ -281,19 +282,17 @@ while ( my $client = $server->accept() ) {
       $sockstart=0; next;
     }
     last if ($line =~ /^(\s*)END REQUEST(\s*)$/);
-    $source .= $line."\n" if $line;
+    $line .= "\n" unless ((! defined $line) || ($line =~ /\n$/));
+    $source .= $line if (defined $line);
   }
-  next unless $source;
+  next unless defined $source;
   #Bookkeeping...
   alarm(0);                    #We are processing, ignore timeout here
   $input_counter++;
-  chomp $source;
-  $source =~ s/^\s+//m;                     #Cleanup space
-  $source =~ s/\s+$//m;                     #Cleanup space
-  next if (!$source);
   # Determine input type if local, otherwise only socket exchange:
   my ($isURL,$isString,$isFile);
   if ($local) {
+    $source=~s/\n$//g; #eliminate trailing new lines
     my @source_lines = split(/\n/,$source);
     $isString = $source if (scalar(@source_lines)>1 || $mode eq "math");
     unless ($isString) {
@@ -301,7 +300,7 @@ while ( my $client = $server->accept() ) {
       $isFile = pathname_canonical($isFile);
       $source = $isFile if $isFile;
       unless($isFile) {
-        $response = $browser->get($source);
+        $response = auth_get($source,$authlist);
         $isURL = $response->is_success;
       }
     }
@@ -377,31 +376,42 @@ while ( my $client = $server->accept() ) {
                           my($state)=@_;
                           $latexml->initializeState('TeX.pool', @{$$latexml{preload} || []});
                         });
+    # Preload the preamble if any (and not loaded)
+    if ($_preamble) {
+      #TODO: It is difficult to digest 2 files via LaTeXML into 1 XML output right now...
+      $response=auth_get($_preamble,$authlist);
+      if ($response->is_success) {
+        my $content = $response->content;
+        $latexml->digestStringDaemonized($content,"standard",$preamble);
+      } else {
+        $latexml->digestFileDaemonized($preamble,"standard");
+      }
+    }
     print STDERR "\n";          #Again, flush log
-  }
+  } # End of standard use case
 
-  # Preload the preamble if any
+  # Preload the preamble if any (and not loaded)
   if ($preamble && ($preamble ne $_preamble_loaded)) {
     #TODO: It is difficult to digest 2 preamble files via LaTeXML right now...
-    $response=$browser->get($preamble);
+    $response=auth_get($preamble,$authlist);
     if ($response->is_success) {
-      $latexml->digestURLDaemonized($preamble,"standard");
+      $latexml->digestStringDaemonized($response->content,"standard",$preamble);
     } else {
       $latexml->digestFileDaemonized($preamble,"standard");
     }
-    $_preamble_loaded = $preamble;
   }
 
   $latexml->withState(sub {
                         my($state)=@_; #Sandbox state
                         #Save preamble information for further use:
-                        $state->assignValue('_preamble_loaded',$_preamble_loaded,'global');
-                        $state->pushFrame; });
+                        $state->assignValue('_preamble_loaded',$preamble,'global');
+                        $state->assignValue('_authlist',$authlist,'global');
+                        $state->pushDaemonFrame; });
   my $serialized;
   my $dom;
   eval {
     if ($isURL) {
-      $digested = $latexml->digestURLDaemonized($source,$mode); 
+      $digested = $latexml->digestStringDaemonized($response->content,$mode,$source);
     } elsif ($isFile) {
       if ($type eq 'bibtex') {
         #TODO: Do we want URL support here?
@@ -411,11 +421,10 @@ while ( my $client = $server->accept() ) {
       }}
     elsif ($isString) {
       $source = mathdoc($source) if ($mode eq "math");
-      $digested = $latexml->digestStringDaemonized($source,$mode); 
+      $digested = $latexml->digestStringDaemonized($source,$mode);
     }
     # ========================================
     # Now, convert to DOM and output, if desired.
-    #use Encode;
     if ($digested) {
       local $LaTeXML::Global::STATE = $$latexml{state};
       if ($format eq 'tex') {
@@ -442,7 +451,6 @@ while ( my $client = $server->accept() ) {
     undef $dom;
     undef $serialized;
     undef $source;
-    undef $stateRestore;
     #Init:
     $latexml= LaTeXML::Daemon->new(preload=>[@preload], searchpaths=>[@paths],
                            verbosity=>$verbosity, strict=>$strict,
@@ -453,18 +461,16 @@ while ( my $client = $server->accept() ) {
     $latexml->withState(sub {
                           my($state)=@_;
                           $latexml->initializeState('TeX.pool', @{$$latexml{preload} || []});
-                          $stateRestore = clone $$state{table} if $mode eq "fragment";
                         });
     # Preload the preamble if any
     if ($preamble && $mode eq "fragment") {
       #TODO: It is difficult to digest 2 files via LaTeXML into 1 XML output right now...
-      $response=$browser->get($preamble);
+      $response=auth_get($preamble,$authlist);
       if ($response->is_success) {
-        $latexml->digestURLDaemonized($preamble,"standard");
+        $latexml->digestStringDaemonized($response->content,"standard",$preamble);
       } else {
         $latexml->digestFileDaemonized($preamble,"standard");
       }
-      $_preamble_loaded = $preamble;
     }
     print STDERR "\n";          #Again, flush log
     #Move to next...
@@ -477,8 +483,7 @@ while ( my $client = $server->accept() ) {
   my $summaryMessage = $latexml->getStatusMessage;
   $latexml->withState(sub {
                         my($state)=@_; #Remove current state frame
-                        $state->popFrame;
-                        $$state{table} = clone $stateRestore if (($mode eq "fragment") && $stateRestore);
+                        $state->popDaemonFrame;
                         $$state{status} = {};
                       });
   if ($cdest && $local && ($cdest ne $client)) {
@@ -651,8 +656,18 @@ sub doPost {
       last if ($maindiv->nodeName eq 'div');
     }
     # Assign the top division to the post-document holder
+    # Copy over all <html> attributes to the maindiv, so that we keep namespaces:
+    my $htmlel = $postdoc->findnode('//*[local-name()="html"]');
+    $htmlel->unbindNode;
+    $htmlel->removeChildNodes;
+    $htmlel->setNodeName('div');
+    $htmlel->setAttribute('class','document');
     $maindiv->unbindNode;
-    $postdoc = $maindiv;
+    foreach ($maindiv->childNodes) {
+      $_->unbindNode;
+      $htmlel->addChild($_);
+    }
+    $postdoc = $htmlel;
   }
   if ($extract eq "math") {
     #Output to destination:
@@ -813,7 +828,7 @@ latexmls [options]
                     by default it avoids this.
  --preamble=file    loads a tex file containing document frontmatter.
                     Useful for fragment mode.
- --basedir=dir      Specifies the base directory that the server
+ --base=dir         Specifies the base directory that the server
                     operates in. Useful when converting documents 
                     that employ relative paths.
  --path=dir         adds dir to the paths searched for files,
