@@ -22,6 +22,7 @@
     exclude-result-prefixes = "ltx">
 
   <xsl:output method="xml"
+		  omit-xml-declaration = "yes"
 	      doctype-public = "-//W3C//DTD XHTML 1.1 plus MathML 2.0//EN"
 	      doctype-system = "http://www.w3.org/TR/MathML2/dtd/xhtml-math11-f.dtd"
 	      media-type     = 'application/xhtml+xml'
@@ -29,7 +30,8 @@
 	      indent         = "yes"/>
   
   <xsl:template name="metatype">
-    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8"/>
+<!-- vismor -->
+<!--     <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8"/> -->
   </xsl:template>
 
   <xsl:template name="add_id">
@@ -39,6 +41,22 @@
   </xsl:template>
 
   <xsl:template match="/">
+
+<!-- vismor -->
+<xsl:processing-instruction name="php">
+<xsl:text>
+	ob_start( "ob_gzhandler" );
+	
+	$monitored_file = __FILE__;
+	$use_mathml = true;
+	
+	require_once( "php_prefix.php" );
+	
+	echo $xhmtml_header;
+</xsl:text>
+</xsl:processing-instruction>	
+<!-- vismor -->
+
     <html xmlns     = "http://www.w3.org/1999/xhtml"
 	  xmlns:m   = "http://www.w3.org/1998/Math/MathML"
 	  xmlns:svg = "http://www.w3.org/2000/svg">

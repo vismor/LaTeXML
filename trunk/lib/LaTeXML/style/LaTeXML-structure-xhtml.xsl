@@ -59,7 +59,12 @@
 
   <xsl:template match="ltx:abstract" xml:space="preserve">
     <div class='{f:classes(.)}'>
-      <xsl:if test="@name"><h6><xsl:apply-templates select="@name"/><xsl:text>.</xsl:text></h6></xsl:if>
+      <!-- vismor -->
+      <!-- 
+      <xsl:if test="@name"><h6><xsl:apply-templates select="@name"/><xsl:text>.</xsl:text></h6></xsl:if> 
+      -->
+      <h6>Abstract </h6>
+      <!-- vismor -->
       <xsl:apply-templates/>
     </div>
   </xsl:template>

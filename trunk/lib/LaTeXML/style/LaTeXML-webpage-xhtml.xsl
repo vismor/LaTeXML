@@ -43,10 +43,12 @@
 		      > &#x2023; <xsl:value-of select="@title"/></xsl:for-each>
       </title>
     </xsl:if>
-    <xsl:text>
-    </xsl:text>
+<!-- vismor -->
+<!--     <xsl:text> -->
+<!--     </xsl:text> -->
+<!-- <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/> -->
     <xsl:call-template name="metatype"/>
-    <xsl:if test="/*/ltx:navigation/ltx:ref[@class='start']"><xsl:text>
+   <xsl:if test="/*/ltx:navigation/ltx:ref[@class='start']"><xsl:text>
     </xsl:text>
       <link rel="start" href="{/*/ltx:navigation/ltx:ref[@class='start']/@href}"
 	    title="{normalize-space(.//ltx:navigation/ltx:ref[@class='start']/@title)}"/>
@@ -84,7 +86,18 @@
     </xsl:if>
     <!-- Should include ltx:keywords here? But, we don't know how the content is formatted!-->
     <xsl:text>
-  </xsl:text>
+    </xsl:text>
+<!-- vismor -->
+    <xsl:processing-instruction name="php">
+	<xsl:text>
+	  $pg_description = "</xsl:text>	
+<xsl:value-of select="normalize-space(*/ltx:title)"/><xsl:text>";
+	  require_once( "doc_header.php" );
+	</xsl:text>
+    </xsl:processing-instruction>  
+  <xsl:text>
+  </xsl:text>	
+<!-- vismor -->
   </head>
 </xsl:template>
 
@@ -96,7 +109,16 @@
   <xsl:text>
   </xsl:text>
   <body>
-    <xsl:call-template name="navbar"/>
+  <!-- vismor -->
+  <xsl:text>
+    </xsl:text>
+    <xsl:processing-instruction name="php">
+        $menu = "documents";
+	    require_once( "doc_prefix.php" );
+    </xsl:processing-instruction>
+  <!-- vismor -->
+  
+<xsl:call-template name="navbar"/>
     <xsl:text>
     </xsl:text>
     <div class='main'>
@@ -114,6 +136,12 @@
       </div>
       <xsl:text>
     </xsl:text>
+    <!-- vismor -->
+    <xsl:processing-instruction name="php">require_once( "doc_footer.php" ); </xsl:processing-instruction>
+  <xsl:text>
+  </xsl:text>
+    <!-- vismor -->
+    
   </body>
 </xsl:template>
 
@@ -139,12 +167,19 @@
   <xsl:if test="//ltx:navigation/ltx:TOC">
     <xsl:text>
     </xsl:text>
+<!--> vismor - we don't use the full blown navbar for each page. So don't waste time and space.
     <div class='navbar'>
       <xsl:apply-templates select="//ltx:navigation/ltx:ref[@class='start']"/>
       <xsl:apply-templates select="//ltx:navigation/ltx:TOC"/>
       <xsl:text>
       </xsl:text>
     </div>
+-->
+    <!-- vismor -->
+  <xsl:text>
+</xsl:text>
+    <xsl:processing-instruction name="php">require_once( "doc_content.php" ); </xsl:processing-instruction>
+    <!-- vismor -->
   </xsl:if>
 </xsl:template>
 
@@ -152,7 +187,12 @@
   <xsl:if test="//ltx:navigation/ltx:ref">
     <xsl:text>
     </xsl:text>
+<!-- vismor - temporary until we complete the conversion to LaTeXML 0.80 
     <div class='header'>
+-->
+    <div class='header eight'>
+      <!-- vismor -->
+      <!-- <xsl:apply-templates select="//ltx:navigation/ltx:ref[@class='up']"/> -->
       <xsl:apply-templates select="//ltx:navigation/ltx:ref[@class='up']"/>
       <xsl:apply-templates select="//ltx:navigation/ltx:ref[@class='previous']"/>
       <xsl:apply-templates select="//ltx:navigation/ltx:ref[@class='next']"/>
@@ -167,7 +207,8 @@
     <xsl:text>
     </xsl:text>
     <div class='footer'>
-      <xsl:value-of select='//ltx:date/node()'/>
+      <!-- vismor -->
+      <!-- <xsl:value-of select='//ltx:date/node()'/> -->
       <xsl:apply-templates select="//ltx:navigation/ltx:ref[@class='previous']"/>
       <xsl:apply-templates select="//ltx:navigation/ltx:ref[@class='next']"/>
       <xsl:text>

@@ -53,8 +53,23 @@
     <xsl:when test="not(@href) or @href=''">
       <span class="{concat(f:classes(.),' here')}"><xsl:apply-templates/></span>
     </xsl:when>
-    <xsl:otherwise>
-      <a href="{@href}" title="{@title}" class="{f:classes(.)}"><xsl:apply-templates/></a>
+	<xsl:otherwise>
+	<!-- vismor -->
+      <xsl:choose>
+		<xsl:when test="starts-with( @labelref,'LABEL:eq_' )">
+             <a href="{@href}" title="{@title}" class="{f:classes(.)}">Equation <xsl:apply-templates/></a>
+		</xsl:when>
+		<xsl:when test="starts-with( @labelref,'LABEL:fig_' )">
+             <a href="{@href}" title="{@title}" class="{f:classes(.)}">Figure <xsl:apply-templates/></a>
+		</xsl:when>
+		<xsl:when test="starts-with( @labelref,'LABEL:tbl_' )">
+             <a href="{@href}" title="{@title}" class="{f:classes(.)}">Table <xsl:apply-templates/></a>
+		</xsl:when>
+        <xsl:otherwise>
+          <a href="{@href}" title="{@title}" class="{f:classes(.)}"><xsl:apply-templates/></a>
+        </xsl:otherwise>
+      </xsl:choose>
+	<!-- vismor -->
     </xsl:otherwise>
   </xsl:choose>    
 </xsl:template>

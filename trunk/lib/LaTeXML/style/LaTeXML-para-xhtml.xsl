@@ -54,7 +54,7 @@
 </xsl:template>
 -->
 
-<xsl:template match="ltx:figure | ltx:table | ltx:float | ltx:listing">
+<xsl:template match="ltx:figure | ltx:table | ltx:listing | ltx:float">
   <div class='{f:classes(.)}'  style="{f:positioning(.)}">
     <xsl:call-template name="add_id"/>
     <xsl:choose>
