@@ -31,4 +31,4 @@ To quote from the [LaTexML web site](http://dlmf.nist.gov/LaTeXML):
 > such as HTML or XHTML, with options to convert the math into MathML (currently only presentation) or 
 > images.
 
-Visit that site for more information.
+Visit the site for more information.
