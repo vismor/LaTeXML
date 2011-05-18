@@ -1,0 +1,24 @@
+# -*- CPERL -*-
+# /=====================================================================\ #
+# |  booktabs                                                           | #
+# | Implementation for LaTeXML                                          | #
+# |=====================================================================| #
+# | Part of LaTeXML:                                                    | #
+# |  Public domain software not subject to copyright in the US.         | #
+# |---------------------------------------------------------------------| #
+# | Tim Vismor                                                  #_#     | #
+# | https://vismor.com/                                        (o o)    | #
+# \=========================================================ooo==U==ooo=/ #
+use LaTeXML::Package;
+use strict;
+
+# For now, skip the variable length mid rules.
+DefMacro('\cmidrule{}','\noalign{\smallskip}\cline{#1}\noalign{\smallskip}');
+
+# Implement the other rules as horizontal rules.
+DefMacro('\toprule','\noalign{\smallskip}\hline\noalign{\smallskip}');
+DefMacro('\midrule','\noalign{\smallskip}\hline\noalign{\smallskip}');
+DefMacro('\bottomrule','\noalign{\smallskip}\hline\noalign{\smallskip}');
+
+# Don't forget this, so perl knows the package was processed.
+1;

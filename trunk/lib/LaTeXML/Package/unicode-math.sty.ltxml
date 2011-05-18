@@ -1,0 +1,23 @@
+# -*- CPERL -*-
+# /=====================================================================\ #
+# |  unicode-math                                                          | #
+# | Implementation for LaTeXML                                          | #
+# |=====================================================================| #
+# | Part of LaTeXML:                                                    | #
+# |  Public domain software not subject to copyright in the US.         | #
+# |---------------------------------------------------------------------| #
+# | Tim Vismor                                                  #_#     | #
+# | https://vismor.com/                                        (o o)    | #
+# \=========================================================ooo==U==ooo=/ #
+use LaTeXML::Package;
+use strict;
+
+# Ignore mathspec/fontspec commands.
+DefMacro('\defaultfontfeatures{}','');
+DefMacro('\setmainfont{}','');
+DefMacro('\setsansfont{}','');
+DefMacro('\setmonofont{}','');
+DefMacro('\setmathfont[]{}','');
+
+# Don't forget this, so perl knows the package was processed.
+1;

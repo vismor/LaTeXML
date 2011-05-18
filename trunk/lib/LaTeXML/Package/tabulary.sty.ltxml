@@ -1,0 +1,18 @@
+# -*- CPERL -*-
+# /=====================================================================\ #
+# |  tabulary                                                           | #
+# | Implementation for LaTeXML                                          | #
+# |=====================================================================| #
+# | Part of LaTeXML:                                                    | #
+# |  Public domain software not subject to copyright in the US.         | #
+# |---------------------------------------------------------------------| #
+# | Tim Vismor                                                  #_#     | #
+# | https://vismor.com/                                        (o o)    | #
+# \=========================================================ooo==U==ooo=/ #
+use LaTeXML::Package;
+use strict;
+
+# Ignore this package for XHTML output, LaTeXML does not use it.
+
+# Don't forget this, so perl knows the package was processed.
+1;
