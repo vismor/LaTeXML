@@ -1,11 +1,11 @@
 **LaTeXML GIT Repository**
 
-This repository is used to maintain the LaTeXML software used on vismor.com.
+This repository houses the LaTeXML software used to maintain vismor.com.
 
 There are two active branches:
 
-- NIST: periodically updated from the LaTeXML svn repository at nist.gov
-- master: NIST merged with customizations for vismor.com.
+- NIST: mirrors the LaTeXML svn repository at nist.gov.
+- master: NIST merged with customizations used for maintaining vismor.com.
 
 Note to self. To update the NIST branch:
 
@@ -17,12 +17,14 @@ Note to self. To update the NIST branch:
 
 **LaTeXML Functionality**
 
-At vismor.com documents are maintained in Scrivener as MultiMarkdown. They are then compiled
-into TeX files by Scrivener. The TeX files are converted to PDF documents and XHTML web
-documents. LaTexML is used for the TeX &mdash;&gt; XHTML conversion. It is particularly adept at TeX
-to MathML conversions.
+At vismor.com documents are maintained in Scrivener as MultiMarkdown. When updates to the site are
+required, the MultiMarkdown documents are compiled into TeX files by Scrivener. The TeX files are 
+then converted to PDF documents and XHTML web documents. LaTexML is used for the TeX &mdash;&gt; XHTML 
+conversion. It is particularly adept at TeX &mdash;&gt; MathML conversions. It is also quite good at
+converting large TeX documents into an interlinked set of XTHML pages including navigation, table of
+contents, and bibliography.
 
-To quote from the [LaTexML web site](http://dlmf.nist.gov/LaTeXML):
+To quote from its description at the [LaTexML web site](http://dlmf.nist.gov/LaTeXML):
 
 > In brief, latexml is a program, written in Perl, that attempts to faithfully mimic TeX’s behaviour, 
 > but produces XML instead of dvi. The document model of the target XML makes explicit the model implied 
