@@ -19,7 +19,7 @@ Note to self. To update the NIST branch:
 
 At vismor.com documents are maintained in Scrivener as MultiMarkdown. They are then compiled
 into TeX files by Scrivener. The TeX files are converted to PDF documents and XHTML web
-documents. LaTexML is used for the TeX-XHTML conversion. It is particularly adept at TeX
+documents. LaTexML is used for the TeX &mdash;&gt; XHTML conversion. It is particularly adept at TeX
 to MathML conversions.
 
 To quote from the [LaTexML web site](http://dlmf.nist.gov/LaTeXML):
