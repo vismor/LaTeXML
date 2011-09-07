@@ -13,14 +13,14 @@
 default namespace = "http://dlmf.nist.gov/LaTeXML"
 
 ## This module defines the following `logical' block elements.
-Para.class |=
-     para
-   | theorem | proof
-   | figure | table | float | listing
+Para.class &=
+     para*
+    & theorem* & proof*
+    &  figure* & table* & float* & listing*
 
 ## Additionally, it defines these miscellaneous elements that can appear
 ## in both inline and block contexts.
-Misc.class  |= inline-para
+Misc.class  &= inline-para
 
 #======================================================================
 
@@ -97,8 +97,9 @@ figure_attributes =
   ## the vertical floating placement parameter that determines where the object is displayed.
   attribute placement { text }?
 
+### MiKo: only allowing one caption, is this right? same for table, float, and listing below
 ## Content model for \elementref{figure}.
-figure_model = (figure | Block.model | Caption.class)*
+figure_model = figure* & Block.model & Caption.class
 
 #======================================================================
 
@@ -116,7 +117,7 @@ table_attributes =
   attribute placement { text }?
 
 ## Content model for \elementref{table}.
-table_model = (table | Block.model | Caption.class)*
+table_model = table* & Block.model & Caption.class
 
 #======================================================================
 
@@ -134,7 +135,7 @@ float_attributes =
   attribute placement { text }?
 
 ## Content model for \elementref{float}.
-float_model = (float | Block.model | Caption.class)*
+float_model = float* & Block.model & Caption.class
 
 #======================================================================
 
@@ -152,7 +153,7 @@ listing_attributes =
   attribute placement { text }?
 
 ## Content model for \elementref{listing}.
-listing_model = (Block.model | Caption.class)*
+listing_model = Block.model  &  Caption.class
 
 #======================================================================
 
@@ -175,7 +176,7 @@ caption_attributes =
 
 ## Content model for \elementref{caption},
 ## basically Inline.model with tag included (normally, but not necessarily, tag would come first).
-caption_model = (tag | text | Inline.class | Misc.class | Meta.class)*
+caption_model = tag* & text & Inline.class  &  Misc.class & Meta.class
 
 #======================================================================
 
@@ -187,6 +188,7 @@ element toccaption { toccaption_attributes, toccaption_model }
 ## Attributes for \elementref{toccaption}.
 toccaption_attributes = Common.attributes
 
+### MiKo: here we allowed multiple tags, but now we can restrict, do we want that?
 ## Content model for \elementref{toccaption}.
-toccaption_model = (text | Inline.class | Misc.class | Meta.class | tag)*
+toccaption_model = text  &  Inline.class & Misc.class & Meta.class & tag*
 #======================================================================

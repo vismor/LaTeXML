@@ -14,7 +14,7 @@ default namespace = "http://dlmf.nist.gov/LaTeXML"
 
 ## This module defines the basic tabular, or alignment, structure.
 ## It is roughly parallel to the HTML model.
-Misc.class |= tabular
+Misc.class &= tabular*
 
 #======================================================================
 
@@ -33,8 +33,9 @@ tabular_attributes =
   ## the desired width of the tabular.
   attribute width { Length.type }?
 
+### MiKo: this can be tightened. Is it really true that we have more than one body?
 ## Content model for \elementref{tabular}.
-tabular_model = (thead | tfoot | tbody | tr)*
+tabular_model = thead* & tfoot* & tbody* & tr*
 
 #======================================================================
 

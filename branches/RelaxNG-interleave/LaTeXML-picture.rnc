@@ -19,14 +19,14 @@ namespace a = "http://relaxng.org/ns/compatibility/annotations/1.0"
 
 ## This module defines a picture environment, roughly a subset of SVG.
 ## NOTE: Consider whether it is sensible to drop this and incorporate SVG itself.
-Misc.class |= picture
+Misc.class &= picture*
 
 #======================================================================
 
 Picture.class =
-  g | rect | line | circle | path
- | arc | wedge | ellipse | polygon | bezier
- | parabola | curve | dots | grid | clip
+  g* & rect* & line* & circle* & path*
+ & arc* & wedge* & ellipse* & polygon* & bezier*
+ & parabola* & curve* & dots* & grid* & clip*
 
 ## These attributes correspond roughly to SVG, but need documentation.
 Picture.attributes =
@@ -86,7 +86,7 @@ picture_attributes =
   attribute content-tex { text }?
 
 ## Content model for \elementref{picture}.
-picture_model = (Picture.class | Inline.class | Misc.class | Meta.class)*
+picture_model = Picture.class & Inline.class & Misc.class & Meta.class
 
 #======================================================================
 
@@ -99,7 +99,7 @@ element g { g_attributes, g_model }
 g_attributes = Common.attributes, Picture.attributes, PictureGroup.attributes
 
 ## Content model for \elementref{g}.
-g_model = (Picture.class | Inline.class | Misc.class | Meta.class)*
+g_model = Picture.class & Inline.class & Misc.class & Meta.class
 
 #======================================================================
 
@@ -280,6 +280,6 @@ element clippath { clippath_attributes, clippath_model }
 clippath_attributes = Common.attributes, Picture.attributes
 
 ## Content model for \elementref{clippath}.
-clippath_model = (Picture.class | Inline.class | Misc.class | Meta.class)*
+clippath_model = Picture.class & Inline.class & Misc.class & Meta.class
 
 #======================================================================

@@ -28,7 +28,7 @@ element biblist { biblist_attributes, biblist_model }
 biblist_attributes = Common.attributes
 
 ## Content model for \elementref{biblist}.
-biblist_model = (bibentry | bibitem)*
+biblist_model = bibentry* & bibitem*
 
 # ======================================================================
 # bibitem is the formatted, presentation, form, typically information has been lost;
@@ -118,7 +118,7 @@ bibentry_attributes =
   attribute type { bibentry.type }
 
 ## Content model for \elementref{bibentry}.
-bibentry_model = Bibentry.class*
+bibentry_model = Bibentry.class
 
 #======================================================================
 
@@ -296,7 +296,7 @@ bib-related_attributes =
   attribute bibrefs { text }?
 
 ## Content model for \elementref{bib-related}.
-bib-related_model = Bibentry.class*
+bib-related_model = Bibentry.class
 
 # ---------------------------------------------------------------------
 
@@ -467,25 +467,26 @@ bib-data_model = Inline.model
 #======================================================================
 
 Bibentry.class =
-  bib-name
-  | bib-title
-  | bib-subtitle
-  | bib-key
-  | bib-type
-  | bib-date
-  | bib-publisher | bib-organization
-  | bib-place
-  | bib-part
-  | bib-related
-  | bib-edition
-  | bib-status
-  | bib-language
-  | bib-url
-  | bib-note
-  | bib-extract
-  | bib-identifier
-  | bib-review
-  | bib-links
-  | bib-data
+  bib-name*
+  & bib-title*
+  & bib-subtitle*
+  & bib-key*
+  & bib-type*
+  & bib-date*
+  & bib-publisher* 
+  & bib-organization*
+  & bib-place*
+  & bib-part*
+  & bib-related*
+  & bib-edition*
+  & bib-status*
+  & bib-language*
+  & bib-url*
+  & bib-note*
+  & bib-extract*
+  & bib-identifier*
+  & bib-review*
+  & bib-links*
+  & bib-data*
 
 #======================================================================

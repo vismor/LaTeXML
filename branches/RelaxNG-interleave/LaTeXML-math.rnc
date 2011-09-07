@@ -16,7 +16,7 @@ default namespace = "http://dlmf.nist.gov/LaTeXML"
 ## content, including the basic math container \elementref{Math}.  This element is
 ## considered inline, as it will be contained within some other block-level
 ## element, eg. \elementref{equation} for display-math.
-Inline.class |= Math
+Inline.class &= Math*
 
 ## This class defines the content of the \elementref{Math} element.
 ## Additionally, it could contain MathML or OpenMath, after postprocessing.
@@ -25,8 +25,8 @@ Math.class   = XMath
 ## These elements comprise the internal math representation, being
 ## the content of the \elementref{XMath} element.
 XMath.class = 
-    XMApp  | XMTok  | XMRef  | XMHint | XMArg
-  | XMWrap | XMDual | XMText | XMArray
+    XMApp* & XMTok* & XMRef* & XMHint* & XMArg*
+   & XMWrap* & XMDual* & XMText* & XMArray*
 
 #======================================================================
 
@@ -54,7 +54,7 @@ Math_attributes =
   attribute text { text }?
 
 ## Content model for \elementref{Math}.
-Math_model =   Math.class*
+Math_model =   Math.class
 
 #======================================================================
 XMath.attributes =
@@ -98,7 +98,7 @@ element XMath { XMath_attributes, XMath_model }
 XMath_attributes = Common.attributes
 
 ## Content model for \elementref{XMath}.
-XMath_model = XMath.class*
+XMath_model = XMath.class
 
 #======================================================================
 
@@ -177,7 +177,7 @@ XMApp_attributes =
   attribute scriptpos { text }?
 
 ## Content model for \elementref{XMApp}.
-XMApp_model = XMath.class*
+XMApp_model = XMath.class
 
 #======================================================================
 
@@ -235,7 +235,7 @@ XMText_attributes =
   attribute scriptpos { text }?
 
 ## Content model for \elementref{XMText}.
-XMText_model = (text | Inline.class | Misc.class)*
+XMText_model = text & Inline.class & Misc.class
 
 #======================================================================
 
@@ -266,7 +266,7 @@ XMWrap_attributes =
 
 
 ## Content model for \elementref{XMWrap}.
-XMWrap_model = XMath.class*
+XMWrap_model = XMath.class
 
 #======================================================================
 
@@ -289,7 +289,7 @@ XMArg_attributes =
   attribute scriptpos { text }?
 
 ## Content model for \elementref{XMArg}.
-XMArg_model = XMath.class*
+XMArg_model = XMath.class
 
 #======================================================================
 
@@ -372,5 +372,5 @@ XMCell_attributes =
   attribute thead {xsd:boolean}?
 
 ## Content model for \elementref{XMCell}.
-XMCell_model =   XMath.class*
+XMCell_model =   XMath.class
 #======================================================================

@@ -20,7 +20,7 @@ element document { document_attributes, document_model }
 
 
 ## The content allowable as the main body of the document.
-document.body.class = Para.model | paragraph | subsubsection | subsection | section | chapter | part
+document.body.class = Para.model & paragraph* & subsubsection* & subsection* & section* & chapter* & part*
 
 ## Attributes for \elementref{document}.
 document_attributes = Sectional.attributes
@@ -28,9 +28,9 @@ document_attributes = Sectional.attributes
 
 ## Content model for \elementref{document}.
 document_model =
- (FrontMatter.class | SectionalFrontMatter.class | Meta.class | titlepage)*,
-  document.body.class*,
-  BackMatter.class*
+ (FrontMatter.class & SectionalFrontMatter.class & Meta.class & titlepage*),
+  document.body.class,
+  BackMatter.class
 
 #======================================================================
 
@@ -39,13 +39,13 @@ part =
 element part { part_attributes, part_model }
 
 ## The content allowable as the main body of a part.
-part.body.class = Para.model | chapter
+part.body.class = Para.model & chapter*
 
 ## Attributes for \elementref{part}.
 part_attributes = Sectional.attributes
 
 ## Content model for \elementref{part}.
-part_model = SectionalFrontMatter.class*, part.body.class*
+part_model = SectionalFrontMatter.class, part.body.class
 
 #----------------------------------------------------------------------
 
@@ -54,13 +54,13 @@ chapter =
 element chapter { chapter_attributes, chapter_model }
 
 ## The content allowable as the main body of a chapter.
-chapter.body.class = Para.model | subparagraph | paragraph | subsubsection | subsection | section
+chapter.body.class = Para.model & subparagraph* & paragraph* & subsubsection* & subsection* & section*
 
 ## Attributes for \elementref{chapter}.
 chapter_attributes = Sectional.attributes
 
 ## Content model for \elementref{chapter}.
-chapter_model = SectionalFrontMatter.class*, chapter.body.class*
+chapter_model = SectionalFrontMatter.class, chapter.body.class
 
 #----------------------------------------------------------------------
 
@@ -69,13 +69,13 @@ section =
 element section { section_attributes, section_model }
 
 ## The content allowable as the main body of a section.
-section.body.class = Para.model | subparagraph | paragraph | subsubsection | subsection
+section.body.class = Para.model & subparagraph* & paragraph* & subsubsection* & subsection*
 
 ## Attributes for \elementref{section}.
 section_attributes = Sectional.attributes
 
 ## Content model for \elementref{section}.
-section_model = SectionalFrontMatter.class*, section.body.class*
+section_model = SectionalFrontMatter.class, section.body.class
 
 #----------------------------------------------------------------------
 
@@ -84,13 +84,13 @@ subsection =
 element subsection { subsection_attributes, subsection_model }
   
 ## The content allowable as the main body of a chapter.
-subsection.body.class = Para.model | subparagraph | paragraph | subsubsection
+subsection.body.class = Para.model & subparagraph* & paragraph* & subsubsection*
 
 ## Attributes for \elementref{subsection}.
 subsection_attributes = Sectional.attributes
 
 ## Content model for \elementref{subsection}.
-subsection_model = SectionalFrontMatter.class*, subsection.body.class*
+subsection_model = SectionalFrontMatter.class, subsection.body.class
 
 #----------------------------------------------------------------------
 
@@ -99,13 +99,13 @@ subsubsection =
 element subsubsection { subsubsection_attributes, subsubsection_model }
 
 ## The content allowable as the main body of a chapter.
-subsubsection.body.class = Para.model | subparagraph | paragraph
+subsubsection.body.class = Para.model & subparagraph* & paragraph*
 
 ## Attributes for \elementref{subsubsection}.
 subsubsection_attributes = Sectional.attributes
 
 ## Content model for \elementref{subsubsection}.
-subsubsection_model = SectionalFrontMatter.class*, subsubsection.body.class*
+subsubsection_model = SectionalFrontMatter.class, subsubsection.body.class
 
 #----------------------------------------------------------------------
 
@@ -115,13 +115,13 @@ paragraph =
 element paragraph { paragraph_attributes, paragraph_model }
 
 ## The content allowable as the main body of a chapter.
-paragraph.body.class = Para.model | subparagraph
+paragraph.body.class = Para.model & subparagraph*
 
 ## Attributes for \elementref{paragraph}.
 paragraph_attributes = Sectional.attributes
 
 ## Content model for \elementref{paragraph}.
-paragraph_model = SectionalFrontMatter.class*, paragraph.body.class*
+paragraph_model = SectionalFrontMatter.class, paragraph.body.class
 
 
 #----------------------------------------------------------------------
@@ -137,7 +137,7 @@ subparagraph.body.class = Para.model
 subparagraph_attributes = Sectional.attributes
 
 ## Content model for \elementref{subparagraph}.
-subparagraph_model = SectionalFrontMatter.class*, subparagraph.body.class*
+subparagraph_model = SectionalFrontMatter.class, subparagraph.body.class
 
 #======================================================================
 
@@ -146,13 +146,13 @@ appendix =
 element appendix { appendix_attributes, appendix_model }
 
 ## The content allowable as the main body of a chapter.
-appendix.body.class = Para.model | subparagraph | paragraph | subsubsection | subsection | section
+appendix.body.class = Para.model & subparagraph* & paragraph* & subsubsection* & subsection* & section*
 
 ## Attributes for \elementref{appendix}.
 appendix_attributes = Sectional.attributes
 
 ## Content model for \elementref{appendix}.
-appendix_model = SectionalFrontMatter.class*, appendix.body.class*
+appendix_model = SectionalFrontMatter.class, appendix.body.class
 
 #======================================================================
 
@@ -161,7 +161,7 @@ bibliography =
 element bibliography { bibliography_attributes, bibliography_model }
 
 ## The content allowable as the main body of a chapter.
-bibliography.body.class = Para.model | biblist
+bibliography.body.class = Para.model & biblist
 
 ## Attributes for \elementref{bibliography}.
 bibliography_attributes = 
@@ -171,7 +171,7 @@ bibliography_attributes =
   attribute files { text }?
 
 ## Content model for \elementref{bibliography}.
-bibliography_model = FrontMatter.class*, SectionalFrontMatter.class*, bibliography.body.class*
+bibliography_model = FrontMatter.class, SectionalFrontMatter.class, bibliography.body.class
 
 #======================================================================
 
@@ -180,13 +180,13 @@ index =
 element index { index_attributes, index_model }
 
 ## The content allowable as the main body of a chapter.
-index.body.class = Para.model | indexlist
+index.body.class = Para.model  & indexlist*
 
 ## Attributes for \elementref{index}.
 index_attributes = Sectional.attributes
 
 ## Content model for \elementref{index}.
-index_model = SectionalFrontMatter.class*, index.body.class*
+index_model = SectionalFrontMatter.class, index.body.class
 
 #----------------------------------------------------------------------
 
@@ -252,7 +252,7 @@ title_attributes =
 
 ## Content model for \elementref{title},
 ## basically Inline.model with tag included (normally, but not necessarily, tag would come first).
-title_model = (tag | text | Inline.class | Misc.class | Meta.class)*
+title_model = tag* & text & Inline.class & Misc.class & Meta.class
 
 #----------------------------------------------------------------------
 
@@ -264,7 +264,7 @@ element toctitle { toctitle_attributes, toctitle_model }
 toctitle_attributes = Common.attributes
 
 ## Content model for \elementref{toctitle}.
-toctitle_model = (text | Inline.class | Misc.class | Meta.class | tag)*
+toctitle_model = text & Inline.class & Misc.class & Meta.class & tag*
 
 #----------------------------------------------------------------------
 
@@ -285,7 +285,7 @@ creator =
 element creator { creator_attributes, creator_model }
 
 ## The content allowed in authors, editors, etc.
-Person.class = personname | contact
+Person.class = personname* & contact*
 
 ## Attributes for \elementref{creator}.
 creator_attributes = 
@@ -296,7 +296,7 @@ creator_attributes =
   attribute role { "author" | "editor" | "translator" | "contributor" | "translator" | text }?
 
 ## Content model for \elementref{creator}.
-creator_model = (Person.class | Misc.class)*
+creator_model = Person.class & Misc.class
 
 #----------------------------------------------------------------------
 # NOTE: This should be aligned with Bibname.
@@ -413,7 +413,7 @@ element titlepage { titlepage_attributes, titlepage_model }
 titlepage_attributes = Sectional.attributes
 
 ## Content model for \elementref{titlepage}.
-titlepage_model = (FrontMatter.class | SectionalFrontMatter.class | Block.class)*
+titlepage_model = FrontMatter.class & SectionalFrontMatter.class & Block.class
 
 #======================================================================
 # TOC & Navigation; generally added by postprocessing
@@ -462,7 +462,7 @@ element tocentry { tocentry_attributes, tocentry_model }
 tocentry_attributes = Common.attributes
 
 ## Content model for \elementref{tocentry}.
-tocentry_model = ( ref | toclist )*
+tocentry_model =  ref* & toclist*
 
 
 navigation =
@@ -480,7 +480,7 @@ element navigation { navigation_attributes, navigation_model }
 navigation_attributes = Common.attributes
 
 ## Content model for \elementref{navigation}.
-navigation_model = ( ref | TOC )*
+navigation_model = ref* & TOC*
 
 #======================================================================
 
@@ -497,20 +497,17 @@ FrontMatter.attributes =
 
 ## The content allowed for the front matter of each sectional unit,
 ## and the document.
-SectionalFrontMatter.class = title | toctitle | creator
+SectionalFrontMatter.class = title* & toctitle* & creator*
 
 ## The content allowed (in addition to \patternref{SectionalFrontMatter.class})
 ## for the front matter of a document.
-FrontMatter.class =
-  subtitle | date | abstract | acknowledgements
-  | keywords | classification
+FrontMatter.class = subtitle* & date* & abstract* & acknowledgements* & keywords* & classification
 
 ## The content allowed a the end of a document.
 ## Note that this includes random trailing Block and Para material,
 ## to support articles with figures and similar data appearing `at end'.
-BackMatter.class = bibliography | appendix | index | acknowledgements
-		 | Para.class | Meta.class
+BackMatter.class = bibliography* & appendix* & index* & acknowledgements* & Para.class & Meta.class
 
-Para.class |= TOC | navigation
+Para.class &= TOC* & navigation*
 
 #======================================================================

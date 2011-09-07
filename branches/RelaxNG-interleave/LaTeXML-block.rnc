@@ -13,14 +13,14 @@
 default namespace = "http://dlmf.nist.gov/LaTeXML"
 
 ## The block module defines the following `physical' block elements.
-Block.class |= 
-   p | equation | equationgroup | quote | block | listingblock
- | itemize | enumerate | description
+Block.class &= 
+   p*  & equation* & equationgroup* & quote* & block* & listingblock*
+         & itemize* & enumerate* & description*
 
 
 ## Additionally, it defines these miscellaneous elements that can appear
 ## in both inline and block contexts.
-Misc.class  |= inline-block | verbatim | break | graphics | svg
+Misc.class  &= inline-block* & verbatim* & break* & graphics* & svg*
 
 ## Additional Metadata that can be present in equations.
 EquationMeta.class = constraint
@@ -64,7 +64,7 @@ element equation { equation_attributes, equation_model }
 equation_attributes =  Common.attributes, Labelled.attributes
 
 ## Content model for \elementref{equation}.
-equation_model = (Math | MathFork  | \text | tabular | Meta.class | EquationMeta.class)* 
+equation_model = Math* & MathFork* & \text* & tabular* & Meta.class & EquationMeta.class
 
 #======================================================================
 
@@ -76,7 +76,7 @@ element equationgroup { equationgroup_attributes, equationgroup_model }
 equationgroup_attributes = Common.attributes, Labelled.attributes
 
 ## Content model for \elementref{equationgroup}.
-equationgroup_model = (equationgroup | equation | p | Meta.class | EquationMeta.class)*
+equationgroup_model = equationgroup* & equation* & p* & Meta.class & EquationMeta.class
 
 #======================================================================
 
@@ -107,7 +107,7 @@ MathBranch_attributes =
   attribute format { text }?
 
 ## Content model for \elementref{MathBranch}.
-MathBranch_model =  (Math|tr|td)*
+MathBranch_model =  Math* & tr* & td*
 
 #======================================================================
 
