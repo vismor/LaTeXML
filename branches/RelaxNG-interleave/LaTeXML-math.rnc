@@ -24,31 +24,29 @@ Math.class   = XMath
 
 ## These elements comprise the internal math representation, being
 ## the content of the \elementref{XMath} element.
-XMath.class = 
-    XMApp* & XMTok* & XMRef* & XMHint* & XMArg*
-   & XMWrap* & XMDual* & XMText* & XMArray*
+XMath.class = XMApp* & XMTok* & XMRef* & XMHint* & XMArg* & XMWrap* & XMDual* & XMText* & XMArray*
 
 #======================================================================
 
 Math =
 ## Outer container for all math. This holds the internal 
 ## \elementref{XMath} representation, as well as image data and other representations.
-element Math { Math_attributes, Math_model }
+element Math { Math_attributes & Math_model }
 
 ## Attributes for \elementref{Math}.
 Math_attributes = 
-  Common.attributes,
-  Imageable.attributes,
-  ID.attributes,
+  Common.attributes & 
+  Imageable.attributes & 
+  ID.attributes & 
 
   ## display or inline mode.
-  attribute mode { "display" | "inline" }?,
+  attribute mode { "display" | "inline" }? &
 
   ## reconstruction of the \TeX\ that generated the math.
-  attribute tex { text }?,
+  attribute tex { text }? &
 
   ## more semantic version of \attr{tex}.
-  attribute content-tex { text }?,
+  attribute content-tex { text }? &
 
   ## a textified representation of the math.
   attribute text { text }?
@@ -60,30 +58,30 @@ Math_model =   Math.class
 XMath.attributes =
 
   ## The role that this item plays in the Grammar.
-  attribute role { text }?,
+  attribute role { text }? &
 
   ## an open delimiter to enclose the object;
-  attribute open { text }?,
+  attribute open { text }? &
 
   ## an close delimiter to enclose the object;
-  attribute close { text }?,
+  attribute close { text }? &
 
   ## an open delimiter to enclose the argument list,
   ## when this token is applied to arguments with \elementref{XMApp}.
-  attribute argopen { text }?,
+  attribute argopen { text }? &
 
   ## a close delimiter to enclose the argument list,
   ## when this token is applied to arguments with \elementref{XMApp}.
-  attribute argclose { text }?,
+  attribute argclose { text }? &
 
   ## characters to separate arguments,
   ## when this token is applied to arguments with \elementref{XMApp}.
   ## Can be multiple characters for different argument positions;
   ## the last character is repeated if there aren't enough.
-  attribute separators { text }?,
+  attribute separators { text }? &
 
   ## trailing (presumably non-semantic) punctuation.
-  attribute punctuation { text }?,
+  attribute punctuation { text }? &
 
   ## an annotation placed by the parser when it suspects this token may be used as a function.
   attribute possibleFunction { text }?
@@ -92,7 +90,7 @@ XMath.attributes =
 
 XMath =
 ## Internal representation of mathematics.
-element XMath { XMath_attributes, XMath_model }
+element XMath { XMath_attributes & XMath_model }
 
 ## Attributes for \elementref{XMath}.
 XMath_attributes = Common.attributes
@@ -104,35 +102,35 @@ XMath_model = XMath.class
 
 XMTok =
 ## General mathematical token.
-element XMTok { XMTok_attributes, XMTok_model }
+element XMTok { XMTok_attributes & XMTok_model }
 
 ## Attributes for \elementref{XMTok}.
 XMTok_attributes = 
-  Common.attributes,
-  XMath.attributes,
-  ID.attributes,
+  Common.attributes &
+  XMath.attributes &
+  ID.attributes &
 
   ## The name of the token, typically the control sequence that created it.
-  attribute name { text }?,
+  attribute name { text }? & 
 
   ## A more semantic name corresponding to the intended meaning,
   ## such as the OpenMath name.
-  attribute meaning { text }?,
+  attribute meaning { text }? & 
 
   ## The OpenMath CD for which \attr{meaning} is a symbol.
-  attribute omcd { text }?,
+  attribute omcd { text }? & 
 
   ## Various random styling information. NOTE This needs to be made consistent.
-  attribute style { text }?,
+  attribute style { text }? & 
 
   ## The font, size a used for the symbol.
-  attribute font { text }?,
+  attribute font { text }? & 
 
   ## The size for the symbol, not presumed to be meaningful(?)
-  attribute size { text }?,
+  attribute size { text }? & 
 
   ## The color (CSS format) for the symbol, not presumed to be meaningful(?)
-  attribute color { text }?,
+  attribute color { text }? & 
 
   ## An encoding of the position of this token as a sub/superscript, used
   ## to handle aligned and nested scripts, both pre and post.
@@ -141,7 +139,7 @@ XMTok_attributes =
   ## indicating the level. These are used to position the scripts, 
   ## and to pair up aligned sub- and superscripts.
   ## NOTE: Clarify where this appears: token, base, script operator, apply?
-  attribute scriptpos { text }?,
+  attribute scriptpos { text }? & 
 
   ## NOTE: How is this used?
   attribute thickness { text }?
@@ -156,20 +154,20 @@ XMApp =
 ## Generalized application of a function, operator, whatever (the first child)
 ## to arguments (the remaining children).
 ## The attributes are a subset of those for \elementref{XMTok}.
-element XMApp { XMApp_attributes, XMApp_model }
+element XMApp { XMApp_attributes & XMApp_model }
 
 ## Attributes for \elementref{XMApp}.
 XMApp_attributes = 
-  Common.attributes,
-  XMath.attributes,
-  ID.attributes,
+  Common.attributes & 
+  XMath.attributes & 
+  ID.attributes & 
 
   ## The name of the token, typically the control sequence that created it.
-  attribute name { text }?,
+  attribute name { text }? &
 
   ## A more semantic name corresponding to the intended meaning,
   ## such as the OpenMath name.
-  attribute meaning { text }?,
+  attribute meaning { text }? &
 
   ## An encoding of the position of this token as a sub/superscript, used
   ## to handle aligned and nested scripts, both pre and post.
@@ -187,12 +185,12 @@ XMDual =
 ## Typically, the arguments are shared between the two branches:
 ## they appear in the content branch, with \attr{id}'s,
 ## and \elementref{XMRef} is used in the presentation branch
-element XMDual { XMDual_attributes, XMDual_model }
+element XMDual { XMDual_attributes &  XMDual_model }
 
 ## Attributes for \elementref{XMDual}.
 XMDual_attributes = 
-  Common.attributes,
-  XMath.attributes,
+  Common.attributes & 
+  XMath.attributes & 
   ID.attributes
 
 ## Content model for \elementref{XMDual}.
@@ -203,15 +201,15 @@ XMDual_model = XMath.class, XMath.class
 XMHint =
 ## Various spacing items, generally ignored in parsing.
 ## The attributes are a subset of those for \elementref{XMTok}.
-element XMHint { XMHint_attributes, XMHint_model }
+element XMHint { XMHint_attributes &  XMHint_model }
 
 ## Attributes for \elementref{XMHint}.
 XMHint_attributes = 
-  Common.attributes,
-  XMath.attributes,
-  ID.attributes,
-  attribute name { text }?,
-  attribute meaning { text }?,
+  Common.attributes & 
+  XMath.attributes & 
+  ID.attributes & 
+  attribute name { text }? &
+  attribute meaning { text }? &
   attribute style { text }?
 
 ## Content model for \elementref{XMHint}.
@@ -221,13 +219,13 @@ XMHint_model = empty
 
 XMText =
 ## Text appearing within math.
-element XMText { XMText_attributes, XMText_model }
+element XMText { XMText_attributes &  XMText_model }
 
 ## Attributes for \elementref{XMText}.
 XMText_attributes = 
-  Common.attributes,
-  XMath.attributes,
-  ID.attributes,
+  Common.attributes & 
+  XMath.attributes & 
+  ID.attributes & 
   
   ## An encoding of the position of this token as a sub/superscript, used
   ## to handle aligned and nested scripts, both pre and post.
@@ -243,21 +241,21 @@ XMWrap =
 ## Wrapper for a sequence of tokens used to assert the role of the
 ## contents in its parent. This element generally disappears after parsing.
 ## The attributes are a subset of those for \elementref{XMTok}.
-element XMWrap { XMWrap_attributes, XMWrap_model }
+element XMWrap { XMWrap_attributes &  XMWrap_model }
 
 ## Attributes for \elementref{XMWrap}.
 XMWrap_attributes = 
-  Common.attributes,
-  XMath.attributes,
-  ID.attributes,
+  Common.attributes & 
+  XMath.attributes & 
+  ID.attributes & 
 
-  attribute name { text }?,
+  attribute name { text }? &
 
   ## A more semantic name corresponding to the intended meaning,
   ## such as the OpenMath name.
-  attribute meaning { text }?,
+  attribute meaning { text }? &
 
-  attribute style { text }?,
+  attribute style { text }? &
 
   ## An encoding of the position of this token as a sub/superscript, used
   ## to handle aligned and nested scripts, both pre and post.
@@ -274,14 +272,14 @@ XMArg =
 ## Wrapper for an argument to a structured macro.
 ## It implies that its content can be parsed independently of its parent,
 ## and thus generally disappears after parsing.
-element XMArg { XMArg_attributes, XMArg_model }
+element XMArg { XMArg_attributes &  XMArg_model }
 
 ## Attributes for \elementref{XMArg}.
 XMArg_attributes = 
-  Common.attributes,
-  XMath.attributes,
-  ID.attributes,
-  attribute rule { text }?,
+  Common.attributes & 
+  XMath.attributes & 
+  ID.attributes & 
+  attribute rule { text }? &
 
   ## An encoding of the position of this token as a sub/superscript, used
   ## to handle aligned and nested scripts, both pre and post.
@@ -296,13 +294,13 @@ XMArg_model = XMath.class
 XMRef =
 ## Structure sharing element typically used in the presentation
 ## branch of an \elementref{XMDual} to refer to the arguments present in the content branch.
-element XMRef { XMRef_attributes, XMRef_model }
+element XMRef { XMRef_attributes &  XMRef_model }
 
 ## Attributes for \elementref{XMRef}.
 XMRef_attributes = 
-  Common.attributes,
-  XMath.attributes,
-  ID.attributes,
+  Common.attributes & 
+  XMath.attributes & 
+  ID.attributes & 
   IDREF.attributes
 
 ## Content model for \elementref{XMRef}.
@@ -313,17 +311,17 @@ XMRef_model = empty
 XMArray =
 ## Math Array/Alignment structure.
 # The attributes are a subset of those for \elementref{XMTok} or of \elementref{tabular}.
-element XMArray { XMArray_attributes, XMArray_model }
+element XMArray { XMArray_attributes &  XMArray_model }
 
 ## Attributes for \elementref{XMArray}.
 XMArray_attributes = 
-  Common.attributes,
-  XMath.attributes,
-  ID.attributes,
-  attribute name { text }?,
-  attribute meaning { text }?,
-  attribute style { text }?,
-  attribute vattach { "top" | "bottom" }?,
+  Common.attributes & 
+  XMath.attributes & 
+  ID.attributes & 
+  attribute name { text }? &
+  attribute meaning { text }? &
+  attribute style { text }? &
+  attribute vattach { "top" | "bottom" }? &
   attribute width { text }?
 
 ## Content model for \elementref{XMArray}.
@@ -332,7 +330,7 @@ XMArray_model = XMRow*
 #======================================================================
 XMRow =
 ## A row in a math alignment.
-element XMRow { XMRow_attributes, XMRow_model }
+element XMRow { XMRow_attributes &  XMRow_model }
 
 ## Attributes for \elementref{XMRow}.
 XMRow_attributes =  Common.attributes
@@ -344,29 +342,29 @@ XMRow_model = XMCell*
 
 XMCell =
 ## A cell in a row of a math alignment.
-element XMCell { XMCell_attributes, XMCell_model }
+element XMCell { XMCell_attributes &  XMCell_model }
 
 ## Attributes for \elementref{XMCell}.
 XMCell_attributes = 
-  Common.attributes,
+  Common.attributes & 
 
   ## indicates how many columns this cell spans or covers.
-  attribute colspan { xsd:nonNegativeInteger }?,
+  attribute colspan { xsd:nonNegativeInteger }? &
 
   ## indicates how many rows this cell spans or covers.
-  attribute rowpan { xsd:nonNegativeInteger }?,
+  attribute rowpan { xsd:nonNegativeInteger }? &
 
 # This would have been clearer, but messes up conversion to dtd
-#  attribute align { "left" | "right" | "center" | "justify" | text }?,
+#  attribute align { "left" | "right" | "center" | "justify" | text }? &
   ##  specifies the alignment of the content.
-  attribute align { text }?,
+  attribute align { text }? &
 
   ## specifies the desired width for the column.
-  attribute width { text }?,
+  attribute width { text }? &
 
   ## records a sequence of t or tt, r or rr, b or bb and l or ll
   ## for borders or doubled borders on any side of the cell.
-  attribute border { text }?,
+  attribute border { text }? &
 
   ## whether this cell corresponds to a table head or foot.
   attribute thead {xsd:boolean}?

@@ -26,10 +26,10 @@ Misc.class  &= inline-para
 
 para =
 ## A Logical paragraph. It has an \attr{id}, but not a \attr{label}.
-element para { para_attributes, para_model }
+element para { para_attributes &  para_model }
 
 ## Attributes for \elementref{para}.
-para_attributes = Common.attributes, ID.attributes
+para_attributes = Common.attributes &  ID.attributes
 
 
 ## Content model for \elementref{para}.
@@ -40,10 +40,10 @@ para_model = Block.model
 inline-para =
 ## An inline para. Actually, can appear in inline or block mode, but
 ## typesets its contents as para.
-element inline-para { inline-para_attributes, inline-para_model }
+element inline-para { inline-para_attributes &  inline-para_model }
 
 ## Attributes for \elementref{inline-para}.
-inline-para_attributes = Common.attributes, Positionable.attributes
+inline-para_attributes = Common.attributes &  Positionable.attributes
 
 ## Content model for \elementref{inline-para}.
 inline-para_model = Para.model
@@ -53,26 +53,26 @@ inline-para_model = Para.model
 theorem =
 ## A theorem or similar object. The \attr{class} attribute can be used to distinguish
 ## different kinds of theorem.
-element theorem { theorem_attributes, theorem_model }
+element theorem { theorem_attributes &  theorem_model }
 
 ## Attributes for \elementref{theorem}.
-theorem_attributes = Common.attributes, Labelled.attributes
+theorem_attributes = Common.attributes &  Labelled.attributes
 
 ## Content model for \elementref{theorem}.
-theorem_model = title?, Para.model
+theorem_model = title? & Para.model
 
 #======================================================================
 
 proof =
 ## A proof or similar object. The \attr{class} attribute can be used to distinguish
 ## different kinds of proof.
-element proof { proof_attributes, proof_model }
+element proof { proof_attributes &  proof_model }
 
 ## Attributes for \elementref{proof}.
-proof_attributes = Common.attributes, Labelled.attributes
+proof_attributes = Common.attributes &  Labelled.attributes
 
 ## Content model for \elementref{proof}.
-proof_model = title?, Para.model
+proof_model = title? & Para.model
 
 #======================================================================
 
@@ -86,13 +86,13 @@ Caption.class = caption | toccaption
 
 figure =
 ## A  figure, possibly captioned.
-element figure { figure_attributes, figure_model }
+element figure { figure_attributes &  figure_model }
 
 ## Attributes for \elementref{figure}.
 figure_attributes = 
-  Common.attributes,
-  Labelled.attributes,
-  Positionable.attributes,
+  Common.attributes & 
+  Labelled.attributes & 
+  Positionable.attributes & 
 
   ## the vertical floating placement parameter that determines where the object is displayed.
   attribute placement { text }?
@@ -105,13 +105,13 @@ figure_model = figure* & Block.model & Caption.class
 
 table =
 ## A  Table, possibly captioned. This is not necessarily a \elementref{tabular}.
-element table { table_attributes, table_model }
+element table { table_attributes &  table_model }
 
 ## Attributes for \elementref{table}.
 table_attributes = 
-  Common.attributes,
-  Labelled.attributes,
-  Positionable.attributes,
+  Common.attributes & 
+  Labelled.attributes & 
+  Positionable.attributes & 
 
   ## the vertical floating placement parameter that determines where the object is displayed.
   attribute placement { text }?
@@ -123,13 +123,13 @@ table_model = table* & Block.model & Caption.class
 
 float =
 ## A generic float, possibly captioned, something other than a table, figure or listing
-element float { float_attributes, float_model }
+element float { float_attributes &  float_model }
 
 ## Attributes for \elementref{float}.
 float_attributes = 
-  Common.attributes,
-  Labelled.attributes,
-  Positionable.attributes,
+  Common.attributes & 
+  Labelled.attributes & 
+  Positionable.attributes & 
 
   ## the vertical floating placement parameter that determines where the object is displayed.
   attribute placement { text }?
@@ -141,13 +141,13 @@ float_model = float* & Block.model & Caption.class
 
 listing =
 ## A Listing, possibly captioned.
-element listing { listing_attributes, listing_model }
+element listing { listing_attributes &  listing_model }
 
 ## Attributes for \elementref{listing}.
 listing_attributes = 
-  Common.attributes,
-  Labelled.attributes,
-  Positionable.attributes,
+  Common.attributes & 
+  Labelled.attributes & 
+  Positionable.attributes & 
 
   ## the floating placement parameter that determines where the object is displayed.
   attribute placement { text }?
@@ -159,16 +159,16 @@ listing_model = Block.model  &  Caption.class
 
 caption =
 ## A caption for a \elementref{table} or \elementref{figure}.
-element caption { caption_attributes, caption_model }
+element caption { caption_attributes &  caption_model }
 
 ## Attributes for \elementref{caption}.
 caption_attributes = 
-  Common.attributes,
-  attribute font { text }?,
+  Common.attributes & 
+  attribute font { text }? &
 
   ## Indicates the text size to use. (See \elementref{text})
   attribute size { "Huge" | "huge" | "LARGE" | "Large" | "large" | "normal"
-                 | "small" | "footnote" | "tiny" | text }?,
+                 | "small" | "footnote" | "tiny" | text }? &
 
   ## the color to use; any CSS compatible color specification.
   attribute color { text }?
@@ -183,7 +183,7 @@ caption_model = tag* & text & Inline.class  &  Misc.class & Meta.class
 toccaption =
 ## A short form of \elementref{table} or \elementref{figure} caption,
 ## used for lists of figures or similar.
-element toccaption { toccaption_attributes, toccaption_model }
+element toccaption { toccaption_attributes &  toccaption_model }
 
 ## Attributes for \elementref{toccaption}.
 toccaption_attributes = Common.attributes

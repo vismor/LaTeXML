@@ -25,12 +25,12 @@ Meta.class   &= note* &  indexmark* & ERROR*
 \text =
 ## General container for styled text.
 ## Attributes cover a variety of styling and position shifting properties.
-element text { text_attributes, text_model }
+element text { text_attributes &  text_model }
 
 ## Attributes for \elementref{text}.
 text_attributes = 
-  Common.attributes,
-  Positionable.attributes,
+  Common.attributes & 
+  Positionable.attributes & 
 
   ## Indicates the font to use. It consists of a space separated sequence
   ## of values representing the
@@ -43,7 +43,7 @@ text_attributes =
   ## whether unknown values specify family, series or shape.
   ## In postprocessing, these values are carried to the \attr{class} attribute,
   ## and can thus be effected by CSS.
-  attribute font { text }?,
+  attribute font { text }? &
 
   ## Indicates the text size to use. The values are modeled after the
   ## more abstract \LaTeX\ font size switches, rather than point-sizes.
@@ -51,12 +51,12 @@ text_attributes =
   ## In postprocessing, these values are carried to the \attr{class} attribute,
   ## and can thus be effected by CSS.
   attribute size { "Huge" | "huge" | "LARGE" | "Large" | "large" | "normal"
-                 | "small" | "footnote" | "tiny" | text }?,
+                 | "small" | "footnote" | "tiny" | text }? &
 
   ## the color to use; any CSS compatible color specification.
   ## In postprocessing, these values are carried to the \attr{class} attribute,
   ## and can thus be effected by CSS.
-  attribute color { text }?,
+  attribute color { text }? &
 
   ## the kind of frame or outline for the text.
   attribute framed { "rectangle" | "underline" | text }?
@@ -68,7 +68,7 @@ text_model = Inline.model
 
 emph =
 ## Emphasized text.
-element emph { emph_attributes, emph_model }
+element emph { emph_attributes &  emph_model }
 
 ## Attributes for \elementref{emph}.
 emph_attributes =  Common.attributes
@@ -80,11 +80,11 @@ emph_model = Inline.model
 
 acronym =
 ## Represents an acronym.
-element acronym { acronym_attributes, acronym_model }
+element acronym { acronym_attributes &  acronym_model }
 
 ## Attributes for \elementref{acronym}.
 acronym_attributes =
-  Common.attributes,
+  Common.attributes & 
   ## should be used to indicate the expansion of the acronym.
   attribute name { text }?
 
@@ -95,10 +95,10 @@ acronym_model = Inline.model
 
 rule =
 ## A Rule.
-element rule { rule_attributes, rule_model }
+element rule { rule_attributes &  rule_model }
 
 ## Attributes for \elementref{rule}.
-rule_attributes = Common.attributes, Positionable.attributes
+rule_attributes = Common.attributes &  Positionable.attributes
 
 ## Content model for \elementref{rule}.
 rule_model = empty
@@ -112,21 +112,21 @@ ref =
 ## attributes \attr{labelref}, \attr{idref} or \attr{href};
 ## Missing fields will usually be filled in during postprocessing,
 ## based on data extracted from the document(s).
-element ref { ref_attributes, ref_model }
+element ref { ref_attributes &  ref_model }
 
 ## Attributes for \elementref{ref}.
 ref_attributes =
-  Common.attributes,
+  Common.attributes & 
 
   ## reference to an internal identifier.
-  IDREF.attributes,
+  IDREF.attributes & 
 
   ## reference to a LaTeX labelled object;
   ## See the \attr{labels} attribute of \patternref{Labelled.attributes}.
-  attribute labelref { text }?,
+  attribute labelref { text }? &
 
   ## reference to an arbitrary url.
-  attribute href { text }?,
+  attribute href { text }? &
 
   ## a pattern encoding how the text content should be filled in during
   ## postprocessing, if it is empty.
@@ -136,7 +136,7 @@ ref_attributes =
   ## mixed with arbitrary characters. The 
   ## It can also be \texttt{fulltitle}, which indicates the title 
   ## with prefix and type if section numbering is enabled.
-  attribute show { text }?,
+  attribute show { text }? &
 
   ## gives a longer form description of the target,
   ## this would typically appear as a tooltip in HTML.
@@ -150,10 +150,10 @@ ref_model = Inline.model
 
 anchor =
 ## Inline anchor.
-element anchor { anchor_attributes, anchor_model }
+element anchor { anchor_attributes &  anchor_model }
 
 ## Attributes for \elementref{anchor}.
-anchor_attributes = Common.attributes, ID.attributes
+anchor_attributes = Common.attributes &  ID.attributes
 
 ## Content model for \elementref{anchor}.
 anchor_model = Inline.model
@@ -164,7 +164,7 @@ cite =
 ## A container for a bibliographic citation. The model is inline to
 ## allow arbitrary comments before and after the expected \elementref{bibref}(s)
 ## which are the specific citation.
-element cite { cite_attributes, cite_model }
+element cite { cite_attributes &  cite_model }
 
 ## Attributes for \elementref{cite}.
 cite_attributes = Common.attributes
@@ -176,26 +176,26 @@ cite_model = Inline.model
 
 bibref =
 ## A bibliographic citation refering to a specific bibliographic item.
-element bibref { bibref_attributes, bibref_model }
+element bibref { bibref_attributes &  bibref_model }
 
 ## Attributes for \elementref{bibref}.
 bibref_attributes =
-  Common.attributes,
-  IDREF.attributes,
+  Common.attributes & 
+  IDREF.attributes & 
 
   ## a comma separated list of bibliographic keys.
   ## (See the \attr{key} attribute of \elementref{bibitem} and \elementref{bibentry})
-  attribute bibrefs { text }?,
+  attribute bibrefs { text }? &
 
   ## a pattern encoding how the text content (of an empty bibref) will be filled in.
   ## Consists of strings \texttt{author}, \texttt{fullauthor}, \texttt{year},
   ## \texttt{number} and \texttt{title}
   ## (to be replaced by data from the bibliographic item)
   ## mixed with arbitrary characters.
-  attribute show { text }?,
+  attribute show { text }? &
 
   ## separator between formatted references
-  attribute separator { text }?,
+  attribute separator { text }? &
 
   ## separator between formatted years when duplicate authors are combined.
   attribute yyseparator { text }?
@@ -208,7 +208,7 @@ bibref_model = bibrefphrase*
 bibrefphrase =
 ## A preceding or following phrase used in composing a bibliographic reference,
 ## such as listing pages or chapter.
-element bibrefphrase { bibrefphrase_attributes, bibrefphrase_model }
+element bibrefphrase { bibrefphrase_attributes &  bibrefphrase_model }
 
 ## Attributes for \elementref{bibrefphrase}
 bibrefphrase_attributes = Common.attributes
@@ -221,14 +221,14 @@ bibrefphrase_model = Inline.model
 note =
 ## Metadata that covers several `out of band' annotations.
 ## It's content allows both inline and block-level content.
-element note { note_attributes, note_model }
+element note { note_attributes &  note_model }
 
 ## Attributes for \elementref{note}.
 note_attributes =
-  Common.attributes,
+  Common.attributes & 
 
   ## indicates the desired visible marker to be linked to the note.
-  attribute mark { text }?,
+  attribute mark { text }? &
 
   ## indicates the kind of note
   attribute role { "footnote" | text }?
@@ -242,7 +242,7 @@ note_model = Flow.model
 
 ERROR =
 ## error object for undefined control sequences, or whatever
-element ERROR { ERROR_attributes, ERROR_model }
+element ERROR { ERROR_attributes &  ERROR_model }
 
 ## Attributes for \elementref{ERROR}.
 ERROR_attributes = Common.attributes
@@ -256,14 +256,14 @@ indexmark =
 ## Metadata to record an indexing position. The content is 
 ## a sequence of \elementref{indexphrase}, each representing a level in
 ## a multilevel indexing entry.
-element indexmark { indexmark_attributes, indexmark_model }
+element indexmark { indexmark_attributes &  indexmark_model }
 
 ## Attributes for \elementref{indexmark}.
 indexmark_attributes =
-  Common.attributes,
+  Common.attributes & 
   ## a flattened form (like \attr{key}) of another \elementref{indexmark},
   ## used to crossreference.
-  attribute see_also { text }?,
+  attribute see_also { text }? &
 
   ## NOTE: describe this.
   attribute style { text }?
@@ -275,11 +275,11 @@ indexmark_model = indexphrase*, indexsee*
 
 indexphrase =
 ## A phrase within an \elementref{indexmark}
-element indexphrase { indexphrase_attributes, indexphrase_model }
+element indexphrase { indexphrase_attributes &  indexphrase_model }
 
 ## Attributes for \elementref{indexphrase}.
 indexphrase_attributes =
-  Common.attributes,
+  Common.attributes & 
 
   ## a flattened form of the phrase for generating an \attr{ID}.
   attribute key { text }?
@@ -289,14 +289,14 @@ indexphrase_model = Inline.model
 
 indexsee =
 ## A see-also phrase within an \elementref{indexmark}
-element indexsee { indexsee_attributes, indexsee_model }
+element indexsee { indexsee_attributes &  indexsee_model }
 
 ## Attributes for \elementref{indexsee}.
 indexsee_attributes =
-  Common.attributes,
+  Common.attributes & 
 
   ## a flattened form of the phrase for generating an \attr{ID}.
-  attribute key { text }?,
+  attribute key { text }? &
 
   ## a name for the see phrase, such as "see also".
   attribute name { text }?
