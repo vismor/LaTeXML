@@ -16,25 +16,25 @@ default namespace = "http://dlmf.nist.gov/LaTeXML"
 # Basic element classes:
 
 ## All strictly inline elements.
-Inline.class = notAllowed
+Inline.class = empty
 
 ## All `physical' block elements. 
 ## A physical block is typically displayed as a block, but
 ## may not constitute a complete logical unit.
-Block.class = notAllowed
+Block.class = empty
 
 ## Additional miscellaneous elements that can appear in
 ## both inline and block contexts.
-Misc.class = notAllowed
+Misc.class = empty
 
 ## All logical block level elements.
 ## A logical block typically contains one or more physical block elements.
 ## For example, a common situation might be \elementref{p},\elementref{equation},\elementref{p},
 ## where the entire sequence comprises a single sentence.
-Para.class = notAllowed
+Para.class = empty
 
 ## All metadata elements, typically representing hidden data.
-Meta.class = notAllowed
+Meta.class = empty
 
 # ======================================================================
 # Attribute types

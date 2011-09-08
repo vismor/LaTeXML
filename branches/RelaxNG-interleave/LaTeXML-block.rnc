@@ -242,7 +242,7 @@ element item { item_attributes &  item_model }
 item_attributes = Common.attributes &  Labelled.attributes
 
 ## Content model for \elementref{item}.
-item_model =   tag? & Para.model
+item_model =   tag? &  Para.model
 
 #======================================================================
 

@@ -14,7 +14,7 @@
 default namespace = "http://dlmf.nist.gov/LaTeXML"
 
 ## The inline module defines basic inline elements used throughout 
-Inline.class &= \text* & emph* & acronym* & rule* & anchor* & ref* & cite* & bibref
+Inline.class &= \text* & emph* & acronym* & rule* & anchor* & ref* & cite* & bibref*
 
 ## Additionally, it defines these meta elements. These are generally hidden,
 ## and can appear in inline and block contexts.

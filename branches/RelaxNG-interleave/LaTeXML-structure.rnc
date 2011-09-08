@@ -28,8 +28,8 @@ document_attributes = Sectional.attributes
 
 ## Content model for \elementref{document}.
 document_model =
- (FrontMatter.class & SectionalFrontMatter.class & Meta.class & titlepage*),
-  document.body.class,
+# (FrontMatter.class & SectionalFrontMatter.class & Meta.class & titlepage*),
+#  document.body.class,
   BackMatter.class
 
 #======================================================================
@@ -506,7 +506,7 @@ FrontMatter.class = subtitle* & date* & abstract* & acknowledgements* & keywords
 ## The content allowed a the end of a document.
 ## Note that this includes random trailing Block and Para material,
 ## to support articles with figures and similar data appearing `at end'.
-BackMatter.class = bibliography* & appendix* & index* & acknowledgements* & Para.class & Meta.class
+BackMatter.class = bibliography* & appendix* & index* & acknowledgements*  & Para.class & Meta.class
 
 Para.class &= TOC* & navigation*
 

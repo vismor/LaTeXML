@@ -13,14 +13,13 @@
 default namespace = "http://dlmf.nist.gov/LaTeXML"
 
 ## This module defines the following `logical' block elements.
-Para.class &=
-     para*
+Para.class &= para*
     & theorem* & proof*
     &  figure* & table* & float* & listing*
 
 ## Additionally, it defines these miscellaneous elements that can appear
 ## in both inline and block contexts.
-Misc.class  &= inline-para
+Misc.class  &= inline-para*
 
 #======================================================================
 
