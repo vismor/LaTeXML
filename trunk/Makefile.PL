@@ -98,8 +98,11 @@ MakeGrammar
 # whereas XHTML must be in a specific namespace.
 sub compile_XSLTs {
   my $styledir = 'LaTeXML/style';
+  # The (.) is supposed to match an open single or double quote;
+  # unfortunately, quoting the quote and having it work in all shells, windows,.....
+  # Let's just hope that whatever's matched is a quote!
   $$MORE_MACROS{XSLTTOHTML}
-    = '$(PERLRUN) -p -e \'s@\s*xmlns\s*=\s*(\"|\'\\\'\')http://www.w3.org/1999/xhtml\1@@\' ';
+    = '$(PERLRUN) -p -e \'s@\s*xmlns\s*=\s*(.)http://www.w3.org/1999/xhtml\1@@\' ';
   opendir(DIR,"lib/$styledir");
   my @xhtmls = grep(/^LaTeXML-(.*)-xhtml.xsl$/,readdir(DIR));
   closedir(DIR);
@@ -127,31 +130,41 @@ MakeXSLT
 # but for manual $(DESTDIR) is empty, so install.PL complains...
 sub install_TeXStyles {
   if(! $TEXMF){
-    my $kpsewhich = `which kpsewhich`; chomp($kpsewhich);
-    $TEXMF = $kpsewhich && `$kpsewhich --expand-var='\$TEXMFLOCAL'`;
-    chomp($TEXMF);
-    if(! $TEXMF){
-      warn "Warning: no TeX installation found.\n", 
-	"  TeX is NOT required, but LaTeXML will have limited functionality.\n";
-      return; }}
+    if(system("kpsewhich --expand-var='\$TEXMFLOCAL'")==0){ # can run kpsewhich?
+      $TEXMF = `kpsewhich --expand-var='\$TEXMFLOCAL'`; 
+      # Strip the quotes (they appear in windows, when spaces in pathnames(?))
+      # These quotes inhibit pasting pathnames togheter,
+      # but we DO need to wrap quotes around all completed paths!!
+      chomp($TEXMF); $TEXMF =~ s/^'//; $TEXMF=~ s/'$//; }}
+  if(! $TEXMF){
+    warn "Warning: no TeX installation found.\n", 
+      "  TeX is NOT required, but LaTeXML will have limited functionality.\n";
+    return; }
 
   $$MORE_MACROS{INST_TEXMFDIR}       = '$(INST_LIB)/LaTeXML/texmf';
   $$MORE_MACROS{INSTALLTEXMFDIR}     = "$TEXMF/tex/latex/latexml";
   $$MORE_MACROS{DESTINSTALLTEXMFDIR} = '$(DESTDIR)$(INSTALLTEXMFDIR)';
 
+  # The installation directory of TeX may well have spaces which screws up Make.
+  # we need to wrap any pathname that includes TEXMF with quotes in case of embedded spaces
+  # The quotes apparently don't hurt, when they completely enclose the path.
+  # ACTUALLY, (apparently) we must ONLY use double quotes to wrap with.
+  # (at least in the stuff that gets evaluated at a shell(like) level)
+  # It seems that single quotes cause some other oddness in windows(????)
+  # Note the dance below with -w shift; this is to keep from nesting quotes!
   $MORE_MAKERULES .= <<'InstallTeXStyles';
 
 pure_install ::
-	$(NOECHO) $(MKPATH) $(DESTINSTALLTEXMFDIR)
+	$(NOECHO) $(MKPATH) "$(DESTINSTALLTEXMFDIR)"
 	$(NOECHO) $(MOD_INSTALL) \
-		read $(INSTALLTEXMFDIR)/.packlist \
-		write $(DESTINSTALLTEXMFDIR)/.packlist \
-		$(INST_TEXMFDIR) $(DESTINSTALLTEXMFDIR)
-	- test -w $(INSTALLTEXMFDIR) && mktexlsr
+		read "$(INSTALLTEXMFDIR)/.packlist" \
+		write "$(DESTINSTALLTEXMFDIR)/.packlist" \
+		"$(INST_TEXMFDIR)" "$(DESTINSTALLTEXMFDIR)"
+	- perl -e "exit(1) unless -w shift;" "$(INSTALLTEXMFDIR)" && mktexlsr
 
 uninstall ::
-	$(NOECHO) $(UNINSTALL) $(INSTALLTEXMFDIR)/.packlist
-	- test -w $(INSTALLTEXMFDIR) && mktexlsr
+	$(NOECHO) $(UNINSTALL) "$(INSTALLTEXMFDIR)/.packlist"
+	- perl -e "exit(1) unless -w shift;" "$(INSTALLTEXMFDIR)" && mktexlsr
 
 InstallTeXStyles
 }

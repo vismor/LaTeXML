@@ -26,7 +26,7 @@ sub toString { $_[0]->[0]; }
 sub ptValue     { int($_[0]->[0]/655.36)/100; }
 
 sub unlist   { $_[0]; }
-sub revert   { Explode($_[0]->toString); }
+sub revert   { ExplodeText($_[0]->toString); }
 
 sub smaller  { ($_[0]->valueOf < $_[1]->valueOf)?$_[0]:$_[1]; }
 sub larger   { ($_[0]->valueOf > $_[1]->valueOf)?$_[0]:$_[1]; }
@@ -34,18 +34,12 @@ sub absolute { (ref $_[0])->new(abs( $_[0]->valueOf));}
 sub sign     { ($_[0]->valueOf<0)?-1:(($_[0]->valueOf>0)?1:0); }
 sub negate   { (ref $_[0])->new(- $_[0]->valueOf); }
 sub add      { (ref $_[0])->new($_[0]->valueOf + $_[1]->valueOf); }
-sub substract{ (ref $_[0])->new($_[0]->valueOf - $_[1]->valueOf); }
+sub subtract { (ref $_[0])->new($_[0]->valueOf - $_[1]->valueOf); }
 # arg 2 is a number
 sub multiply { (ref $_[0])->new(int($_[0]->valueOf * (ref $_[1] ? $_[1]->valueOf : $_[1]))); }
 
 sub stringify { "Number[".$_[0]->[0]."]"; }
 
-# Utility for printing sane numbers.
-sub simplify {
-  my $s = sprintf("%5f",$_[0]);
-  $s =~ s/0+$// if $s =~ /\./;
-  $s =~ s/\.$//;
-  $s; }
 
 #**********************************************************************
 # Strictly speaking, Float isn't part of TeX, but it's handy.
@@ -54,9 +48,17 @@ use LaTeXML::Global;
 use base qw(LaTeXML::Number);
 use strict;
 
-sub toString { LaTeXML::Number::simplify($_[0]->[0]); }
+sub toString { LaTeXML::Float::format($_[0]->[0]); }
 sub multiply { (ref $_[0])->new($_[0]->valueOf * (ref $_[1] ? $_[1]->valueOf : $_[1])); }
 sub stringify { "Float[".$_[0]->[0]."]"; }
+
+# Utility for formatting sane numbers.
+sub format {
+  my $s = sprintf("%5f",$_[0]);
+  $s =~ s/0+$// if $s =~ /\./;
+#  $s =~ s/\.$//;
+  $s =~ s/\.$/.0/;		# Seems TeX prints .0 which in odd corner cases, people use?
+  $s; }
 
 #**********************************************************************
 package LaTeXML::Dimension;
@@ -67,11 +69,11 @@ use strict;
 sub new {
   my($class,$sp)=@_;
   $sp = "0" unless $sp;
-  if($sp =~ /^(\d*\.?\d*)([a-zA-Z][a-zA-Z])$/){ # Dimensions given.
+  if($sp =~ /^(-?\d*\.?\d*)([a-zA-Z][a-zA-Z])$/){ # Dimensions given.
     $sp = $1 * $STATE->convertUnit($2); }
   bless [$sp||"0"],$class; }
 
-sub toString { LaTeXML::Number::simplify($_[0]->[0]/65536).'pt'; }
+sub toString { LaTeXML::Float::format($_[0]->[0]/65536).'pt'; }
 
 sub stringify { "Dimension[".$_[0]->[0]."]"; }
 #**********************************************************************
@@ -81,7 +83,7 @@ use base qw(LaTeXML::Dimension);
 
 # A mu is 1/18th of an em in the current math font.
 # Sigh.... I'll just take it as 2/3pt
-sub toString { LaTeXML::Number::simplify($_[0]->[0]/65536 * 0.66).'mu'; }
+sub toString { LaTeXML::Float::format($_[0]->[0]/65536 * 0.66).'mu'; }
 
 sub stringify { "MuDimension[".$_[0]->[0]."]"; }
 #**********************************************************************
@@ -114,9 +116,9 @@ sub new {
 sub toString { 
   my($self)=@_;
   my ($sp,$plus,$pfill,$minus,$mfill)=@$self;
-  my $string = LaTeXML::Number::simplify($sp/65536).'pt';
-  $string .= ' plus '. ($pfill ? $plus .$FILL[$pfill] : LaTeXML::Number::simplify($plus/65536) .'pt') if $plus != 0;
-  $string .= ' minus '.($mfill ? $minus.$FILL[$mfill] : LaTeXML::Number::simplify($minus/65536).'pt') if $minus != 0;
+  my $string = LaTeXML::Float::format($sp/65536).'pt';
+  $string .= ' plus '. ($pfill ? $plus .$FILL[$pfill] : LaTeXML::Float::format($plus/65536) .'pt') if $plus != 0;
+  $string .= ' minus '.($mfill ? $minus.$FILL[$mfill] : LaTeXML::Float::format($minus/65536).'pt') if $minus != 0;
   $string; }
 sub negate      { 
   my($pts,$p,$pf,$m,$mf)=@{$_[0]};
@@ -151,9 +153,9 @@ use base qw(LaTeXML::Glue);
 sub toString { 
   my($self)=@_;
   my ($sp,$plus,$pfill,$minus,$mfill)=@$self;
-  my $string = LaTeXML::Number::simplify($sp/65536 * 0.66)."mu";
-  $string .= ' plus '. ($pfill ? $plus .$FILL[$pfill] : LaTeXML::Number::simplify($plus/65536 * 0.66) .'mu') if $plus != 0;
-  $string .= ' minus '.($mfill ? $minus.$FILL[$mfill] : LaTeXML::Number::simplify($minus/65536 * 0.66).'mu') if $minus != 0;
+  my $string = LaTeXML::Float::format($sp/65536 * 0.66)."mu";
+  $string .= ' plus '. ($pfill ? $plus .$FILL[$pfill] : LaTeXML::Float::format($plus/65536 * 0.66) .'mu') if $plus != 0;
+  $string .= ' minus '.($mfill ? $minus.$FILL[$mfill] : LaTeXML::Float::format($minus/65536 * 0.66).'mu') if $minus != 0;
   $string; }
 
 sub stringify { "MuGlue[".join(',',@{$_[0]})."]"; }
@@ -173,7 +175,7 @@ sub toString {
 
 sub revert {
   my($self)=@_;
-  map( (Explode($_),T_SPACE,Revert($$self{$_})), keys %{$self}); }
+  map( (ExplodeText($_),T_SPACE,Revert($$self{$_})), keys %{$self}); }
 
 #**********************************************************************
 
@@ -204,6 +206,8 @@ sub stringify{ "Pair[".join(',',map($_->stringify, @{$_[0]}))."]"; }
 sub revert {
   my($self)=@_;
   (T_OTHER('('),Revert($$self[0]),T_OTHER(','),Revert($$self[1]),T_OTHER(')')); }
+
+sub negate { $_[0]->multiply(-1); }
 
 #**********************************************************************
 package LaTeXML::PairList;

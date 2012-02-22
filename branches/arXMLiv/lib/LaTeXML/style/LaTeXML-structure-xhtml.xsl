@@ -27,7 +27,7 @@
 
   <xsl:template match="ltx:document  | ltx:part | ltx:chapter
 		       | ltx:section | ltx:subsection | ltx:subsubsection
-		       | ltx:paragraph | ltx:subparagraph
+		       | ltx:paragraph | ltx:subparagraph | ltx:slide
 		       | ltx:bibliography | ltx:appendix | ltx:index" xml:space="preserve">
     <div class="{f:classes(.)}"><xsl:call-template name="add_id"/>
     <xsl:apply-templates/>
@@ -35,37 +35,37 @@
   </xsl:template>
 
   <xsl:template match="ltx:creator[@role='author']" xml:space="preserve">
-    <div class="{concat(f:classes(.),' ',@role)}"><xsl:apply-templates/></div>
+    <div class="{concat(f:classes(.),' ',@role)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></div>
   </xsl:template>
 
   <xsl:template match="ltx:personname" xml:space="preserve">
-    <div class="{f:classes(.)}"><xsl:apply-templates/></div>
+    <div class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></div>
   </xsl:template>
 
   <xsl:template match="ltx:contact[@role='address']" xml:space="preserve">
-    <div class="{concat(f:classes(.),' ',@role)}"><xsl:apply-templates/></div>
+    <div class="{concat(f:classes(.),' ',@role)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></div>
   </xsl:template>
 
   <xsl:template match="ltx:contact[@role='email']" xml:space="preserve">
-    <div class="{concat(f:classes(.),' ',@role)}"><a href="{concat('mailto:',text())}"><xsl:apply-templates/></a></div>
+    <div class="{concat(f:classes(.),' ',@role)}"><xsl:call-template name="add_id"/><a href="{concat('mailto:',text())}"><xsl:apply-templates/></a></div>
   </xsl:template>
 
   <xsl:template match="ltx:contact[@role='dedicatory']" xml:space="preserve">
-    <div class="{concat(f:classes(.),' ',@role)}"><xsl:apply-templates/></div>
+    <div class="{concat(f:classes(.),' ',@role)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></div>
   </xsl:template>
 
   <!-- put in footer -->
   <xsl:template match="ltx:date"/>
 
   <xsl:template match="ltx:abstract" xml:space="preserve">
-    <div class='{f:classes(.)}'>
+    <div class='{f:classes(.)}'><xsl:call-template name="add_id"/>
       <xsl:if test="@name"><h6><xsl:apply-templates select="@name"/><xsl:text>.</xsl:text></h6></xsl:if>
       <xsl:apply-templates/>
     </div>
   </xsl:template>
 
   <xsl:template match="ltx:acknowledgements">
-    <div class='{f:classes(.)}'>
+    <div class='{f:classes(.)}'><xsl:call-template name="add_id"/>
       <xsl:if test="@name"><h6><xsl:apply-templates select="@name"/><xsl:text>.</xsl:text></h6></xsl:if>
       <xsl:apply-templates/>
     </div>
@@ -77,7 +77,7 @@
 
 
   <xsl:template match="ltx:keywords" xml:space="preserve">
-    <div class='{f:classes(.)}'>
+    <div class='{f:classes(.)}'><xsl:call-template name="add_id"/>
       <xsl:if test="@name"><h6><xsl:apply-templates select="@name"/><xsl:text>:</xsl:text></h6></xsl:if>
       <xsl:apply-templates/>
     </div>
@@ -86,7 +86,7 @@
   <xsl:template match="ltx:classification">
     <xsl:text>
     </xsl:text>
-    <div class='{f:classes(.)}'>
+    <div class='{f:classes(.)}'><xsl:call-template name="add_id"/>
       <i><xsl:choose>
 	<xsl:when test='@scheme'><xsl:value-of select='@scheme'/></xsl:when>
 	<xsl:when test='@name'><xsl:value-of select='@name'/></xsl:when>
@@ -207,12 +207,18 @@
 	<xsl:otherwise><xsl:value-of select="$title_level"/></xsl:otherwise>
       </xsl:choose>
     </xsl:param>
-    <xsl:element name="{concat('h',$use_level)}">
+    <xsl:element name="{concat('h',$use_level)}"><xsl:call-template name="add_id"/>
       <xsl:attribute name="class">
 	<xsl:value-of select="concat(f:classes(.),
 			      ' ',concat(local-name(..),'-title'),
-			      f:if(@font,concat(' ',@font),'') )"/>
+			      f:if(@font,concat(' ',@font),''),
+			      f:if(@size,concat(' ',@size),''))"/>
       </xsl:attribute>
+      <xsl:if test="@color">
+	<xsl:attribute name="style">
+	  <xsl:value-of select="concat('color:',@color)"/>
+	</xsl:attribute>
+      </xsl:if>
       <xsl:apply-templates/>
     </xsl:element>
   </xsl:template>
@@ -221,7 +227,7 @@
 
 <!-- NOTE: Probably should support font, punct, etc, right? -->
   <xsl:template match="ltx:subtitle">
-    <div class="{f:classes(.)}"><xsl:apply-templates/></div>
+    <div class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></div>
   </xsl:template>
 
   <!-- ======================================================================
@@ -229,7 +235,7 @@
        ====================================================================== -->
 
   <xsl:template match="ltx:indexlist">
-    <ul class="{f:classes(.)}">
+    <ul class="{f:classes(.)}"><xsl:call-template name="add_id"/>
       <xsl:apply-templates/>
     </ul>
   </xsl:template>
@@ -243,7 +249,7 @@
   </xsl:template>
 
   <xsl:template match="ltx:indexrefs">
-    <span class="{f:classes(.)}"><xsl:apply-templates/></span>
+    <span class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></span>
   </xsl:template>
 
 </xsl:stylesheet>

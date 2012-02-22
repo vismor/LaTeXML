@@ -175,6 +175,11 @@ sub scanExternal {
     local @LaTeXML::Model::RelaxNG::PATHS
       = (pathname_directory($path),@LaTeXML::Model::RelaxNG::PATHS);
     my $node = $XMLPARSER->parseFile($path)->documentElement;
+    # Fetch any additional namespaces
+    foreach my $ns ($node->getNamespaces){
+	my($prefix,$uri)=($ns->getLocalName,$ns->getData);
+	next if $uri =~ m|^http://relaxng.org|; # Ignore RelaxNG namespaces(!!)
+	$$self{model}->registerDocumentNamespace($prefix,$uri); }
     (['module',$mod,$self->scanPattern($node,$inherit_ns)]); }
   else {
     Error(":missing_file:$name Couldn't find RelaxNG schema $name"); 
@@ -499,22 +504,39 @@ sub showSchema {
 #======================================================================
 # Generate TeX documentation for a Schema
 #======================================================================
+# The svg schema can only just barely be read in and recognized,
+# but it is structured in a way that makes a joke of our attempt at automatic documentation
+our $SKIP_SVG = 1;
+
 sub documentModules {
   my($self)=@_;
   my $docs="";
+  $$self{defined_patterns}={};
   foreach my $module (@{$$self{modules}}){
     my($op,$name,@content)=@$module;
+    next if $SKIP_SVG && $name =~ /^svg/;	# !!!!
     $docs = join("\n",$docs,
 		 "\\begin{schemamodule}{$name}",
 		 map($self->toTeX($_),@content),
 		 "\\end{schemamodule}"); }
+  foreach my $name (keys %{$$self{defined_patterns}}){
+    if($$self{defined_patterns}{$name} < 0){
+      $docs =~ s/\\patternadd{$name}/\\patterndefadd{$name}/s; }}
   $docs; }
 
 sub cleanTeX {
   my($string)=@_;
   return '\typename{text}' if $string eq '#PCDATA';
   $string =~ s/\#/\\#/g;
+  $string =~ s/<([^>]*)>/\\texttt{$1}/g; # An apparent convention <sometext> == ttfont?
   $string =~ s/_/\\_/g;
+  $string; }
+
+sub cleanTeXName {
+  my($string)=@_;
+  $string = cleanTeX($string);
+  $string =~ s/^ltx://;
+#  $string =~ s/:/../;
   $string; }
 
 sub toTeX {
@@ -527,8 +549,7 @@ sub toTeX {
       join(' ',map(cleanTeX($_),@data))."\n"; }
     elsif($op eq 'ref'){
       if(my $el = $$self{elementdefs}{$name}){
-	$el =~ s/^ltx://;
-	$el = cleanTeX($el);
+	$el = cleanTeXName($el);
       "\\elementref{$el}"; }
       else {
 	$name =~ s/^\w+://;	# Strip off qualifier!!!! (watch for clash in docs?)
@@ -543,7 +564,14 @@ sub toTeX {
       if($combiner){
 	my $body = $attr;
 	$body .= '\item['.($combiner eq 'choice' ? '\textbar=' : '\&=').'] '.$content if $content;
+	$$self{defined_patterns}{$name}=-1 unless defined $$self{defined_patterns}{$name};
 	"\\patternadd{$name}{$docs}{$body}\n";  }
+#      elsif((scalar(@data)==1) && (ref $data[0] eq 'ARRAY') && ($data[0][0] eq 'grammar')){
+#	print STDERR "========================================================\n";
+#	print STDERR "IMPORTING GRAMMAR! $name\n";
+#	print STDERR "docs: \"$docs\"\n";
+#	print STDERR "specs: ".join(', ',map($self->toTeX($_), @spec))."\n";
+#	"\\patterndef{$name}{$docs}{\\item[Import grammar] $data[0][1]}\n"; }
       else {
 	$attr = '\item[\textit{Attributes:}] \textit{empty}' if !$attr && ($name =~ /\\_attributes/);
 	$content = '\textit{empty}' if !$content && ($name =~ /\\_model/);
@@ -555,11 +583,15 @@ sub toTeX {
 	if($name !~ /_(attributes|model)$/){ # Skip the "used by" if element-specific attributes or moel.
 	  if(my $uses = $self->getSymbolUses($qname)){
 	    $body .= '\item[\textit{Used by}:] '.$uses; }}
-	"\\patterndef{$name}{$docs}{$body}\n"; }}
+	if((defined $$self{defined_patterns}{$name}) && ($$self{defined_patterns}{$name} > 0)){ # Already been defined???
+	  ''; }
+	else {
+	  $$self{defined_patterns}{$name} = 1;
+	  "\\patterndef{$name}{$docs}{$body}\n"; }}}
     elsif($op eq 'element'){
       my $qname = $name;
       $name =~ s/^ltx://;
-      $name = cleanTeX($name);
+      $name = cleanTeXName($name);
       my($docs,@spec)=$self->toTeXExtractDocs(@data);
       my($attr,$content) = $self->toTeXBody(@spec);
       $content = "\\typename{empty}" unless $content;
@@ -573,7 +605,7 @@ sub toTeX {
 	  $body .= '\item[\textit{Used by}:] '.$uses; }}
       "\\elementdef{$name}{$docs}{$body}\n"; }
     elsif($op eq 'attribute'){
-      $name = cleanTeX($name);
+      $name = cleanTeXName($name);
       my($docs,@spec)=$self->toTeXExtractDocs(@data);
       my $content = join(' ',map($self->toTeX($_),@spec)) || '\typename{text}';
       "\\attrdef{$name}{$docs}{$content}"; }
@@ -594,9 +626,13 @@ sub toTeX {
       my $content = join(' ',map($self->toTeX($_),@spec));
       "\\item[\\textit{Start}]\\textbf{==}\\ $content".($docs ? " \\par$docs" :''); }
     elsif($op eq 'grammar'){	# Don't otherwise mention it?
+##      join("\n",'\item[\textit{Grammar}:] '.$name,
       join("\n",map($self->toTeX($_),@data)); }
     elsif($op eq 'module'){
-      '\item[\textit{Module }\moduleref{'.cleanTeX($name).'}] included.'; }
+      if(($name=~ /^svg/) && $SKIP_SVG){
+	'\item[\textit{Module }'.cleanTeX($name).'] included.'; }
+      else {
+	'\item[\textit{Module }\moduleref{'.cleanTeX($name).'}] included.'; }}
     else {
       warn "RelaxNG->toTeX: Unrecognized item $op";
       "[$op: ".join(', ',map($self->toTeX($_),@data))."]"; }}
@@ -607,9 +643,12 @@ sub getSymbolUses {
   my($self,$qname)=@_;
   if(my $uses = $$self{usesname}{$qname}){
     my @uses = sort keys %$uses;
+    @uses = grep( ! /\bSVG./, @uses) if $SKIP_SVG; # !!!
     join(', ',
 	 map(/^pattern:[^:]*:(.*)$/ ? ('\patternref{'.cleanTeX($1).'}'):(), @uses),
-	 map(/^element:[^:]*:(.*)$/ ? ('\elementref{'.cleanTeX($1).'}'):(), @uses)); }
+	 map(/^pattern:[^:]*:(.*)$/ ? ('\patternref{'.cleanTeX($1).'}'):(), @uses),
+##	 map(/^element:[^:]*:(.*)$/ ? ('\elementref{'.cleanTeX($1).'}'):(), @uses)); }
+	 map(/^element:(.*)$/ ? ('\elementref{'.cleanTeXName($1).'}'):(), @uses)); }
   else { ''; }}
 
 # Extract any documentation nodes from @data

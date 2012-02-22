@@ -104,18 +104,12 @@ and can thus be effected by CSS.</a:documentation>
   </define>
   <define name="text_model">
     <a:documentation>Content model for \elementref{text}.
-DG: Quick fix disallowing Misc elements in text:
-text_model = Inline.model</a:documentation>
-    <zeroOrMore>
-      <choice>
-        <text/>
-        <ref name="Inline.class"/>
-        <ref name="Meta.class"/>
-      </choice>
-    </zeroOrMore>
+DG: Quick fix disallowing Misc elements in text:</a:documentation>
+    <ref name="Inline.model"/>
   </define>
   <!-- ====================================================================== -->
   <define name="emph">
+    <a:documentation>text_model = (text | Inline.class | Meta.class)*</a:documentation>
     <element name="emph">
       <a:documentation>Emphasized text.</a:documentation>
       <ref name="emph_attributes"/>
@@ -297,6 +291,25 @@ mixed with arbitrary characters.</a:documentation>
   </define>
   <define name="bibref_model">
     <a:documentation>Content model for \elementref{bibref}.</a:documentation>
+    <zeroOrMore>
+      <ref name="bibrefphrase"/>
+    </zeroOrMore>
+  </define>
+  <!-- ====================================================================== -->
+  <define name="bibrefphrase">
+    <element name="bibrefphrase">
+      <a:documentation>A preceding or following phrase used in composing a bibliographic reference,
+such as listing pages or chapter.</a:documentation>
+      <ref name="bibrefphrase_attributes"/>
+      <ref name="bibrefphrase_model"/>
+    </element>
+  </define>
+  <define name="bibrefphrase_attributes">
+    <a:documentation>Attributes for \elementref{bibrefphrase}</a:documentation>
+    <ref name="Common.attributes"/>
+  </define>
+  <define name="bibrefphrase_model">
+    <a:documentation>Content model for \elementref{bibrefphrase}</a:documentation>
     <ref name="Inline.model"/>
   </define>
   <!-- ====================================================================== -->
@@ -314,36 +327,6 @@ It's content allows both inline and block-level content.</a:documentation>
     <optional>
       <attribute name="mark">
         <a:documentation>indicates the desired visible marker to be linked to the note.</a:documentation>
-      </attribute>
-    </optional>
-    <optional>
-      <attribute name="property">
-        <a:documentation>indicates the RDFa property.</a:documentation>
-      </attribute>
-    </optional>
-    <optional>
-      <attribute name="content">
-        <a:documentation>indicates the RDFa content.</a:documentation>
-      </attribute>
-    </optional>
-    <optional>
-      <attribute name="rel">
-        <a:documentation>indicates the RDFa relation.</a:documentation>
-      </attribute>
-    </optional>
-    <optional>
-      <attribute name="resource">
-        <a:documentation>indicates the RDFa relation.</a:documentation>
-      </attribute>
-    </optional>
-    <optional>
-      <attribute name="datatype">
-        <a:documentation>indicates the RDFa content datatype.</a:documentation>
-      </attribute>
-    </optional>
-    <optional>
-      <attribute name="about">
-        <a:documentation>indicates the RDFa about.</a:documentation>
       </attribute>
     </optional>
     <optional>

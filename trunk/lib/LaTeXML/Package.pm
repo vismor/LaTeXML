@@ -22,14 +22,16 @@ use Text::Balanced;
 use base qw(Exporter);
 our @EXPORT = (qw(&DefExpandable
 		  &DefMacro &DefMacroI
-		  &DefPrimitive  &DefPrimitiveI &DefRegister &DefRegisterI
+		  &DefConditional &DefConditionalI
+		  &DefPrimitive  &DefPrimitiveI
+		  &DefRegister &DefRegisterI
 		  &DefConstructor &DefConstructorI
 		  &dualize_arglist
 		  &DefMath &DefMathI &DefEnvironment &DefEnvironmentI
 		  &convertLaTeXArgs),
 
 	       # Class, Package and File loading.
-	       qw(&RequirePackage &LoadClass &LoadPool &FindFile
+	       qw(&InputFile &InputDefinitions &RequirePackage &LoadClass &LoadPool &FindFile
 		  &DeclareOption &PassOptions &ProcessOptions &ExecuteOptions
 		  &AddToMacro &AtBeginDocument &AtEndDocument),
 
@@ -47,6 +49,9 @@ our @EXPORT = (qw(&DefExpandable
 	       # Mid-level support for writing definitions.
 	       qw(&Expand &Invocation &Digest &DigestIf
 		  &RawTeX &Let),
+
+	       # Font encoding
+	       qw(&DeclareFontMap &FontDecode &LoadFontMap),
 
 	       # Support for structured/argument readers
 	       qw(&ReadParameters &DefParameterType  &DefColumnType),
@@ -144,10 +149,20 @@ sub Let {
   ($token1)=TokenizeInternal($token1)->unlist unless ref $token1;
   ($token2)=TokenizeInternal($token2)->unlist unless ref $token2;
   $STATE->assignMeaning($token1,$STATE->lookupMeaning($token2),$scope); 
+  AfterAssignment();
   return; }
 
 sub Digest {
   $STATE->getStomach->digest(map((ref $_ ? $_ : Tokenize($_)),@_)); }
+
+# probably need to export this, as well?
+sub DigestLiteral {
+  # Perhaps should do StartSemiverbatim, but is it safe to push a frame? (we might cover over valid changes of state!)
+  my $font = LookupValue('font');
+  AssignValue(font=>$font->merge(encoding=>'ASCII'), 'local'); # try to stay as ASCII as possible
+  my $value = $STATE->getStomach->digest(map((ref $_ ? $_ : Tokenize($_)),@_));
+  AssignValue(font=>$font);
+  $value; }
 
 sub DigestIf {
   my($token)=@_;
@@ -184,9 +199,9 @@ sub roman_aux {
   $s; }
 
 # Convert the number to lower case roman numerals, returning a list of LaTeXML::Token
-sub roman { Explode(roman_aux(@_)); }
+sub roman { ExplodeText(roman_aux(@_)); }
 # Convert the number to upper case roman numerals, returning a list of LaTeXML::Token
-sub Roman { Explode(uc(roman_aux(@_))); }
+sub Roman { ExplodeText(uc(roman_aux(@_))); }
 
 #======================================================================
 # Cleaners
@@ -317,7 +332,7 @@ sub CounterValue {
 
 sub AfterAssignment {
   if(my $after = $STATE->lookupValue('afterAssignment')){
-    $STATE->assignValue(afterAssignment=>undef);
+    $STATE->assignValue(afterAssignment=>undef,'global');
     $STATE->getStomach->getGullet->unread($after); }	# primitive returns boxes, so these need to be digested!
 }
 
@@ -360,7 +375,10 @@ sub RefStepCounter {
   my $idtokens = $has_id && Expand(T_CS("\\the$ctr\@ID"));
   DefMacroI(T_CS('\@currentlabel'),undef,$refnumtokens,scope=>'global');
   DefMacroI(T_CS('\@currentID'),   undef,$idtokens,scope=>'global') if $has_id;
-  my $id      = $has_id && ToString(Digest($idtokens));
+###  my $id      = $has_id && ToString(Digest($idtokens));
+
+  my $id      = $has_id && ToString(DigestLiteral($idtokens));
+
   my $refnum  = ToString(Digest($refnumtokens));
   my $frefnum = ToString(Digest(Invocation(T_CS('\fnum@@'),$ctr)));
   # Any scopes activated for previous value of this counter (& any nested counters) must be removed.
@@ -409,21 +427,26 @@ sub ResetCounter {
 sub GenerateID {
   my($document,$node,$whatsit,$prefix)=@_;
   if(!$node->hasAttribute('xml:id')){
-    my $parent =  $document->findnode('ancestor::*[@xml:id][1]',$node)
+    my $ancestor =  $document->findnode('ancestor::*[@xml:id][1]',$node)
       || $document->getDocument->documentElement;
-    my $ctrkey = '_ID_counter_'.$prefix;
-    my $ctr = ($parent && $parent->getAttribute($ctrkey)) || 0;
-## Old versions don't like this!!!
-##    my $parent_id = $parent && $parent->getAttribute('xml:id');
-    my $parent_id = $parent && $parent->getAttributeNS("http://www.w3.org/XML/1998/namespace",'id');
+    ## Old versions don't like $ancestor->getAttribute('xml:id');
+    my $ancestor_id = $ancestor && $ancestor->getAttributeNS("http://www.w3.org/XML/1998/namespace",'id');
+    # If we've got no $ancestor_id, then we've got no $ancestor (no document yet!),
+    # or $ancestor IS the root element (but without an id);
+    # If we also have no $prefix, we'll end up with an illegal id (just digits)!!!
+    # We'll use "id" for an id prefix; this will work whether or not we have an $ancestor.
+    $prefix = 'id' unless $prefix || $ancestor_id;
 
-    my $id = ($parent_id ? $parent_id."." : '').$prefix. (++$ctr);
-    $parent->setAttribute($ctrkey=>$ctr) if $parent;
+    my $ctrkey = '_ID_counter_'.(defined $prefix ? $prefix.'_' : '');
+    my $ctr = ($ancestor && $ancestor->getAttribute($ctrkey)) || 0;
+
+    my $id = ($ancestor_id ? $ancestor_id."." : '').(defined $prefix ? $prefix : '').(++$ctr);
+    $ancestor->setAttribute($ctrkey=>$ctr) if $ancestor;
     $document->setAttribute($node,'xml:id'=>$id);
 }}
 
 #======================================================================
-# Readers for reading various data types
+#
 #======================================================================
 
 sub Expand            { $STATE->getStomach->getGullet->expandTokens(@_); }
@@ -435,6 +458,11 @@ sub Invocation        {
   else {
     Fatal(":undefined:".Stringify($token)." Cannot invoke ".Stringify($token)."; it is undefined");
     Tokens(); }}
+
+sub RawTeX {
+  my($text)=@_;
+  Digest(TokenizeInternal($text));
+  return; }
 
 #======================================================================
 # Non-exported support for defining forms.
@@ -455,7 +483,6 @@ sub forbidMath {
   Warn(":unexpected:$cs $cs should not appear in math mode") if LookupValue('IN_MATH');
   return; }
 
-
 #**********************************************************************
 # Definitions
 #**********************************************************************
@@ -468,7 +495,7 @@ sub forbidMath {
 # substituted for any #1,...), or a sub which returns a list of tokens (or just return;).
 # Those tokens, if any, will be reinserted into the input.
 # There are no options to these definitions.
-our $expandable_options = {isConditional=>1, scope=>1, locked=>1};
+our $expandable_options = {scope=>1, locked=>1};
 sub DefExpandable {
   my($proto,$expansion,%options)=@_;
   Warn(":misdefined:DefExpandable DefExpandable ($proto) is deprecated; use DefMacro");
@@ -476,7 +503,7 @@ sub DefExpandable {
 
 # Define a Macro: Essentially an alias for DefExpandable
 # For convenience, the $expansion can be a string which will be tokenized.
-our $macro_options = {isConditional=>1, scope=>1, locked=>1};
+our $macro_options = {scope=>1, locked=>1};
 sub DefMacro {
   my($proto,$expansion,%options)=@_;
   CheckOptions("DefMacro ($proto)",$macro_options,%options);
@@ -491,9 +518,42 @@ sub DefMacroI {
   AssignValue(ToString($cs).":locked"=>1) if $options{locked};
   return; }
 
-sub RawTeX {
-  my($text)=@_;
-  Digest(TokenizeInternal($text));
+#======================================================================
+# Defining Conditional Control Sequences.
+#======================================================================
+# Define a conditional control sequence. Its processing takes place in
+# the Gullet.  The test is applied to the arguments (if any),
+# which determines which branch is executed.
+# If the test is undefined, the conditional is a "user defined" one;
+# Two additional primitives are defined \footrue and \foofalse;
+# the test is then determined by the most recently called of those.
+
+# If you supply a skipper instead of a test, it is also applied to the arguments
+# and should skip to the right place in the following \or, \else, \fi.
+# This is ONLY used for \ifcase.
+our $conditional_options = {scope=>1, locked=>1, skipper=>1};
+sub DefConditional {
+  my($proto,$test,%options)=@_;
+  CheckOptions("DefConditional ($proto)",$conditional_options,%options);
+  DefConditionalI(parsePrototype($proto),$test,%options); }
+
+sub DefConditionalI {
+  my($cs,$paramlist,$test,%options)=@_;
+  $cs = coerceCS($cs);
+  if((! defined $test) && (! defined $options{skipper})){
+    # define a "user defined" conditional, like with \newif
+    if(ToString($cs) =~ /^\\if(.*)$/){
+      my $name = $1;
+      $test = sub { LookupValue('Boolean:'.$name); };
+      DefPrimitiveI(T_CS('\\'.$name.'true'),undef, sub { AssignValue('Boolean:'.$name => 1); });
+      DefPrimitiveI(T_CS('\\'.$name.'false'),undef,sub { AssignValue('Boolean:'.$name => 0); }); }
+    else {
+      Error(":misdefined:".Stringify($cs)." The conditional ".Stringify($cs).
+	    " is being defined but doesn't start with \\if"); }}
+
+  $STATE->installDefinition(LaTeXML::Conditional->new($cs,$paramlist,$test,%options),
+			    $options{scope});
+  AssignValue(ToString($cs).":locked"=>1) if $options{locked};
   return; }
 
 #======================================================================
@@ -886,25 +946,22 @@ sub DefEnvironmentI {
 #======================================================================
 
 # Specify the properties of a Node tag.
-our $tag_options = {autoOpen=>1, autoClose=>1, afterOpen=>1, afterClose=>1};
-
+our $tag_options = {autoOpen=>1, autoClose=>1, afterOpen=>1, afterClose=>1,
+		    'afterOpen:early'=>1, 'afterClose:early'=>1,
+		    'afterOpen:late'=>1, 'afterClose:late'=>1};
+our $tag_prepend_options={'afterOpen:early'=>1, 'afterClose:early'=>1};
+our $tag_append_options={'afterOpen'=>1, 'afterClose'=>1,
+			 'afterOpen:late'=>1, 'afterClose:late'=>1};
 sub Tag {
   my($tag,%properties)=@_;
   CheckOptions("Tag ($tag)",$tag_options,%properties);
   my $model = $STATE->getModel;
-  $model->setTagProperty($tag,autoOpen=>$properties{autoOpen})
-    if $properties{autoOpen};
-  $model->setTagProperty($tag,autoClose=>$properties{autoClose})
-    if $properties{autoClose};
-  # ADD after daemons to any already present.
-  $model->setTagProperty($tag,
-	 afterOpen=>flatten($model->getTagProperty($tag,'afterOpen'),
-			    $properties{afterOpen}))
-    if $properties{afterOpen};
-  $model->setTagProperty($tag,
-         afterClose=>flatten($model->getTagProperty($tag,'afterClose'),
-			     $properties{afterClose}))
-    if $properties{afterClose};
+  foreach my $key (keys %properties){
+    my $new = $properties{$key};
+    my $old = $model->getTagProperty($tag,$key);
+    if(   $$tag_prepend_options{$key}){ $new=flatten($new,$old); }
+    elsif($$tag_append_options{$key}){  $new=flatten($old,$new); }
+    $model->setTagProperty($tag,$key=>$new); }
   return; }
 
 sub DocType {
@@ -938,38 +995,174 @@ sub RegisterDocumentNamespace {
 # Package, Class and File Loading
 #======================================================================
 
-# Find a file:
-# If the raw option is given, 
-#   it searches for the file.
-# If $ext is given or $file ends with a known extension
-# (eg. .sty for packages, .cls for classes, etc):
-#    the file is sought first as $file.$ext.ltxml then as $file.$ext
-# Otherwise, the file is sought in a more TeX-like fashion:
-#    the file is sought as $file.tex.ltxml, $file.tex, $file.ltxml or $file.
-# [ie. if raw=>1, we do _not_ loo for .ltxml forms]
-our $findfile_options = {raw=>1, type=>1};
+# Does this test even make sense (or can it?)
+# Shouldn't this more likely be dependent on the context?
+# Ah, but what about \InputFileIfExists type stuff...
+# should we assume a raw type can be processed if being read from within a raw type????
+# yeah, that sounds about right...
+sub pathname_is_raw {
+  my($pathname)=@_;
+  ($pathname =~ /\.(tex|pool|sty|cls|clo|cnf|cfg|ldf|def|dfu)$/); }
+
+our $findfile_options = {type=>1, notex=>1, noltxml=>1};
 sub FindFile {
   my ($file,%options)=@_;
-  CheckOptions("FindFile ($file)",$findfile_options,%options);
-  my $paths = LookupValue('SEARCHPATHS');
   $file = ToString($file);
-  $file .= ".$options{type}" if $options{type};
   if($options{raw}){
-    pathname_find_x("$file",paths=>$paths); }
-  elsif($options{type} || ($file =~ /\.(tex|pool|sty|cls|clo|cnf|cfg)$/)){ # explicit or known extensions
-    pathname_find_x("$file.ltxml",paths=>$paths,installation_subdir=>'Package')
-      || pathname_find_x("$file",paths=>$paths); }
-  else {
-    pathname_find_x("$file.tex.ltxml",paths=>$paths,installation_subdir=>'Package')
-      || pathname_find_x("$file.tex",paths=>$paths)
-	|| pathname_find_x("$file.ltxml",paths=>$paths,installation_subdir=>'Package')
-	  || pathname_find_x("$file",paths=>$paths); }}
+    delete $options{raw};
+    Warn(":obsolete:raw FindFile $file option raw is obsolete; it is not needed"); }
+  CheckOptions("FindFile ($file)",$findfile_options,%options);
+  $file .= ".$options{type}" if $options{type};
+  # If we REALLY want to rely on k-path-search, we could just push $PATHS onto TEXINPUTS
+  # and ONLY use kpsewhich...? would that be faster or better in any way?
+  my $paths    = LookupValue('SEARCHPATHS');
+  (        !$options{noltxml} && !$options{type}
+	   && ( pathname_find_x("$file.tex.ltxml",paths=>$paths,installation_subdir=>'Package')
+		|| pathname_kpathsearch("$file.tex.ltxml") ))
+    || (   !$options{notex}   && !$options{type}
+	   && ( pathname_find_x("$file.tex",paths=>$paths) || pathname_kpathsearch("$file.tex") ))
+      || ( !$options{noltxml}
+	   && ( pathname_find_x("$file.ltxml",paths=>$paths,installation_subdir=>'Package')
+		|| pathname_kpathsearch("$file.ltxml") ))
+	||(!$options{notex}
+	   && ( pathname_find_x("$file",paths=>$paths) || pathname_kpathsearch($file) ));
+ }
+
+sub pathname_kpathsearch {
+  my($path)=@_;
+  my $kpsewhich = $ENV{LATEXML_KPSEWHICH} || 'kpsewhich';
+  my $found = `$kpsewhich $path`; 
+  chomp($found); 
+  $found; }
 
 sub pathname_find_x {
   my($path,%options)=@_;
   if(LookupValue($path.'_contents')){
     return $path; }
   pathname_find($path,%options); }
+
+# This needs to evolve into a useful interface.
+# Perhaps need to expose a lower level as well: OpenMouth ?
+# So far, we're expecting that the file likely contains content,
+# but if in latex, and in preamble it actually better be a style file
+# (and we'll even try to find a .sty instead of .tex?)
+# In TeX, if there's no file by that name, we may also try for a style file.
+# 
+our $inputfile_options={};
+sub InputFile {
+  my($request,%options)=@_;
+  $request = ToString($request);
+  CheckOptions("InputFile ($request)",$inputfile_options,%options);
+  # HEURISTIC! First check if equivalent style file, but only IFF we are in preamble
+  my ($dir,$name,$type) = pathname_split($request);
+  my $file = $name; $file .= '.'.$type if $type;
+  my $altpath;
+  # Firstly, check if we are going to OVERRIDE the requested file with a style file.
+  if((! $dir) && (!$type || ($type eq 'tex')) # No specific directory, but apparently to a raw tex file.
+     && (LookupValue('inPreamble') || !FindFile($file)) # AND, in preamble so it SHOULD be style file, OR also if we can't find the raw file.
+     && ($altpath=FindFile($name,type=>'sty'))){	# AND there IS such a style file
+    Info(":override Overriding input of $request with $altpath");
+    RequirePackage($name); }	# Then override, and just assume we'll find $name as a package style file!
+  elsif(LookupValue('INTERPRETING_DEFINITIONS')){
+    InputDefinitions($request)
+      || Error(":missing_file:$request Cannot find file $request in paths "
+	       .join(', ',@{$STATE->lookupValue('SEARCHPATHS')})); }
+  elsif(my $path = FindFile($request)){			# Else if the requested file was found, we'll input it
+    # note that this may _STILL_ end up reading $path.ltxml if there is one.
+    $STATE->getStomach->getGullet->input($path); }
+  else {			# Otherwise, the file seems to be missing.
+    $STATE->noteStatus(missing=>$request);
+    Error(":missing_file:$request Cannot find file $request in paths "
+	  .join(', ',@{$STATE->lookupValue('SEARCHPATHS')})); }
+  return; }
+
+# InputFile should end up something like this...
+# sub InputFile {
+#   my($pathname)=@_;
+#   my($dir,$name,$type)=pathname_split($pathname);
+#   if($type eq 'ltxml'){
+#     loadLTXML($pathname); }		# Perl module.
+#    elsif(($type ne 'tex') && ($pathname =~ /\.(tex|pool|sty|cls|clo|cnf|cfg|ldf|def|dfu)$/)){ # (attempt to) interpret a style file.  
+#      loadTeXDefinitions($pathname); }
+#   else {
+#     loadTeXContent($pathname); }}
+
+# LOW-LEVEL input processing
+#  if($type eq 'ltxml'){		# Perl module.
+# Do we have the option of file_contents?
+sub loadLTXML {
+  my($pathname)=@_;
+  my($dir,$name,$type)=pathname_split($pathname);
+  return if LookupValue($name.'.'.$type.'_loaded');
+  AssignValue($name.'.'.$type.'_loaded'=>1,'global');
+  AssignValue($name.'_loaded'=>1,'global');
+  my $stomach = $STATE->getStomach;
+  my $gullet = $stomach->getGullet;
+
+  $gullet->openMouth(LaTeXML::PerlMouth->new($pathname),0);
+  # ARE we going to assume that anything loaded by the ltxml is going to be definitions?
+  # and so will be forced to read through, immediately?
+  # Do we have (or NEED?) a way to enforce this?
+  my $pmouth = $$gullet{mouth};
+  do $pathname; 
+  Fatal(":perl:die File $pathname had an error:\n  $@") if $@; 
+  $gullet->closeMouth if $pmouth eq $$gullet{mouth}; # Close immediately, unless recursive input
+}
+
+#   elsif(($type ne 'tex') && ($path =~ /\.(tex|pool|sty|cls|clo|cnf|cfg|ldf|def|dfu)$/)){ # (attempt to) interpret a style file.
+# Note: the CALLER will decide if we're going to try to read raw tex.
+sub loadTeXDefinitions {
+  my($pathname)=@_;
+  my($dir,$name,$type)=pathname_split($pathname);
+  return if LookupValue($name.'.'.$type.'_loaded');
+  AssignValue($name.'.'.$type.'_loaded'=>1,'global');
+
+  my $stomach = $STATE->getStomach;
+  my $gullet = $stomach->getGullet;
+  my $filecontents = LookupValue($pathname.'_contents');
+  my $mouth = ($filecontents
+	       ? LaTeXML::StyleStringMouth->new($pathname,$filecontents)
+	       : LaTeXML::StyleMouth->new($pathname));
+  $gullet->openMouth($mouth,1);
+  # And NOW process the input!!!!
+###  my $cmts = LookupValue('INCLUDE_COMMENTS');
+###  AssignValue('INCLUDE_COMMENTS'=>0);
+  my $interpreting = LookupValue('INTERPRETING_DEFINITIONS');
+  AssignValue('INTERPRETING_DEFINITIONS'=>1);
+  my $token;
+  while($gullet->mouthIsOpen($mouth)
+	&& ($token = $gullet->readXToken(0))){
+    next if $token->equals(T_SPACE);
+    $stomach->invokeToken($token); }
+  # Note that Mouths like this will often have been closed by \endinput
+  if($gullet->mouthIsOpen($mouth)){
+      if($mouth ne $gullet->getMouth){
+	  Error(":unexpected:mouth We expected to be able to close ".Stringify($mouth)
+		." but ".Stringify($gullet->getMouth)." is still open."); }
+      else {
+	  $gullet->closeMouth; }}
+###  AssignValue('INCLUDE_COMMENTS'=>$cmts);
+  AssignValue('INTERPRETING_DEFINITIONS'=>$interpreting);
+}
+
+# This is a stand-in for code that needs to be evolved.
+sub loadTeXContent {
+  my($pathname)=@_;
+  # If there is a file-specific declaration file (name.latexml), load it first!
+  my $file = $pathname;
+  $file =~ s/\.tex//;
+  local $LaTeXML::INHIBIT_LOAD=0; # What's all this about?????
+###  $self->inputConfigfile($file); #  Load configuration for this source, if any.
+  # NOW load the input --- UNLESS INHIBITTED!!!
+  if(!$LaTeXML::INHIBIT_LOAD){
+    if(my $filecontents = LookupValue($pathname.'_contents')){
+      $STATE->getStomach->getGullet->openMouth(LaTeXML::Mouth->new($filecontents) ,0); }
+    else {
+      $STATE->getStomach->getGullet->openMouth(LaTeXML::FileMouth->new($pathname) ,0); }}
+}
+
+#======================================================================
+# Option Handling for Packages and Classes
 
 # Declare an option for the current package or class
 # If $option is undef, it is the default.
@@ -1008,7 +1201,7 @@ sub ProcessOptions {
   my $name = LookupDefinition(T_CS('\@currname')) && ToString(Digest(T_CS('\@currname')));
   my $ext  = LookupDefinition(T_CS('\@currext')) && ToString(Digest(T_CS('\@currext')));
   my @declaredoptions = @{LookupValue('@declaredoptions')};
-  my @curroptions     = @{ ( defined($name)&& defined($ext) ? LookupValue('opt@'.$name.'.'.$ext) : []) };
+  my @curroptions     = @{ (defined($name) && defined($ext) && LookupValue('opt@'.$name.'.'.$ext)) || [] };
 #  print STDERR "\nProcessing options for $name.$ext: ".join(', ',@curroptions)."\n";
 
   my $defaultcs = T_CS('\default@ds');
@@ -1019,22 +1212,18 @@ sub ProcessOptions {
       DefMacroI('\CurrentOption',undef,$option);
       my $cs = T_CS('\ds@'.$option);
       if(LookupDefinition($cs)){
-#	print STDERR "\nUsing option $option to $name.$ext\n";
 	Digest($cs); }
       elsif($defaultcs){
-#	print STDERR "\nUsing option $option to $name.$ext with default handler\n";
 	Digest($defaultcs); }}}
   else {			# Execute options in declared order (eg. \ProcessOptions)
     foreach my $option (@declaredoptions){
       if(grep($option eq $_,@curroptions)){
 	@curroptions = grep($option ne $_, @curroptions); # Remove it, since it's been handled.
-#	 print STDERR "\nUsing option $option  to $name.$ext\n";
 	DefMacroI('\CurrentOption',undef,$option);
 	Digest(T_CS('\ds@'.$option)); }}
     # Now handle any remaining options (eg. default options), in the given order.
     foreach my $option (@curroptions){
       DefMacroI('\CurrentOption',undef,$option);
-#      print STDERR "\nUsing option $option to $name.$ext with default handler\n";
       Digest($defaultcs); }}
   # Now, undefine the handlers?
   foreach my $option (@declaredoptions){
@@ -1063,93 +1252,123 @@ sub resetOptions {
 }
 
 sub AddToMacro {
-  my($cs,$tokens)=@_;
+  my($cs,@tokens)=@_;
   # Needs error checking!
   my $defn = LookupDefinition($cs);
-  DefMacroI($cs,undef,Tokens($defn->getExpansion->unlist,$tokens->unlist)); }
+  if(! defined $defn || ! $defn->isExpandable){
+    Error(":unexpected:".ToString($cs)." ".ToString($cs)." is not an expandable control sequence"); }
+  else {
+    DefMacroI($cs,undef,Tokens($defn->getExpansion->unlist,
+			       map($_->unlist,map( (ref $_ ? $_ : TokenizeInternal($_)), @tokens)))); }}
 
-our $require_options = {options=>1, withoptions=>1, type=>1, as_class=>1, raw=>1, after=>1};
+#======================================================================
+our $inputdefinitions_options={options=>1, withoptions=>1, handleoptions=>1,
+			       type=>1, as_class=>1, noltxml=>1, notex=>1, after=>1};
+#   options=>[options...]
+#   withoptions=>boolean : pass options from calling class/package
+#   after=>code or tokens or string as $name.$type-hook macro. (executed after the package is loaded)
+# Returns the path that was loaded, or undef, if none found.
+
+# NOTE: there's NO warning message if it's not found!?!?!?!?!?
+# Maybe this is not the right level?
+# Maybe this should be RequirePackage (with all the handleoptions garbage)
+# and a simpler InputDefinitions should be used for the other types of \input ???
+sub InputDefinitions {
+  my($name,%options)=@_;
+  $name = ToString($name) if ref $name;
+  $name =~ s/^\s*//;  $name =~ s/\s*$//;
+  CheckOptions("InputDefinitions ($name)",$inputdefinitions_options,%options);
+
+  my $prevname = $options{handleoptions} && LookupDefinition(T_CS('\@currname')) && ToString(Digest(T_CS('\@currname')));
+  my $prevext  = $options{handleoptions} && LookupDefinition(T_CS('\@currext')) && ToString(Digest(T_CS('\@currext')));
+
+  # This file will be treated somewhat as if it were a class
+  # IF as_class is true
+  # OR if it is loaded by such a class, and has withoptions true!!! (yikes)
+  $options{as_class} = 1 if  $options{handleoptions} && $options{withoptions}
+    && grep($prevname eq $_, @{LookupValue('@masquerading@as@class')||[]});
+
+  $options{raw} = 1 if $options{noltxml}; # so it will be read as raw by Gullet.!L!
+  my $astype = ($options{as_class} ? 'cls' : $options{type});
+
+  if(my $file = FindFile($name, type=>$options{type}, notex=>$options{notex}, noltxml=>$options{noltxml})){
+    if($options{handleoptions}){
+      # For \RequirePackageWithOptions, pass the options from the outer class/style to the inner one.
+      if($options{withoptions} && $prevname){
+	PassOptions($name,$astype,@{LookupValue('opt@'.$prevname.".".$prevext)}); }
+      DefMacroI('\@currname',undef,Tokens(Explode($name)));
+      DefMacroI('\@currext',undef,Tokens(Explode($astype)));
+      # reset options (Note reset & pass were in opposite order in LoadClass ????)
+      resetOptions();
+      PassOptions($name,$astype,@{$options{options} || []}); # passed explicit options.
+      # Note which packages are pretending to be classes.
+      PushValue('@masquerading@as@class',$name) if $options{as_class};
+      DefMacroI(T_CS("\\$name.$astype-hook"),undef,$options{after} || '');
+    }
+
+###    $options{raw}=1;		# since we're taking the decision away from gullet!
+###    my $gullet = $STATE->getStomach->getGullet;
+###    $gullet->input($file,undef,%options); 
+
+
+    my($fdir,$fname,$ftype)=pathname_split($file);
+    if($ftype eq 'ltxml'){
+      loadLTXML($file); }		# Perl module.
+    else {
+      loadTeXDefinitions($file); }
+
+    if($options{handleoptions}){
+      Digest(T_CS("\\$name.$astype-hook"));
+      DefMacroI('\@currname',undef,Tokens(Explode($prevname))) if $prevname;
+      DefMacroI('\@currext',undef,Tokens(Explode($prevext))) if $prevext;
+      resetOptions(); }  # And reset options afterwards, too.
+    $file; }}
+
+our $require_options = {options=>1, withoptions=>1, type=>1, as_class=>1, noltxml=>1, notex=>1, raw=>1, after=>1};
+# This (& FindFile) needs to evolve a bit to support reading raw .sty (.def, etc) files from
+# the standard texmf directories.  Maybe even use kpsewhich itself (INSTEAD of pathname_find ???)
+# Another potentially useful option might be that if we are reading a raw file,
+# perhaps it should just get digested immediately, since it shouldn't contribute any boxes.
 sub RequirePackage {
   my($package,%options)=@_;
   $package = ToString($package) if ref $package;
-  $package =~ s/^\s*//;  $package =~ s/\s*$//;
+  if($options{raw}){
+    delete $options{raw}; $options{notex}=0;
+    Warn(":obsolete:raw RequirePackage $package option raw is obsolete; it is not needed"); }
   CheckOptions("RequirePackage ($package)",$require_options,%options);
-  my $prevname = LookupDefinition(T_CS('\@currname')) && ToString(Digest(T_CS('\@currname')));
-  my $prevext  = LookupDefinition(T_CS('\@currext')) && ToString(Digest(T_CS('\@currext')));
-
-  $options{type} = 'sty' unless $options{type};
-  # This package will be treated somewhat as if it were a class if as_class is true
-  # OR if it is loaded by such a class, and has withoptions true!!!
-  $options{as_class} = 1 if  $options{withoptions}
-    && grep($prevname eq $_, @{LookupValue('@masquerading@as@class')||[]});
-  my $filetype = $options{type};
-  my $type = ($options{as_class} ? 'cls' : $options{type});
-  # For \RequirePackageWithOptions, pass the options from the outer class/style to the inner one.
-  if($options{withoptions} && $prevname){
-    PassOptions($package,$type,@{LookupValue('opt@'.$prevname.".".$prevext)}); }
-  DefMacroI('\@currname',undef,Tokens(Explode($package)));
-  DefMacroI('\@currext',undef,Tokens(Explode($type)));
-  # reset options
-  resetOptions();
-  PassOptions($package,$type,@{$options{options} || []});
-  if(my $file = FindFile($package, type=>$filetype, raw=>$options{raw})){
-    # Note which packages are pretending to be classes.
-    PushValue('@masquerading@as@class',$package) if $options{as_class};
-    DefMacroI(T_CS("\\$package.$type-hook"),undef,$options{after} || '');
-    my $gullet = $STATE->getStomach->getGullet;
-    $gullet->input($file,undef,%options); 
-    Digest(T_CS("\\$package.$type-hook"));
-    DefMacroI('\@currname',undef,Tokens(Explode($prevname))) if $prevname;
-    DefMacroI('\@currext',undef,Tokens(Explode($prevext))) if $prevext;
-    resetOptions(); } # And reset options afterwards, too.
+  # We'll usually disallow raw TeX, unless the option explicitly given, or globally set. 
+  $options{notex} = 1 if !defined $options{notex}  && !LookupValue('INCLUDE_STYLES');
+  if(InputDefinitions($package,type=>$options{type} || 'sty', handleoptions=>1,%options) ){}
   else {
-    $STATE->noteStatus(missing=>$package);
+    $STATE->noteStatus(missing=>$package.'.'.($options{type} || 'sty'));
     Error(":missing_file:$package Cannot find package $package"
-	  .($type eq 'sty' ? '' : "(w/type=$type)")
-	  ." in paths ".join(', ',@{$STATE->lookupValue('SEARCHPATHS')})); }
+	 ."[paths=".join(', ',@{LookupValue('SEARCHPATHS')})."]"); }
   return; }
 
 our $loadclass_options = {options=>1, withoptions=>1, after=>1};
 sub LoadClass {
   my($class,%options)=@_;
   $class = ToString($class) if ref $class;
-  $class =~ s/^\s*//;  $class =~ s/\s*$//;
   CheckOptions("LoadClass ($class)",$loadclass_options,%options);
-  $options{type} = 'cls' unless $options{type};
-  my $type = $options{type};
-  my $prevname = LookupDefinition(T_CS('\@currname')) && ToString(Digest(T_CS('\@currname')));
-  my $prevext  = LookupDefinition(T_CS('\@currext')) && ToString(Digest(T_CS('\@currext')));
-  # For \LoadClassWithOptions, pass the options from the outer class to the inner one.
-  if($options{withoptions} && $prevname){
-    PassOptions($class,$type,@{LookupValue('opt@'.$prevname.".".$prevext)}); }
-  DefMacroI('\@currname',undef,Tokens(Explode($class)));
-  DefMacroI('\@currext',undef,Tokens(Explode($type)));
-  PassOptions($class,$type,@{$options{options} || []});
-  # What about "global options" ??????
-  resetOptions();
-  my $classfile = FindFile($class, type=>$type, raw=>$options{raw});
-  if(!$classfile || ($classfile =~ /\.\Q$type\E$/)){
-    Warn(":missing_file:$class.cls.ltxml No LaTeXML implementation of class $class found, using article");
-    if(!($classfile = FindFile("article.cls"))){
-      Fatal(":missing_file:article.cls.ltxml Installation error: Cannot find article implementation!"); }}
-  DefMacroI(T_CS("\\$class.$type-hook"),undef,$options{after} || '');
-  my $gullet = $STATE->getStomach->getGullet;
-##  $gullet->openMouth(Tokens(T_CS("\\$class.$type-hook")));
-  $gullet->input($classfile,undef,%options);
-  Digest(T_CS("\\$class.$type-hook"));
-  DefMacroI('\@currname',undef,Tokens(Explode($prevname))) if $prevname;
-  DefMacroI('\@currext',undef,Tokens(Explode($prevext))) if $prevext;
-  resetOptions();  # And reset options afterwards, too.
+  if(InputDefinitions($class,type=>'cls', notex=>1, handleoptions=>1, %options)){}
+  else {
+    $STATE->noteStatus(missing=>$class.'.cls');
+    Warn(":missing_file:$class.cls.ltxml  No LaTeXML implementation of $class.cls found, using article"
+	 ."[paths=".join(', ',@{LookupValue('SEARCHPATHS')})."]");
+    if(InputDefinitions('article',type=>'cls',%options)){}
+    else {
+      Fatal(":missing_file:article.cls.ltxml Installation error Cannot find either article.cls.ltxml!"
+	 ."[paths=".join(', ',@{LookupValue('SEARCHPATHS')})."]"); }}
   return; }
 
 sub LoadPool {
-  my($mode)=@_;
-  $mode = ToString($mode) if ref $mode;
-  $mode =~ s/^\s*//;  $mode =~ s/\s*$//;
-  if(my $poolfile = FindFile($mode.".pool")){
-    $STATE->getStomach->getGullet->input($poolfile); }
+  my($pool)=@_;
+  $pool = ToString($pool) if ref $pool;
+  if(InputDefinitions($pool,type=>'pool', notex=>1)){}
   else {
-    Fatal(":missing_file:$mode.pool.ltxml Installation error: Cannot find $mode pool module!"); }}
+    Fatal(":missing_file:$pool.pool.ltxml Installation error: Cannot find $pool.pool module!"
+	 ."[paths=".join(', ',@{LookupValue('SEARCHPATHS')})."]"); }
+  return; }
 
 sub AtBeginDocument {
   my(@operations)=@_;
@@ -1178,6 +1397,60 @@ sub AtEndDocument {
       DefMacroI($tn,undef,$op); 
       $op = $tn; }
     PushValue('@at@end@document',$op->unlist); }}
+
+#======================================================================
+#
+our $fontmap_options = {family=>1};	# none yet
+sub DeclareFontMap {
+  my($name,$map,%options)=@_;
+  CheckOptions("DeclareFontMap",$fontmap_options,%options);
+  my $mapname = ToString($name)
+    .($options{family} ? '_'.$options{family} : '')
+      .'_fontmap';
+  AssignValue($mapname=>$map, 'global'); }
+
+# Decode a codepoint using the fontmap for a given font and/or fontencoding.
+# If $encoding not provided, then lookup according to the current font's
+# encoding; the font family may also be used to choose the fontmap (think tt fonts!).
+# When $implicit is false, we are "explicitly" asking for a decoding, such as
+# with \char, \mathchar, \symbol, DeclareTextSymbol and such cases.
+# In such cases, only codepoints specifically within the map are covered; the rest are undef.
+# If $implicit is true, we'll decode token content that has made it to the stomach:
+# We're going to assume that SOME sort of handling of input encoding is taking place,
+# so that if anything above 128 comes in, it must already be Unicode!.
+# The lower half plane still needs to go through decoding, though, to deal
+# with TeX's rearrangement of ASCII...
+sub FontDecode {
+  my($code,$encoding,$implicit)=@_;
+  my($map,$font);
+  return undef if !defined $code || ($code < 0);
+  if(! $encoding){
+    $font = LookupValue('font');
+    $encoding = $font->getEncoding; }
+  if($encoding && ($map = LoadFontMap($encoding))){ # OK got some map.
+    my($family,$fmap);
+    if($font && ($family=$font->getFamily) && ($fmap=LookupValue($encoding.'_'.$family.'_fontmap'))){
+      $map = $fmap; }}		# Use the family specific map, if any.
+  if($implicit){
+    if($map && ($code < 128)){
+      $$map[$code]; }
+    else {
+      pack('U',$code); }}
+  else {
+    if($map){ $$map[$code]; }
+    else { undef; }}}
+
+sub LoadFontMap {
+  my($encoding)=@_;
+  my $map = LookupValue($encoding.'_fontmap');
+  if(!$map && !LookupValue($encoding.'_fontmap_failed_to_load')){
+    AssignValue($encoding.'_fontmap_failed_to_load'=>1); # Stop recursion?
+    RequirePackage(lc($encoding),type=>'fontmap');
+    if($map = LookupValue($encoding.'_fontmap')){ # Got map?
+      AssignValue($encoding.'_fontmap_failed_to_load'=>0); }
+    else {
+      AssignValue($encoding.'_fontmap_failed_to_load'=>1,'global'); }}
+  $map; }
 
 #======================================================================
 # Defining Rewrite rules that act on the DOM
@@ -1431,9 +1704,6 @@ expanded during macro expansion time (in the  L<LaTeXML::Gullet>).  If a C<$stri
 tokenized at definition time, and any macro arguments will be substituted for parameter
 indicators (eg #1) at expansion time; the result is used as the expansion of
 the control sequence. 
-The only option, other than C<scope>, is C<isConditional> which should be true,
-for conditional control sequences (TeX uses these to keep track of conditional
-nesting when skipping to \else or \fi).
 
 If defined by C<$code>, the form is C<CODE($gullet,@args)> and it
 must return a list of L<LaTeXML::Token>'s.
@@ -1444,6 +1714,31 @@ X<DefMacroI>
 Internal form of C<DefMacro> where the control sequence and parameter list
 have already been parsed; useful for definitions from within code.
 Also, slightly more efficient for macros with no arguments (use C<undef> for
+C<$paramlist>).
+
+=back
+
+=head3 Macros
+
+=over
+
+=item C<< DefConditional($prototype,$test,%options); >>
+
+X<DefConditional>
+Defines a conditional for C<$prototype>; a control sequence that is
+processed during macro expansion time (in the  L<LaTeXML::Gullet>).
+A conditional corresponds to a TeX C<\if>.
+It evaluates C<$test>, which should be CODE that is applied to the arguments, if any.
+Depending on whether the result of that evaluation returns a true or false value
+(in the usual Perl sense), the result of the expansion is either the
+first or else code following, in the usual TeX sense.
+
+=item C<< DefConditionalI($cs,$paramlist,$test,%options); >>
+
+X<DefConditionalI>
+Internal form of C<DefConditional> where the control sequence and parameter list
+have already been parsed; useful for definitions from within code.
+Also, slightly more efficient for conditinal with no arguments (use C<undef> for
 C<$paramlist>).
 
 =back
@@ -1827,7 +2122,11 @@ The options are:
 
 =item C<< options=>[...] >> specifies a list of package options.
 
-=item C<< raw=>1 >> specifies that it is allowable to try to read a raw TeX style file.
+=item C<< noltxml=>1 >> inhibits searching for the LaTeXML binding for the file
+(ie. C<$name.$type.ltxml>
+
+=item C<< notex=>1 >> inhibits searching for raw tex version of the file.
+That is, it will I<only> search for the LaTeXML binding.
 
 =back
 
@@ -1852,9 +2151,14 @@ The options are:
 
 =over
 
-=item C<< type=>type >> specifies the file type (default C<sty>.
+=item C<< type=>type >> specifies the file type.  If not set, it will search for
+both C<$name.tex> and C<$name>.
 
-=item C<< raw=>1 >> specifies that it is allowable to try to read a raw TeX style file.
+=item C<< noltxml=>1 >> inhibits searching for the LaTeXML binding for the file
+(ie. C<$name.$type.ltxml>
+
+=item C<< notex=>1 >> inhibits searching for raw tex version of the file.
+That is, it will I<only> search for the LaTeXML binding.
 
 =back
 
@@ -1967,7 +2271,7 @@ The calling pattern makes it appropriate for use in Tag, as in
 
 If C<$node> doesn't already have an xml:id set, it computes an
 appropriate id by concatenating the xml:id of the closest
-ancestor with an id (if any), the prefix and a unique counter.
+ancestor with an id (if any), the prefix (if any) and a unique counter.
 
 =back
 
@@ -1982,8 +2286,30 @@ Document Model is used to control exactly how those fragments are assembled.
 
 X<Tag>
 Declares properties of elements with the name C<$tag>.
+Note that C<Tag> can set or add properties to any element from any binding file,
+unlike the properties set on control by  C<DefPrimtive>, C<DefConstructor>, etc..
+And, since the properties are recorded in the current Model, they are not
+subject to TeX grouping; once set, they remain in effect until changed
+or the end of the document.
 
-The recognized properties are:
+The C<$tag> can be specified in one of three forms:
+
+   prefix:name matches a specific name in a specific namespace
+   prefix:*    matches any tag in the specific namespace;
+   *           matches any tag in any namespace.
+
+There are two kinds of properties:
+
+=over
+
+=item Scalar properties
+
+For scalar properties, only a single value is returned for a given element.
+When the property is looked up, each of the above forms is considered
+(the specific element name, the namespace, and all elements);
+the first defined value is returned.
+
+The recognized scalar properties are:
 
 =over
 
@@ -2001,7 +2327,33 @@ if needed to close an ancestor node, or insert
 an element into an ancestor.
 This property can help match the more  SGML-like LaTeX to XML.
 
-=item afterOpen=>CODE($document,$box)
+=back
+
+=item Code properties
+
+These properties provide a bit of code to be run at the times
+of certain events associated with an element.  I<All> the code bits
+that match a given element will be run, and since they can be added by
+any binding file, and be specified in a random orders,
+a little bit of extra control is desirable.
+
+Firstly, any I<early> codes are run (eg C<afterOpen:early>), then
+any normal codes (without modifier) are run, and finally
+any I<late> codes are run (eg. C<afterOpen:late>).
+
+Within I<each> of those groups, the codes assigned for an element's specific
+name are run first, then those assigned for its package and finally the generic one (C<*>);
+that is, the most specific codes are run first.
+
+When code properties are accumulated by C<Tag> for normal or late events,
+the code is appended to the end of the current list (if there were any previous codes added);
+for early event, the code is prepended.
+
+The recognized code properties are:
+
+=over
+
+=item afterOpen=>CODE($document,$box), afterOpen:early=>CODE($document,$box), afterOpen:late=>CODE($document,$box)
 
 Provides CODE to be run whenever a node with this $tag
 is opened.  It is called with the document being constructed,
@@ -2010,11 +2362,13 @@ It is called after the node has been created, and after
 any initial attributes due to the constructor (passed to openElement)
 are added.
 
-=item afterClose=>CODE($document,$box)
+=item afterClose=>CODE($document,$box), afterClose:early=>CODE($document,$box), afterClose:late=>CODE($document,$box)
 
 Provides CODE to be run whenever a node with this $tag
 is closed.  It is called with the document being constructed,
 and the initiating digested object as arguments.
+
+=back
 
 =back
 
@@ -2058,6 +2412,25 @@ each associated namespace URI.  Use the prefix C<#default> for the default names
 The prefixes defined for the DTD may be different from the prefixes used in
 implementation CODE (eg. in ltxml files; see RegisterNamespace).
 The generated document will use the namespaces and prefixes defined for the DTD.
+
+=back
+
+A related capability is adding commands to be executed at the beginning
+and end of the document
+
+=over
+
+=item C<< AtBeginDocument($tokens,...) >>
+
+adds the C<$tokens> to the list of tokens to be processed a just after C<\\begin{document}>.
+These tokens can be used for side effect, or any content they generate will appear as the
+first children of the document (but probably after titles and frontmatter).
+
+=item C<< AtEndDocument($tokens,...) >>
+
+adds the C<$tokens> to the list of tokens to be processed a just before C<\\end{document}>.
+These tokens can be used for side effect, or any content they generate will appear as the
+last children of the document.
 
 =back
 
@@ -2317,6 +2690,43 @@ Looks up the current definition, if any, of the C<$token>.
 X<InstallDefinition>
 Install the Definition C<$defn> into C<$STATE> under its
 control sequence.
+
+=back
+
+=head2 Font Encoding
+
+=over
+
+=item C<< DeclareFontMap($name,$map,%options); >>
+
+Declares a font map for the encoding C<$name>. The map C<$map>
+is an array of 128 or 256 entries, each element is either a unicode
+string for the representation of that codepoint, or undef if that
+codepoint is not supported  by this encoding.  The only option
+currently is C<family> used because some fonts (notably cmr!)
+have different glyphs in some font families, such as
+C<family=>'typewriter'>.
+
+=item C<< FontDecode($code,$encoding,$implicit); >>
+
+Returns the unicode string representing the given codepoint C<$code>
+(an integer) in the given font encoding C<$encoding>.
+If C<$encoding> is undefined, the usual case, the current font encoding
+and font family is used for the lookup.  Explicit decoding is
+used when C<\\char> or similar are invoked (C<$implicit> is false), and
+the codepoint must be represented in the fontmap, otherwise undef is returned.
+Implicit decoding (ie. C<$implicit> is true) occurs within the Stomach
+when a Token's content is being digested and converted to a Box; in that case
+only the lower 128 codepoints are converted; all codepoints above 128 are assumed to already be Unicode.
+
+The font map for C<$encoding> is automatically loaded if it has not already been loaded.
+
+=item C<< LoadFontMap($encoding); >>
+
+Finds and loads the font map for the encoding named C<$encoding>, if it hasn't been
+loaded before.  It looks for C<encoding.fontmap.ltxml>, which would typically define
+the font map using C<DeclareFontMap>, possibly including extra maps for families
+like C<typewriter>.
 
 =back
 

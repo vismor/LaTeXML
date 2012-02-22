@@ -125,20 +125,26 @@ sub finish {
 sub compare {
   my($a,$b)=@_;
   my $ra = ref $a;
-  if(! $ra){
+  if(! $ra) {
     if(ref $b){ 0; }
-    else { $a eq $b; }}
+    else { compare_scalar($a,$b); }}
   elsif($ra ne ref $b){ 0; }
   elsif($ra eq 'HASH'){ compare_hash($a,$b); }
   elsif($ra eq 'ARRAY'){ compare_array($a,$b); }
-  else { $a eq $b;}}
+  else { compare_scalar($a,$b); }}
+
+sub compare_scalar {
+  my ($a,$b) = @_;
+  ((! defined $a) && (! defined $b)) ||
+    (defined $a && defined $b && $a eq $b);
+}
 
 sub compare_hash {
   my($a,$b)=@_;
   my %attr = ();
   map($attr{$_}=1, keys %$a);
   map($attr{$_}=1, keys %$b);
-  (grep( !( (defined $$a{$_}) && (defined $$b{$_})
+  (grep( !( (exists $$a{$_}) && (exists $$b{$_})
 	    && compare($$a{$_}, $$b{$_}) ), keys %attr) ? 0 : 1); }
 
 sub compare_array {
@@ -192,8 +198,13 @@ sub register {
     bless $entry, 'LaTeXML::Util::ObjectDB::Entry';
     $$self{objects}{$key}=$entry; }
   $entry->setValues(%props);
-
   $entry; }
+
+sub purge {
+  my ($self,$key) = @_;
+  delete $$self{objects}{$key};
+  delete $$self{externaldb}{Encode::encode('utf8',$key)};
+}
 
 #********************************************************************************
 # DB Entries
@@ -215,6 +226,11 @@ sub key { $_[0]->{key}; }
 sub getValue {
   my($self,$attr)=@_;
   decodeValue($$self{$attr}); }
+
+sub getKeys {
+ my($self)=@_;
+ keys %$self;
+}
 
 sub setValues {
   my($self,%avpairs)=@_;
@@ -251,6 +267,15 @@ sub noteAssociation {
       $hash = $$hash{$key}; }
     else {
       $hash = $$hash{$key} = (@keys ? {} : 1); }}}
+
+sub as_hashref {
+  my($self)=@_;
+  my $hashref = {};
+  foreach (keys %$self) {
+    $hashref->{$_} = decodeValue($self->{$_});
+  }
+  return $hashref;
+}
 
 # Debugging aid
 use Text::Wrap;

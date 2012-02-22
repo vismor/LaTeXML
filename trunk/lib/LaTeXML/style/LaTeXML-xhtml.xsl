@@ -24,20 +24,14 @@
   <xsl:output method="xml"
 		  omit-xml-declaration = "yes"
 	      doctype-public = "-//W3C//DTD XHTML 1.1 plus MathML 2.0//EN"
-	      doctype-system = "http://www.w3.org/TR/MathML2/dtd/xhtml-math11-f.dtd"
+	      doctype-system = "http://www.w3.org/Math/DTD/mathml2/xhtml-math11-f.dtd"
 	      media-type     = 'application/xhtml+xml'
 	      encoding       = 'utf-8'
 	      indent         = "yes"/>
-  
+<!--	      doctype-system = "http://www.w3.org/TR/MathML2/dtd/xhtml-math11-f.dtd"  -->
   <xsl:template name="metatype">
 <!-- vismor -->
 <!--     <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8"/> -->
-  </xsl:template>
-
-  <xsl:template name="add_id">
-    <xsl:if test="@fragid">
-      <xsl:attribute name="id"><xsl:value-of select="@fragid"/></xsl:attribute>
-    </xsl:if>
   </xsl:template>
 
   <xsl:template match="/">
@@ -57,9 +51,12 @@
 </xsl:processing-instruction>	
 <!-- vismor -->
 
-    <html xmlns     = "http://www.w3.org/1999/xhtml"
+  <!-- This version generates MathML & SVG with an xmlns namespace declaration on EACH node;
+       If you want to declare and use namespace prefixes (m & svg, resp), add this here
 	  xmlns:m   = "http://www.w3.org/1998/Math/MathML"
-	  xmlns:svg = "http://www.w3.org/2000/svg">
+	  xmlns:svg = "http://www.w3.org/2000/svg"
+       and change local-name() to name() in LaTeXML-math-mathml & LaTeXML-picture-svg. -->
+    <html xmlns     = "http://www.w3.org/1999/xhtml">
       <xsl:call-template name="head"/>
       <xsl:call-template name="body"/><xsl:text>
     </xsl:text>

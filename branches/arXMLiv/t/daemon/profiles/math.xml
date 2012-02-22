@@ -1,0 +1,25 @@
+<math xmlns="http://www.w3.org/1998/Math/MathML" alttext="1+2=3" display="inline">
+  <semantics>
+    <mrow>
+      <mrow>
+        <mn>1</mn>
+        <mo>+</mo>
+        <mn>2</mn>
+      </mrow>
+      <mo>=</mo>
+      <mn>3</mn>
+    </mrow>
+    <annotation-xml encoding="MathML-Content">
+      <apply>
+        <eq/>
+        <apply>
+          <plus/>
+          <cn type="integer">1</cn>
+          <cn type="integer">2</cn>
+        </apply>
+        <cn type="integer">3</cn>
+      </apply>
+    </annotation-xml>
+    <annotation encoding="application/x-tex">1+2=3</annotation>
+  </semantics>
+</math>

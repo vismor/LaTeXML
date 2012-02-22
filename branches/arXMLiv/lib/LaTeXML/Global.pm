@@ -39,7 +39,7 @@ our  @EXPORT = (
 		   &T_LETTER &T_OTHER &T_ACTIVE &T_COMMENT &T_CS
 		   &T_CR
 		   &Token &Tokens
-		   &Tokenize &TokenizeInternal &Explode &UnTeX
+		   &Tokenize &TokenizeInternal &Explode &ExplodeText &UnTeX
 		   &StartSemiverbatim &EndSemiverbatim),
 	       # Number & Dimension constructors
 		qw( &Number &Float &Dimension &MuDimension &Glue &MuGlue &Pair &PairList),
@@ -136,9 +136,11 @@ sub TokenizeInternal {
 
 sub StartSemiverbatim() {
   $LaTeXML::STATE->pushFrame;
-  # include space!
-  map($LaTeXML::STATE->assignCatcode($_=>CC_OTHER,'local'),'^','_','@','~','&','$','#','%',"'",' ');
+  $LaTeXML::STATE->assignValue(MODE=>'text'); # only text mode makes sense here... BUT is this shorthand safe???
+  $LaTeXML::STATE->assignValue(IN_MATH=>0);
+  map($LaTeXML::STATE->assignCatcode($_=>CC_OTHER,'local'),@{$LaTeXML::STATE->lookupValue('SPECIALS')});
   $LaTeXML::STATE->assignCatcode('math:\''=>0,'local');
+  $LaTeXML::STATE->assignValue(font=>$LaTeXML::STATE->lookupValue('font')->merge(encoding=>'ASCII'), 'local'); # try to stay as ASCII as possible
   return; }
 
 sub EndSemiverbatim() {  $LaTeXML::STATE->popFrame; }
@@ -158,7 +160,15 @@ sub Tokens {
 # Explode a string into a list of tokens w/catcode OTHER (except space).
 sub Explode {
   my($string)=@_;
-  map(($_ eq ' ' ? T_SPACE() : T_OTHER($_)),split('',$string)); }
+  (defined $string ? map(($_ eq ' ' ? T_SPACE() : T_OTHER($_)),split('',$string)) : ()); }
+
+# Similar to Explode, but convert letters to catcode LETTER
+# Hopefully, this is essentially correct WITHOUT resorting to catcode lookup?
+sub ExplodeText {
+  my($string)=@_;
+  (defined $string
+   ? map(($_ eq ' ' ? T_SPACE() : (/[a-zA-Z]/ ? T_LETTER($_) : T_OTHER($_))),split('',$string))
+   : ()); }
 
 # Reverts an object into TeX code, as a Tokens list, that would create it.
 # Note that this is not necessarily the original TeX.
@@ -276,7 +286,7 @@ sub Info {
   my($msg)=@_;
   $LaTeXML::Global::STATE->noteStatus('info');
   print STDERR LaTeXML::Error::generateMessage("Info",$msg,0)
-    unless $LaTeXML::Global::STATE->lookupValue('VERBOSITY') < -1; 
+    unless $LaTeXML::Global::STATE->lookupValue('VERBOSITY') < 0;
   return; }
 
 #**********************************************************************
@@ -406,6 +416,13 @@ returning a L<LaTeXML::Tokens>.
 =item C<< @tokens = Explode($string); >>
 
 Returns a list of the tokens corresponding to the characters in C<$string>.
+All tokens have catcode CC_OTHER, except for spaces which have catcode CC_SPACE.
+
+=item C<< @tokens = ExplodeText($string); >>
+
+Returns a list of the tokens corresponding to the characters in C<$string>.
+All (roman) letters have catcode CC_LETTER, all others have catcode CC_OTHER,
+except for spaces which have catcode CC_SPACE.
 
 =item C<< $tokens = Revert($object); >>
 

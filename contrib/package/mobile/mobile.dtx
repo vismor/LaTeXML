@@ -1,0 +1,143 @@
+% \iffalse meta-comment
+% A LaTeX Package for a Mobile Device Input Syntax
+% Copyright (c) 2012 Deyan Ginev, all rights reserved
+%               this file is released under the
+%               LaTeX Project Public License (LPPL)
+%
+% The development version of this file can be found at
+% $HeadURL: https://svn.mathweb.org/repos/LaTeXML/contrib/package/mobile/mobile.dtx $
+% \fi
+%   
+% \iffalse
+%<package>\NeedsTeXFormat{LaTeX2e}[1999/12/01]
+%<package>\ProvidesPackage{mobile}[2010/08/10 v0.1 Input Syntax for Mobile Devices]
+%
+%<*driver>
+\documentclass{ltxdoc}
+\usepackage{url,array,float}
+\usepackage[show]{ed}
+\usepackage{latexml}
+\usepackage{hyperref}
+\makeindex
+\begin{document}\DocInput{mobile.dtx}\end{document}
+%</driver>
+% \fi
+% 
+%\iffalse\CheckSum{275}\fi
+% 
+% \changes{v0.1}{2012/2/20}{First Version}
+%
+% 
+% \GetFileInfo{mobile.sty}
+% 
+% \MakeShortVerb{\|}
+%
+% \title{{\texttt{mobile.sty}}: A Syntax for {\LaTeX} Authoring on
+% Mobile Devices}
+%    \author{Deyan Ginev\\
+%            Jacobs University, Bremen\\
+%            \url{http://kwarc.info/dginev}}
+% \maketitle
+%
+% \begin{abstract}
+%   This package provides convenient shorthands for fast and easy
+%   authoring of {\LaTeX} documents on mobile devices. Given a highly
+%   limited default keyboard, the package builds on the alphanumeric
+%   latin letters, the dot and regular paranthesis, as its main
+%   building blocks. While modern smartphone devices provide a variety
+%   of altnerative keyboards via a (combination of) function keys,
+%   that proves slow and error-prone in practice. The dot and
+%   paranthesis notation outlined below aims to circumvent that issues.
+% \end{abstract}
+%
+% \tableofcontents\newpage
+% 
+% \section{Introduction}\label{sec:intro}
+% With the advent of mobile devices, the young typesetter has often
+% felt the frustration of the inability to quickly and reliably author
+% high quality texts, be it scientific, professional or fictional, on
+% their otherwise very high capacity smartphones. 
+%
+% The |mobile| package tailors to this need. The heart of the project
+% is to use the 29 symbols on a default smartphone keyboard as a basis
+% for a typesetting kernel, capturing as big a subset as possible of
+% {\LaTeX}'s original capabilities. 
+%
+% \section{User Interface}\label{sec:user}%
+% The user interface tries to stay true to the classic {\LaTeX}
+% authoring feeling, remapping the escape symbol backslash($\backslash$)
+% to dot(.). 
+%
+% Thus, an example document might be created as shown in Figure {\ref{fig:example-doc}}.
+%
+% \begin{figure}[ht]\centering
+% \begin{verbatim}
+% \documentclass{article}
+% \usepackage{mobile}
+% 
+% .begin(document)
+% 
+% An example follows. 
+% 
+% .begin(itemize)
+% 
+% .item The probability of getting .m.(k.).m heads when flipping .m.(n.).m coins is: 
+% .mm P.(E.) = (n .choose k) p.sup(k) .(1.minus p.).sup(n .minus k) .mm
+%
+% .end(itemize)
+%
+% .end(document)
+%
+% \end{verbatim}
+% \caption{Example use of \texttt{\textbackslash{mobile}}}\label{fig:example-doc}
+% \end{figure}
+%
+% Below, we outline the full list of shorthands we have enabled thus
+% far. Note that the original {\LaTeX} syntax remains functional, thus
+% keeping the |mobile| package compatible with any other {\LaTeX}
+% package, and allowing the user to flexibly decide on which notation
+% to use, as well as to co-author documents with a variety of devices.
+%
+% \section{Exhaustive Feature List}\label{sec:features} 
+%
+% \section{Implementation}\label{sec:impl}
+% 
+% We proceed to doing the actual work on the {\LaTeX} side of affairs.
+%
+% To start things off, we create a variety of shorthands to symbols typically
+% accessbile on a computer keyboard, but hard to use on a mobile
+% device.
+%    \begin{macrocode}
+%<*package>
+\edef\ {. }
+\def\m{$ }
+\def\mm{$$ }
+\def\minus{-}
+\def\plus{+}
+\def\eq{=}
+\def\at{@}
+\def\comment{\%}
+\def\sub{_}
+\def\sup{^}
+\edef\d{(}
+\edef\b{)}
+\def\bb{\b\b}
+\def\dd{\d\d}
+%</package>
+%    \end{macrocode}
+%
+% Lastly, we reassign the respective catcodes, in order to make dot and
+% paranthesis active.
+%    \begin{macrocode}
+%<*package>
+\catcode`\.=0
+\catcode`\(=1%
+\catcode`\)=2%
+\let\(\d
+\let\)\b
+%</package>
+%    \end{macrocode}
+%
+% 
+% \Finale
+% \endinput

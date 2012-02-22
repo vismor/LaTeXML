@@ -31,34 +31,31 @@ sub extractTeX {
   my $mode = uc($node->getAttribute('mode')||'INLINE');
   my $tex = $self->cleanTeX($node->getAttribute('tex'));
   return undef unless defined $tex;
-  $mode = 'DISPLAY' if $tex=~/^\s*\\displaystyle/;
+  $mode = 'DISPLAY' if $tex=~ s/^\s*\\displaystyle\s+//; # Strip leading displaystyle
   ($tex =~ /^\s*$/ ? undef : "\\begin$mode $tex\\end$mode"); }
+
+our $MML_NAMESPACE = "http://www.w3.org/1998/Math/MathML";
+sub setTeXImage {
+  my($self,$doc,$node,$path,$width,$height,$depth)=@_;
+  $self->SUPER::setTeXImage($doc,$node,$path,$width,$height,$depth);
+  # IF the ltx:Math node has a m:math child, add image info to it, too. (MML3)
+#  if($mml = $node->findnode('m:math',$node)){
+  if(my $mml = $doc->findnode("child::*[local-name() = 'math' and namespace-uri() = '$MML_NAMESPACE']",$node)){
+    $mml->setAttribute('altimg',$path);
+    $mml->setAttribute('altimg-width',$width);
+    $mml->setAttribute('altimg-height',$height);
+    $mml->setAttribute('altimg-valign',-$depth) if defined $depth; }} # Note the sign!!
+
 
 # Definitions needed for processing inline & display math images
 sub preamble {
   my($self,$doc)=@_;
-  # To align the baseline of math images, align=middle is necessary.  
-  # It aligns the middle of the image to the baseline + half the xheight.
-  # We pad either the height or depth of the formula as such:
-  #  let delta = height - xheight + depth;
-  #  if(delta > 0) increment the depth by delta
-  #  if(delta < 0) increment the height by |delta|
-  # We'll assume the xheight is 6pts?
-
 return <<EOPreamble;
-\\def\\AdjustInline{%
-  \\\@tempdima=\\ht\\lxImageBox\\advance\\\@tempdima-6pt\\advance\\\@tempdima-\\dp\\lxImageBox
-  \\ifdim\\\@tempdima>0pt
-    \\advance\\\@tempdima\\dp\\lxImageBox\\dp\\lxImageBox=\\\@tempdima
-  \\else\\ifdim\\\@tempdima>0pt
-     \\advance\\\@tempdima-\\ht\\lxImageBox\\ht\\lxImageBox=-\\\@tempdima
-  \\fi\\fi}
-% For Inline, typeset in box, then extend box so height=depth; then we can center it
 \\def\\beginINLINE{\\lxBeginImage\\(}
-\\def\\endINLINE{\\)\\lxEndImage\\AdjustInline\\lxShowImage}
+\\def\\endINLINE{\\)\\lxEndImage\\lxShowImage}
 % For Display, same as inline, but set displaystyle.
 \\def\\beginDISPLAY{\\lxBeginImage\\(\\displaystyle\\the\\everydisplay}
-\\def\\endDISPLAY{\\)\\lxEndImage\\AdjustInline\\lxShowImage}
+\\def\\endDISPLAY{\\)\\lxEndImage\\lxShowImage}
 EOPreamble
 }
 #======================================================================

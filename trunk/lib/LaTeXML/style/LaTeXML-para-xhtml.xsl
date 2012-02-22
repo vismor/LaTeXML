@@ -31,7 +31,7 @@
 
   <!-- Need to handle attributes! -->
   <xsl:template match="ltx:inline-para" xml:space="preserve">
-    <span class="{f:classes(.)}"><xsl:apply-templates/></span>
+    <span class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></span>
   </xsl:template>
 
 <!-- ======================================================================
@@ -54,9 +54,9 @@
 </xsl:template>
 -->
 
-<xsl:template match="ltx:figure | ltx:table | ltx:listing | ltx:float">
-  <div class='{f:classes(.)}'  style="{f:positioning(.)}">
-    <xsl:call-template name="add_id"/>
+<xsl:template match="ltx:figure | ltx:table | ltx:float | ltx:listing">
+  <div class='{f:classes(.)}'  style="{f:positioning(.)}"
+       ><xsl:call-template name="add_id"/>
     <xsl:choose>
       <xsl:when test="count(ltx:figure | ltx:table | ltx:float | ltx:listing | ltx:graphics) > 1">
 	<table style="width:100%;">
@@ -76,13 +76,17 @@
 </xsl:template>
 
 <xsl:template match="ltx:listing/ltx:tabular" xml:space="preserve">
-  <table class="{f:classes(.)}">
+  <table class="{f:classes(.)}"><xsl:call-template name="add_id"/>
     <xsl:apply-templates/>
   </table>
 </xsl:template>
 
 <xsl:template match="ltx:caption" xml:space="preserve">
-  <div class='{f:classes(.)}'>
+  <div class="{concat(f:classes(.),
+		    f:if(@font,concat(' ',@font),''),
+		    f:if(@size,concat(' ',@size),''))}"
+       style="{f:if(@color,concat('color:',@color),'')}"
+       ><xsl:call-template name="add_id"/>
     <xsl:apply-templates/>
   </div>
 </xsl:template>

@@ -140,9 +140,13 @@ sub finalize_rec {
 
   local $LaTeXML::FONT = $declared_font;
   foreach my $child ($node->childNodes){
-    $self->finalize_rec($child)
-      if $child->nodeType == XML_ELEMENT_NODE; }
-
+    if($child->nodeType == XML_ELEMENT_NODE){
+      $self->finalize_rec($child);
+      # Also check if child is  $FONT_ELEMENT_NAME, has no attributes
+      # If so, and providing $node can contain that child's content, we'll collapse it.
+      if(($model->getNodeQName($child) eq $FONT_ELEMENT_NAME) && !$child->hasAttributes){
+	$self->unwrapNodes($child); }
+    }}
   # Attributes that begin with (the semi-legal) "_" are for Bookkeeping.
   # Remove them now.
   foreach my $attr ($node->attributes){
@@ -332,15 +336,13 @@ sub closeNode_internal {
   my $closeto = $node->parentNode; # Grab now in case afterClose screws the structure.
   my $n = $self->closeText_internal; # Close any open text node.
   while($n->nodeType == XML_ELEMENT_NODE){
-    if(my $post= $$self{model}->getTagProperty($n,'afterClose')){
-      map(&$_($self,$n,$LaTeXML::BOX),@$post); }
+    map(&$_($self,$n,$LaTeXML::BOX),$$self{model}->getTagPropertyList($n,'afterClose'));
     last if $$node eq $$n;	# NOTE: This equality test is questionable
     $n = $n->parentNode; }
   print STDERR "Closing ".Stringify($node)." => ".Stringify($closeto)."\n" if $LaTeXML::Document::DEBUG;
 
   $$self{node} = $closeto;
 
-  if(0){			# I _think_ this is desirable, but disable for the moment to reduce output changes
   my @c;
   # If we're closing a node that can take font switches and it contains a single FONT_ELEMENT_NAME node; pull it up.
   my $np = $node->parentNode;
@@ -352,9 +354,25 @@ sub closeNode_internal {
     $self->setNodeFont($node,$self->getNodeFont($c));
     $node->removeChild($c);
     foreach my $gc ($c->childNodes){
-      $node->appendChild($gc); }}
-}
-
+      $node->appendChild($gc); }
+    foreach my $attr ($c->attributes()){
+      if($attr->nodeType == XML_ATTRIBUTE_NODE){
+	my $key = $attr->nodeName;
+	my $val = $attr->getValue;
+	if($key eq 'xml:id'){	# Use the replacement id
+	  if(!$node->hasAttribute($key)){
+	    $self->recordID($val,$node);
+	    $node->setAttribute($key, $val); }}
+	elsif($key eq 'class'){
+	  if(my $class = $node->getAttribute($key)){
+	    $node->setAttribute($key,$class.' '.$val); }
+	  else {
+	    $node->setAttribute($key,$class); }}
+	elsif(my $ns = $attr->namespaceURI){
+	  $node->setAttributeNS($ns,$attr->localname,$val); }
+	else {
+	  $node->setAttribute( $attr->localname,$val); }}}
+    }
   $$self{node}; }
 
 sub getInsertionCandidates {
@@ -504,11 +522,11 @@ sub openMathText_internal {
     my($nmatched, $newstring, %attr) = &{$$ligature{matcher}}($self,@sibs);
     if($nmatched){
 ##      print STDERR "Matched $nmatched => \"$newstring\"\n";
-      my @boxes = ($self->getNodeBox($node));
+#      my @boxes = ($self->getNodeBox($node));
       $node->firstChild->setData($newstring);
       for(my $i=0; $i<$nmatched-1; $i++){
 	my $remove = $node->previousSibling;
-	unshift(@boxes,$self->getNodeBox($remove));
+#	unshift(@boxes,$self->getNodeBox($remove));
 	$node->parentNode->removeChild($remove); }
 ## This fragment replaces the node's box by the composite boxes it replaces
 ## HOWEVER, this gets things out of sync because parent lists of boxes still
@@ -568,8 +586,7 @@ sub openElement {
   $self->setNodeBox($node, $LaTeXML::BOX);
   print STDERR "Inserting ".Stringify($node)." into ".Stringify($point)."\n" if $LaTeXML::Document::DEBUG;
   $$self{node} = $node;
-  if(defined(my $post=$$self{model}->getTagProperty($node,'afterOpen'))){
-    map( &$_($self,$node,$LaTeXML::BOX), @$post); }
+  map( &$_($self,$node,$LaTeXML::BOX),$$self{model}->getTagPropertyList($node,'afterOpen'));
   $$self{node}; }
 
 sub closeElement {
@@ -699,10 +716,13 @@ sub insertPI {
     $$self{node}->appendChild($pi); }
   $pi; }
 
-#**********************************************************************
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Document surgery (?)
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # moving stuff around, duplicating, etc.
-# 
+
+#**********************************************************************
+# Appending clones of nodes
 
 # Inserting clones of nodes into the document.
 # Nodes that exist in some other part of the document (or some other document)
@@ -756,6 +776,52 @@ sub appendClone_aux {
     elsif($type == XML_TEXT_NODE){
       $node->appendTextNode($child->textContent); }}
   $node; }
+
+#**********************************************************************
+# Wrapping & Unwrapping nodes by another element.
+
+# Wrap @nodes with an element named $qname, making the new element replace the first $node,
+# and all @nodes becomes the child of the new node.
+# [this makes most sense if @nodes are a sequence of siblings]
+# Returns undef if $qname isn't allowed in the parent, or if @nodes aren't allowed in $qname,
+# otherwise, returns the newly created $qname.
+sub wrapNodes {
+  my($self,$qname, @nodes)=@_;
+  return unless @nodes;
+  my $model = $$self{model};
+  my $parent = $nodes[0]->parentNode;
+  return unless $model->canContain($model->getNodeQName($parent),$qname)
+    && ! grep( ! $model->canContain($qname,$model->getNodeQName($_)), @nodes);
+  my($ns,$tag) = $model->decodeQName($qname);
+  my $new;
+  if($ns){
+    if(! defined $parent->lookupNamespacePrefix($ns)){	# namespace not already declared?
+      $self->getDocument->documentElement
+	->setNamespace($ns,$model->getDocumentNamespacePrefix($ns),0); }
+    $new= $parent->addNewChild($ns,$tag); }
+  else {
+    $new = $parent->appendChild($$self{document}->createElement($tag)); }
+  $parent->replaceChild($new,$nodes[0]);
+  foreach my $node (@nodes){
+    $new->appendChild($node); }
+  $new; }
+
+# Unwrap the children of $node, by replacing $node by its children.
+# Returns undef if the children are not allowed in the parent,
+# else returns the REMOVED node.
+sub unwrapNodes {
+  my($self,$node)=@_;
+  my $model = $$self{model};
+  my $parent = $node->parentNode;
+  my $parentqname = $model->getNodeQName($parent);
+  my @children = $node->childNodes;
+  if( ! grep( ! $model->canContain($parentqname,$model->getNodeQName($_)), @children)){
+    my $c0;
+    while(my $c1 = shift(@children)){
+      if($c0){ $parent->insertAfter($c1,$c0); }
+      else   { $parent->replaceChild($c1,$node); }
+      $c0=$c1; }
+    $node; }}
 
 #**********************************************************************
 1;

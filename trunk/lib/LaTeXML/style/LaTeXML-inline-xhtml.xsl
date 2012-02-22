@@ -28,17 +28,18 @@
 <xsl:template match="ltx:text">
  <span style="{f:positioning(.)}" class="{concat(f:classes(.),
 					 f:if(@font,concat(' ',@font),''),
-					 f:if(@size,concat(' ',@size),''))}">
+					 f:if(@size,concat(' ',@size),''))}"
+       ><xsl:call-template name="add_id"/>
    <xsl:apply-templates/>
  </span>
 </xsl:template>
 
 <xsl:template match="ltx:emph">
-  <em class="{f:classes(.)}"><xsl:apply-templates/></em>
+  <em class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></em>
 </xsl:template>
 
 <xsl:template match="ltx:acronym">
-  <acronym class='{f:classes(.)}' title="{@name}"><xsl:apply-templates/></acronym>
+  <acronym class='{f:classes(.)}' title="{@name}"><xsl:call-template name="add_id"/><xsl:apply-templates/></acronym>
 </xsl:template>
 
 
@@ -51,22 +52,22 @@
 <xsl:template match="ltx:ref">
   <xsl:choose>
     <xsl:when test="not(@href) or @href=''">
-      <span class="{concat(f:classes(.),' here')}"><xsl:apply-templates/></span>
+      <span class="{concat(f:classes(.),' here')}"><xsl:call-template name="add_id"/><xsl:apply-templates/></span>
     </xsl:when>
 	<xsl:otherwise>
 	<!-- vismor -->
       <xsl:choose>
 		<xsl:when test="starts-with( @labelref,'LABEL:eq_' )">
-             <a href="{@href}" title="{@title}" class="{f:classes(.)}">Equation <xsl:apply-templates/></a>
+             <a href="{@href}" title="{@title}" class="{f:classes(.)}">Equation <xsl:call-template name="add_id"/><xsl:apply-templates/></a>
 		</xsl:when>
 		<xsl:when test="starts-with( @labelref,'LABEL:fig_' )">
-             <a href="{@href}" title="{@title}" class="{f:classes(.)}">Figure <xsl:apply-templates/></a>
+             <a href="{@href}" title="{@title}" class="{f:classes(.)}">Figure <xsl:call-template name="add_id"/><xsl:apply-templates/></a>
 		</xsl:when>
 		<xsl:when test="starts-with( @labelref,'LABEL:tbl_' )">
-             <a href="{@href}" title="{@title}" class="{f:classes(.)}">Table <xsl:apply-templates/></a>
+             <a href="{@href}" title="{@title}" class="{f:classes(.)}">Table <xsl:call-template name="add_id"/><xsl:apply-templates/></a>
 		</xsl:when>
         <xsl:otherwise>
-          <a href="{@href}" title="{@title}" class="{f:classes(.)}"><xsl:apply-templates/></a>
+          <a href="{@href}" title="{@title}" class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></a>
         </xsl:otherwise>
       </xsl:choose>
 	<!-- vismor -->
@@ -76,15 +77,15 @@
 
 <!-- can't nest-->
 <xsl:template match="ltx:ref//ltx:ref">
-  <span class="{f:classes(.)}"><xsl:apply-templates/></span>
+  <span class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></span>
 </xsl:template>
 
 <xsl:template match="ltx:anchor">
-  <a name="{@xml:id}" class="{f:classes(.)}"><xsl:apply-templates/></a>
+  <a name="{@xml:id}" class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></a>
 </xsl:template>
 
 <xsl:template match="ltx:cite">
-  <cite class="{f:classes(.)}"><xsl:apply-templates/></cite>
+  <cite class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></cite>
 </xsl:template>
 
 <!-- ltx:bibref not handled, since it is translated to ref in crossref module -->
@@ -95,15 +96,18 @@
 
 <!-- normally hidden -->
 <xsl:template match="ltx:note">
-  <span class="{concat(f:classes(.),' ',@role)}">
+  <span class="{concat(f:classes(.),' ',@role)}"
+	><xsl:call-template name="add_id"/>
     <xsl:call-template name="note-mark"/>
-    <div class="{concat(local-name(.),'_content')}">
-      <xsl:call-template name="note-mark"/>
-      <xsl:if test="not(@role = 'footnote')">
-	<span class="note-type"><xsl:value-of select="@role"/>: </span>
-      </xsl:if>
-      <xsl:apply-templates/>
-    </div>
+    <span class="{concat(local-name(.),'_content_outer')}">
+      <span class="{concat(local-name(.),'_content')}">
+	<xsl:call-template name="note-mark"/>
+	<xsl:if test="not(@role = 'footnote')">
+	  <span class="note-type"><xsl:value-of select="@role"/>: </span>
+	</xsl:if>
+	<xsl:apply-templates/>
+      </span>
+    </span>
   </span>
 </xsl:template>
 
@@ -117,14 +121,14 @@
 </xsl:template>
 
 <xsl:template match="ltx:ERROR">
-  <span class="{f:classes(.)}"><xsl:apply-templates/></span>
+  <span class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></span>
 </xsl:template>
 
 <!-- invisible -->
 <xsl:template match="ltx:indexmark"/>
 
 <xsl:template match="ltx:indexphrase">
-  <span class="{f:classes(.)}"><xsl:apply-templates/></span>
+  <span class="{f:classes(.)}"><xsl:call-template name="add_id"/><xsl:apply-templates/></span>
 </xsl:template>
 
 </xsl:stylesheet>

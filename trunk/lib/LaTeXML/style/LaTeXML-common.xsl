@@ -21,6 +21,13 @@
     extension-element-prefixes="func f"
     exclude-result-prefixes = "ltx f func string">
 
+  <!-- Copy ID info from latexml elements to generated element.-->
+  <xsl:template name="add_id">
+    <xsl:if test="@fragid">
+      <xsl:attribute name="id"><xsl:value-of select="@fragid"/></xsl:attribute>
+    </xsl:if>
+  </xsl:template>
+
 <!-- Usage:  <element class='{f:classes(.)}'>...
      Adds space separated classes based on the current element's 
      local-name and class attribute (if any). -->
@@ -28,7 +35,7 @@
   <xsl:param name="node"/>
   <xsl:choose>
     <xsl:when test="$node/@class">
-      <func:result><xsl:value-of select="concat(local-name($node),' ',@class)"/></func:result>
+      <func:result><xsl:value-of select="concat(local-name($node),' ',$node/@class)"/></func:result>
     </xsl:when>
     <xsl:otherwise>
       <func:result><xsl:value-of select="local-name($node)"/></func:result>
@@ -96,7 +103,9 @@
 		       f:if($node/@yoffset,   concat('position:relative; bottom:',$node/@yoffset,'; '),''),
 		       f:if($node/@color,     concat('color:',$node/@color,'; '),''),
 		       f:if($node/@framed = 'rectangle','border:1px solid black; ',''),
-		       f:if($node/@framed = 'underline','text-decoration:underline; ','')
+		       f:if($node/@framed = 'underline','text-decoration:underline; ',''),
+		       f:if($node/@align,     concat('text-align:',$node/@align,';'),''),
+		       f:if($node/@vattach,   concat('vertical-align:',$node/@vattach,';'),'')
 		       )"/>
   </func:result>
 </func:function>

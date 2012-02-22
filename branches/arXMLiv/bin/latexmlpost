@@ -20,14 +20,16 @@ my $identity = "latexmlpost (LaTeXML version $LaTeXML::VERSION)";
 # undef => unspecified; 0 = NO, 1 = YES
 my($help,$showversion,$verbosity,$validate,$omit_doctype)=(0,0,0,1,0);
 my($sourcedir,$destination)=(undef,undef);
-my($format,$urlstyle) = (undef,'server');
+my($format,$is_html,$urlstyle) = (undef,undef,'server');
 my($numbersections)=(1);
 my($stylesheet,$defaultcss,$icon,@css)=(undef,1);
-my($parallelmath,$mathimages,$mathimagemag)=(undef,undef,1.75);
-my($linelength,$keepXMath,$plane1,$hackplane1)=(undef,undef,undef,undef);
+my($mathimages,$mathimagemag)=(undef,1.75);
+my($linelength,$plane1,$hackplane1)=(undef,undef,undef);
 my($dographics,$svg,$picimages)=(undef,undef,undef);
 my @graphicsmaps=();
 my($split,$splitat,$splitpath,$splitnaming)=(undef,'section',undef,'id');
+my($navtoc)=(undef);
+my %navtocstyles=(context=>1,normal=>1,none=>1);
 my($prescan,$dbfile,$scan,$crossref,$sitedir)=(undef,undef,1,1,undef);
 my($index,$permutedindex,$splitindex)=(1,undef,undef);
 my($splitbibliography,@bibliographies)=(undef);
@@ -40,6 +42,8 @@ my %splitpaths =
    subsection=>"//ltx:chapter | //ltx:section | //ltx:subsection | $splitback",
    subsubsection=>"//ltx:chapter | //ltx:section | //ltx:subsection | //ltx:subsubsection | $splitback");
 
+# Obsolete...
+my $parallelmath;
 
 # Get the command line arguments.
 GetOptions("verbose+"              =>\$verbosity,
@@ -54,7 +58,8 @@ GetOptions("verbose+"              =>\$verbosity,
 	   "destination=s"=>sub { $destination = $_[1];
 				  if(!defined $format){
 				    $format='xhtml' if $destination=~/\.xhtml$/;
-				    $format='html'  if $destination=~/\.html$/; }},
+				    $format='html'  if $destination=~/\.html$/; 
+				    $format='html5' if $destination=~/\.html5$/; }},
 	   "omitdoctype!"          =>\$omit_doctype,
 	   "numbersections!"       =>\$numbersections,
 	   # Some general XSLT/CSS options.
@@ -70,6 +75,8 @@ GetOptions("verbose+"              =>\$verbosity,
 	   "scan!"                 =>\$scan,
 	   "crossref!"             =>\$crossref,
 	   "urlstyle=s"            =>\$urlstyle,
+	   "navigationtoc=s"       =>\$navtoc,
+	   "navtoc=s"              =>\$navtoc,
 	   # Generating indices
 	   "index!"                =>\$index,
 	   "permutedindex!"        =>\$permutedindex,
@@ -101,7 +108,8 @@ GetOptions("verbose+"              =>\$verbosity,
 	   "nocontentmathml|nocmml"      => sub { removeMathFormat('cmml'); },
 	   "noopenmath|noom"             => sub { removeMathFormat('om'); },
 	   "parallelmath!"               => \$parallelmath,
-	   "keepXMath!"                  =>\$keepXMath,
+	   "keepXMath"                   => sub { addMathFormat('XMath'); },
+	   "nokeepXMath"                 => sub { removeMathFormat('XMath'); },
 	   # For graphics: vaguely similar issues, but more limited.
 	   # includegraphics images (eg. ps) can be converted to webimages (eg.png)
 	   # picture/pstricks images can be converted to png or possibly svg.
@@ -129,6 +137,10 @@ $sourcedir   = $sourcedir   && pathname_canonical($sourcedir);
 $destination = $destination && pathname_canonical($destination);
 $sitedir     = $sitedir     && pathname_canonical($sitedir);
 
+if(defined $parallelmath){
+  warn "The --parallelmath option is obsolete; Parallel markup will be generated"
+    . " whenever you specify more than one math format."; }
+
 # Check for appropriate combination of split, scan, prescan, dbfile, crossref
 if($split && !defined $destination){
   Error("Must supply --destination when using --split"); }
@@ -153,45 +165,53 @@ if(!$prescan && $index && ! ($scan || defined $crossref)){
 if(!$prescan && @bibliographies && ! ($scan || defined $crossref)){
   Error("Cannot generate bibliography (--bibliography) without --scan or --dbfile"); }
 
+$navtoc = lc($navtoc) if defined $navtoc;
+$navtoc=undef if $navtoc && $navtoc eq 'none';
+if($navtoc){
+  if(!$navtocstyles{$navtoc}){
+    Error("$navtoc is not a recognized style of navigation TOC (--navigationtoc)"); }
+  if(!$crossref){
+    Error("Cannot use --navigationtoc=$navtoc without --crossref"); }}
+
 # Check format and complete math and image options
 if(!defined $format){}
 elsif($format eq 'html'){
   Error("Default html stylesheet only supports math images, not ".join(', ',@math_formats))
-    if (!defined $stylesheet) && ($parallelmath || scalar(@math_formats));
+    if (!defined $stylesheet) && scalar(@math_formats);
   Error("Default html stylesheet does not support --svg") if $svg;
 
   $mathimages = 1 unless defined $mathimages;
   $dographics = 1 unless defined $dographics;
   $picimages  = 1 unless defined $picimages;
+  $is_html = 1;
   if(!defined $stylesheet){
     $stylesheet = "LaTeXML-html.xsl";
     unshift(@css,"core.css") if $defaultcss; }}
-elsif($format eq 'xhtml'){
-  Error("Default xhtml stylesheet does not support --mathimages")
-    if (!defined $stylesheet) && $mathimages;
-  # Add pMML FIRST, unless already there, or was disabled.
+elsif($format eq 'html5'){
+  # In principle, should only have pMML and possibly MathImages (for altimg);
+  # but I guess we can allow people to try...
   unshift(@math_formats,'pmml') 
     unless grep($_ eq 'pmml',@math_formats) || $removed_math_formats{pmml};
-  # Add cMML NEXT if parallel was requested and pMML is present, but no secondary format was requested.
-  push(@math_formats,'cmml') 
-    if $parallelmath &&  grep($_ eq 'pmml',@math_formats) && scalar(@math_formats)==1;
-  # use parallel markup if there are multiple formats requested.
-  $parallelmath = 1 if (!defined $parallelmath) && (scalar(@math_formats)>1);
-  Error("Default xhtml stylesheet only supports OpenMath in parallel with MathML")
-    if (!defined $stylesheet) && !$parallelmath && grep($_ eq 'om',@math_formats);
   $svg        = 1 unless defined $svg;
   $dographics = 1 unless defined $dographics;
+  $is_html = 1;
+  if(!defined $stylesheet){
+    $stylesheet = "LaTeXML-html5.xsl";
+    unshift(@css,"core.css") if $defaultcss; }}
+elsif($format eq 'xhtml'){
+  # Add pMML FIRST, unless already there, or was disabled.
+  # note that MathImages can supply altimg attributes
+  unshift(@math_formats,'pmml') 
+    unless grep($_ eq 'pmml',@math_formats) || $removed_math_formats{pmml};
+  $svg        = 1 unless defined $svg;
+  $dographics = 1 unless defined $dographics;
+  $is_html = 0;
   if(!defined $stylesheet){
     $stylesheet = "LaTeXML-xhtml.xsl";
     unshift(@css,"core.css") if $defaultcss; }}
 elsif($format eq 'xml'){}
 else {
   Error("Unrecognized target format: $format"); }
-
-Error("Parallel math markup needs at least two formats")
-  if $parallelmath && (scalar(@math_formats) < 2);
-#Error("Parallel math markup can only be based on MathML") 
-#  if $parallelmath && ($math_formats[0] !~ /^(cmml|pmml)$/);
 
 if((!defined $destination) && ($mathimages || $dographics || $picimages)){
   Error("Must supply --destination unless all auxilliary file writing is disabled"
@@ -214,6 +234,15 @@ if(defined $dbfile && !-f $dbfile){
     pathname_mkdir($dbdir); }}
 my $DB = LaTeXML::Util::ObjectDB->new(dbfile=>$dbfile,%OPTIONS);
 
+# Create the Source Document
+my $DOCUMENT= ($xmlfile eq '-'
+	       ? LaTeXML::Post::Document->newFromSTDIN(validate=>$validate,
+						       sourceDirectory=>$sourcedir,
+						       destination=>$destination)
+	       : LaTeXML::Post::Document->newFromFile($xmlfile,
+						      validate=>$validate,
+						      sourceDirectory=>$sourcedir,
+						      destination=>$destination));
 # Create the processors:
 my @procs = ();
 if($split){
@@ -241,11 +270,9 @@ if(!$prescan){
     require 'LaTeXML/Post/CrossRef.pm';
     push(@procs,LaTeXML::Post::CrossRef->new(db=>$DB,urlstyle=>$urlstyle,format=>$format,
 					     ($numbersections ? (number_sections=>1):()),
+					     ($navtoc ? (navigation_toc=>$navtoc):()),
 					     %OPTIONS)); }
 
-  if($mathimages){
-    require 'LaTeXML/Post/MathImages.pm';
-    push(@procs,LaTeXML::Post::MathImages->new(magnification=>$mathimagemag,%OPTIONS)); }
   if($picimages){
     require 'LaTeXML/Post/PictureImages.pm';
     push(@procs,LaTeXML::Post::PictureImages->new(%OPTIONS)); }
@@ -261,79 +288,73 @@ if(!$prescan){
     require 'LaTeXML/Post/SVG.pm';
     push(@procs,LaTeXML::Post::SVG->new(%OPTIONS)); }
   if(@math_formats){
-    $keepXMath  = 0 unless defined $keepXMath;
     my @mprocs=();
+###    # If XMath is not first, it must be at END!  Or... ???
     foreach my $fmt (@math_formats){
-      if($fmt eq 'pmml'){
+      if($fmt eq 'XMath'){
+	require 'LaTeXML/Post/XMath.pm';
+	push(@mprocs,LaTeXML::Post::XMath->new(%OPTIONS)); }
+      elsif($fmt eq 'pmml'){
 	require 'LaTeXML/Post/MathML.pm';
-	push(@mprocs,LaTeXML::Post::MathML::Presentation->new(
-		    (defined $linelength ? (linelength=>$linelength):()),
+	if(defined $linelength){
+	  push(@mprocs,LaTeXML::Post::MathML::PresentationLineBreak->new(
+                    linelength=>$linelength,
                     ($plane1 ? (plane1=>1):()),
                     ($hackplane1 ? (hackplane1=>1):()),
                     %OPTIONS)); }
+	else {
+	  push(@mprocs,LaTeXML::Post::MathML::Presentation->new(
+                    ($plane1 ? (plane1=>1):()),
+                    ($hackplane1 ? (hackplane1=>1):()),
+                    %OPTIONS)); }}
       elsif($fmt eq 'cmml'){
 	require 'LaTeXML/Post/MathML.pm';
 	push(@mprocs,LaTeXML::Post::MathML::Content->new(%OPTIONS)); }
       elsif($fmt eq 'om'){
 	require 'LaTeXML/Post/OpenMath.pm';
-	push(@mprocs,LaTeXML::Post::OpenMath->new(%OPTIONS)); }}
-    if($parallelmath){
-#      require 'LaTeXML/Post/MathML.pm';
-#      push(@procs,LaTeXML::Post::MathML::Parallel->new(math_processors=>[@mprocs],%OPTIONS)); }
-      my $main = shift(@mprocs);
-      $main->setParallel(@mprocs);
-      push(@procs,$main); }
-    else {
-      push(@procs,@mprocs); }}
-  else {
-    $keepXMath  = 1 unless defined $keepXMath;
-  }
-  if(!$keepXMath){
-    require 'LaTeXML/Post/PurgeXMath.pm';
-    push(@procs,LaTeXML::Post::PurgeXMath->new(%OPTIONS)); }
+	push(@mprocs,LaTeXML::Post::OpenMath->new(%OPTIONS)); }
+    }
+    my $main = shift(@mprocs);
+    $main->setParallel(@mprocs);
+    push(@procs,$main); }
+  # Done AFTER other math formats, so that it can add attributes in appropriate places
+  # (eg. MathML's altimg).
+  if($mathimages){
+    require 'LaTeXML/Post/MathImages.pm';
+    push(@procs,LaTeXML::Post::MathImages->new(magnification=>$mathimagemag,%OPTIONS)); }
 
   if($stylesheet){
     require 'LaTeXML/Post/XSLT.pm'; 
-    my @csspaths=();
-    if(@css){
-      foreach my $css (@css){
-	$css .= '.css' unless $css =~ /\.css$/;
-	# Dance, if dest is current dir, we'll find the old css before the new one!
-	my @csssources = map(pathname_canonical($_),
-			     pathname_findall($css,types=>['css'],
-					      ($sourcedir ? (paths=>[$sourcedir]):()),
-					      installation_subdir=>'style'));
-	my $csspath = pathname_absolute($css,pathname_directory($destination));
-	while(@csssources && ($csssources[0] eq $csspath)){ shift(@csssources); }
-	my $csssource = shift(@csssources);
-	pathname_copy($csssource,$csspath)  if $csssource && -f $csssource;
-	push(@csspaths,$csspath); }}
-    my $icondest;
+    # Copy various kinds of resources, css, icon (eventually javascript...)
+    my $parameters={};
+    my @searchpaths = $DOCUMENT->getSearchPaths;
+    foreach my $css (@css){
+      if(my $csssource = pathname_find($css, types=>['css'],paths=>[@searchpaths],
+				       installation_subdir=>'style')){
+	print STDERR "Using CSS=$csssource\n" if $verbosity > 0;
+	my $cssdest = pathname_absolute($css,pathname_directory($destination));
+	$cssdest .= '.css' unless $cssdest =~ /\.css$/;
+	warn "CSS source $csssource is same as destination!" if $csssource eq $cssdest;
+	pathname_copy($csssource,$cssdest);
+	push(@{$$parameters{CSS}}, $cssdest); }
+      else {
+	warn "Couldn't find CSS $css in paths ".join(',',@searchpaths)."\n"; }}
     if($icon){
-      $icondest = pathname_absolute($icon,pathname_directory($destination));
-      if(my $iconsrc = pathname_find($icon,($sourcedir ? (paths=>[$sourcedir]):()))){
-	pathname_copy($iconsrc,$icondest); }}
-    push(@procs,LaTeXML::Post::XSLT->new(stylesheet=>$stylesheet,
-					 parameters=>{(@csspaths ? (CSS=>[@csspaths]):()),
-						      ($icondest ? (ICON=>$icondest):()),
-						     },
-					 %OPTIONS)); }
+      if(my $iconsrc = pathname_find($icon,paths=>[$DOCUMENT->getSearchPaths])){
+	print STDERR "Using icon=$iconsrc\n" if $verbosity > 0;
+	my $icondest = pathname_absolute($icon,pathname_directory($destination));
+	pathname_copy($iconsrc,$icondest);
+	$$parameters{ICON}=$icondest;  }
+      else {
+	warn "Couldn't find ICON $icon in paths ".join(',',@searchpaths)."\n"; }}
+    push(@procs,LaTeXML::Post::XSLT->new(stylesheet=>$stylesheet,parameters=>$parameters, %OPTIONS)); }
 
-  push(@procs,LaTeXML::Post::Writer->new(format=>$format,omit_doctype=>$omit_doctype,%OPTIONS));
+  push(@procs,LaTeXML::Post::Writer->new(format=>$format,omit_doctype=>$omit_doctype,is_html=>$is_html,%OPTIONS));
 }
 
 # Figure how to define a Reader processor (?)
 # that initialize the thing by reading several files (the rest of the command line).
-LaTeXML::Post::ProcessChain(
-	  ($xmlfile eq '-'
-	   ? LaTeXML::Post::Document->newFromSTDIN(validate=>$validate,
-						   sourceDirectory=>$sourcedir,
-						   destination=>$destination)
-	   : LaTeXML::Post::Document->newFromFile($xmlfile,
-						  validate=>$validate,
-						  sourceDirectory=>$sourcedir,
-						  destination=>$destination)),
-			    @procs);
+LaTeXML::Post::ProcessChain($DOCUMENT,@procs);
 $DB->finish;
 #======================================================================
 # helpers
@@ -381,7 +402,7 @@ latexmlpost [options] I<xmlfile>
                          source TeX file.
  --validate, --novalidate Enables (the default) or disables
                          validation of the source xml.
- --format=html|xhtml|xml requests the output format.
+ --format=html|html5|xhtml|xml requests the output format.
  --destination=file      specifies output file (and directory).
  --omitdoctype           omits the Doctype declaration,
  --noomitdoctype         disables the omission (the default)
@@ -390,7 +411,7 @@ latexmlpost [options] I<xmlfile>
  --nonumbersections      disables the above
  --stylesheet=xslfile    requests the XSL transform using the
                          given xslfile as stylesheet.
- --css=cssfile           adds a css stylesheet to html/xhtml
+ --css=cssfile           adds a css stylesheet to html/html5/xhtml
                          (can be repeated)
  --nodefaultcss          disables the default css stylesheet
  --split                 requests splitting each document
@@ -407,6 +428,7 @@ latexmlpost [options] I<xmlfile>
  --nocrossref            disables the above
  --urlstyle=(server|negotiated|file) format to use for urls
                          (default server).
+ --navigationtoc=(context|none) generates a table of contents innavbar
  --index                 requests filling in the index (default)
  --noindex               disables the above
  --splitindex            Splits the index into pages per initial.
@@ -428,7 +450,7 @@ latexmlpost [options] I<xmlfile>
  --nomathimages          disables the above
  --mathimagemagnification=mag specifies magnification factor
  --presentationmathml    converts math to Presentation MathML
-                         (default for xhtml format)
+                         (default for xhtml & html5 formats)
  --pmml                  alias for --presentationmathml
  --nopresentationmathml  disables the above
  --linelength=n          formats presentation mathml to a
@@ -439,9 +461,6 @@ latexmlpost [options] I<xmlfile>
  --openmath              converts math to OpenMath
  --noopenmath            disables the above (default)
  --om                    alias for --openmath
- --parallelmath          requests parallel math markup for MathML
-                         (default when multiple math formats)
- --noparallelmath        disables the above
  --keepXMath             preserves the intermediate XMath
                          representation (default is to remove)
  --graphicimages         converts graphics to images (default)
@@ -497,16 +516,17 @@ Enables (or disables) the validation of the source XML document (the default).
 
 =over 4
 
-=item C<--format>=C<(html|xhtml|xml)>
+=item C<--format>=C<(html|html5|xhtml|xml)>
 
 Specifies the output format for post processing. 
 C<html> format converts the material to html and the mathematics to png images.
 C<xhtml> format converts to xhtml and uses presentation MathML (after attempting
-to parse the mathematics) for representing the math.  In both cases, any
+to parse the mathematics) for representing the math.  C<html5> similarly converts
+math to presentation MathML. In these cases, any
 graphics will be converted to web-friendly formats and/or copied to the
 destination directory.  By default, C<xml>, the output is left in LaTeXML's xml,
 but the math is parsed and converted to presentation MathML.
-For html and xhtml, a default stylesheet is provided, but see
+For html, html5 and xhtml, a default stylesheet is provided, but see
 the C<--stylesheet> option.
 
 =item C<--destination=>I<destination>
@@ -528,11 +548,11 @@ numbers in the formatted document and crossreference links.
 
 Requests the XSL transformation of the document using the given xslfile as stylesheet.
 If the stylesheet is omitted, a `standard' one appropriate for the
-format (html or xhtml) will be used.
+format (html, html5 or xhtml) will be used.
 
 =item C<--css>=I<cssfile>
 
-Adds I<cssfile> as a css stylesheet to be used in the transformed html/xhtml.
+Adds I<cssfile> as a css stylesheet to be used in the transformed html/html5/xhtml.
 Multiple stylesheets can be used; they are included in the html in the
 order given, following the default C<core.css>
 (but see C<--nodefaultcss>). Some stylesheets included in the distribution are
@@ -549,7 +569,7 @@ Disables the inclusion of the default C<core.css> stylesheet.
 =item C<--icon>=I<iconfile>
 
 Copies I<iconfile> to the destination directory and sets up the linkage in
-the transformed html/xhtml to use that as the "favicon".
+the transformed html/html5/xhtml to use that as the "favicon".
 
 =back
 
@@ -615,6 +635,13 @@ trailing C<index.html>.  With C<negotiated>, the trailing
 file extension (typically C<html> or C<xhtml>) are eliminated.
 The scheme C<file> preserves complete (but relative) urls
 so that the site can be browsed as files without any server.
+
+=item C<--navigationtoc>=C<(context|none)>
+
+Generates a table of contents in the navigation bar; default is C<none>.
+The `context' style of TOC, is somewhat verbose and reveals more detail near the current
+page; it is most suitable for navigation bars placed on the left or right.
+Other styles of TOC should be developed and added here, such as a short form.
 
 =item C<--index>, C<--noindex>
 
@@ -693,7 +720,7 @@ Default is 1.75.
 =item C<--presentationmathml>, C<--nopresentationmathml>
 
 Requests or disables conversion of math to Presentation MathML.
-Conversion is the default for xhtml format.
+Conversion is the default for xhtml and html5 formats.
 
 =item C<--linelength>I<=number>
 
@@ -726,25 +753,12 @@ Requests or disables conversion of math to OpenMath.
 Conversion is disabled by default.
 B<Note> that this conversion is only partially implemented.
 
-=item C<--parallelmath>, C<--noparallelmath>
-
-Requests or disables parallel math markup.
-Parallel markup is the default for xhtml formats when multiple math
-formats are requested.
-
-This method uses the MathML C<semantics> element with additional formats
-appearing as C<annotation>'s.
-The first math format requested must be either Presentation or Content MathML;
-additional formats may be MathML or OpenMath.
-
-If this option is disabled and multiple formats are requested, the
-representations are simply stored as separate children of the C<Math> element.
-
 =item C<--keepXMath>
 
 By default, when any of the MathML or OpenMath conversions
 are used, the intermediate math representation will be removed;
-this option preserves it.
+this option preserves it; it will be used as secondary parallel
+markup, when it follows the options for other math representations.
 
 =back
 

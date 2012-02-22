@@ -90,7 +90,7 @@ sub new {
   if($options{catcodes} =~ /^(standard|style)/){
     # Setup default catcodes.
     my %std = ( "\\"=>   CC_ESCAPE, "{"=>    CC_BEGIN,  "}"=>    CC_END,   "\$"=>   CC_MATH,
-		"\&"=>   CC_ALIGN,  "\n"=>   CC_EOL,    "#"=>    CC_PARAM,  "^"=>   CC_SUPER,
+		"\&"=>   CC_ALIGN,  "\r"=>   CC_EOL,    "#"=>    CC_PARAM,  "^"=>   CC_SUPER,
 		"_"=>    CC_SUB,    " "=>    CC_SPACE,  "\t"=>   CC_SPACE,  "%"=>   CC_COMMENT,
 		"~"=>    CC_ACTIVE, chr(0)=> CC_IGNORE);
     map( $$self{table}{catcode}{$_} = [$std{$_}], keys %std);
@@ -98,6 +98,7 @@ sub new {
       $$self{table}{catcode}{chr($c)} = [CC_LETTER];
       $$self{table}{catcode}{chr($c+ord('a')-ord('A'))} = [CC_LETTER];  }
   }
+  $$self{table}{value}{SPECIALS}=[['^','_','@','~','&','$','#','%',"'"]];
   if($options{catcodes} eq 'style'){
     $$self{table}{catcode}{'@'} = [CC_LETTER]; }
   $self; }
@@ -168,7 +169,7 @@ sub shiftValue {
   my($self,$key)=@_;
   my $vtable = $$self{table}{value};
   assign_internal($self,'value',$key,[],'global') unless $$vtable{$key}[0];
-  shift(@{$$vtable{value}{$key}[0]}); }
+  shift(@{$$vtable{$key}[0]}); }
 
 sub lookupStackedValues { 
   my $stack = $_[0]->{table}{value}{$_[1]};
@@ -302,6 +303,7 @@ sub popDaemonFrame {
 #======================================================================
 # Set one of the definition prefixes global, etc (only global matters!)
 sub setPrefix     { $_[0]->{prefixes}{$_[1]} = 1; }
+sub getPrefix     { $_[0]->{prefixes}{$_[1]}; }
 sub clearPrefixes { $_[0]->{prefixes} = {}; }
 
 #======================================================================

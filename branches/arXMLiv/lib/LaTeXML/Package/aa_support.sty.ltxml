@@ -63,15 +63,15 @@ DefConstructor('\@add@institute {}',
 # Handling similar to reconnecting footnotemark & text.
 Tag('ltx:note',afterClose=>\&relocateInstitute);
 sub relocateInstitute {
-  my($document,$node)=@_;
-  if(($node->getAttribute('role')||'') eq 'institutetext'){
-    if(my $mark = $node->getAttribute('mark')){
+  my($document,$instnode)=@_;
+  if(($instnode->getAttribute('role')||'') eq 'institutetext'){
+    if(my $mark = $instnode->getAttribute('mark')){
       if(my @authors = $document->findnodes(".//ltx:contact[\@role='institutemark'][\@mark='$mark']")){
 	foreach my $author (@authors){
-	  append_nodes_clone($author,$node->childNodes);
+	  $document->appendClone($author,$instnode->childNodes);
 	  $author->setAttribute(role=>'institute');
 	  $author->removeAttribute('mark'); }
-	$node->parentNode->removeChild($node); }}}}
+	$instnode->parentNode->removeChild($instnode); }}}}
 
 # "Structured" abstract
 # Note that they suggest either a 5 or 1 argument version!
@@ -244,8 +244,8 @@ DefMath('\lse',   "\x{2A8D}", role=>'RELOP', meaning=>'less-than-or-similar-to-o
 DefMath('\gse',   "\x{2A8E}", role=>'RELOP', meaning=>'greater-than-or-similar-to-or-equal');
 DefMath('\leogr', "\x{2276}", role=>'RELOP', meaning=>'less-than-or-greater-than');
 DefMath('\grole', "\x{2277}", role=>'RELOP', meaning=>'greater-than-or-less-than');
-DefMath('\loa',   "\x{2A85}", role=>'RELOP', meaning=>'less-than-or-aproximately-equals');
-DefMath('\goa',   "\x{2A86}", role=>'RELOP', meaning=>'greater-than-or-aproximately-equals');
+DefMath('\loa',   "\x{2A85}", role=>'RELOP', meaning=>'less-than-or-approximately-equals');
+DefMath('\goa',   "\x{2A86}", role=>'RELOP', meaning=>'greater-than-or-approximately-equals');
 DefMath('\lid',   "\x{2266}", role=>'RELOP', meaning=>'less-than-or-equals');
 DefMath('\gid',   "\x{2267}", role=>'RELOP', meaning=>'greater-than-or-equals');
 

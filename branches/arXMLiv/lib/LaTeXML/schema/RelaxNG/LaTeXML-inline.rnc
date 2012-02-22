@@ -65,8 +65,8 @@ text_attributes =
 
 ## Content model for \elementref{text}.
 ## DG: Quick fix disallowing Misc elements in text:
-## text_model = Inline.model
-text_model = (text | Inline.class | Meta.class)*
+ text_model = Inline.model
+## text_model = (text | Inline.class | Meta.class)*
 
 #======================================================================
 
@@ -205,7 +205,20 @@ bibref_attributes =
   attribute yyseparator { text }?
 
 ## Content model for \elementref{bibref}.
-bibref_model = Inline.model
+bibref_model = bibrefphrase*
+
+#======================================================================
+
+bibrefphrase =
+## A preceding or following phrase used in composing a bibliographic reference,
+## such as listing pages or chapter.
+element bibrefphrase { bibrefphrase_attributes, bibrefphrase_model }
+
+## Attributes for \elementref{bibrefphrase}
+bibrefphrase_attributes = Common.attributes
+
+## Content model for \elementref{bibrefphrase}
+bibrefphrase_model = Inline.model
 
 #======================================================================
 
@@ -220,24 +233,6 @@ note_attributes =
 
   ## indicates the desired visible marker to be linked to the note.
   attribute mark { text }?,
-
-  ## indicates the RDFa property.
-  attribute property { text }?,
-
-  ## indicates the RDFa content.
-  attribute content { text }?,
-
-  ## indicates the RDFa relation.
-  attribute rel { text }?,
-
-  ## indicates the RDFa relation.
-  attribute resource { text }?,
-
-  ## indicates the RDFa content datatype.
-  attribute datatype { text }?,
-
-  ## indicates the RDFa about.
-  attribute about { text }?,
 
   ## indicates the kind of note
   attribute role { "footnote" | text }?

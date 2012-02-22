@@ -607,7 +607,7 @@ sub p_getValue {
   elsif(ref $node eq 'ARRAY'){
     my($op,$attr,@args)=@$node;
     if(@args){
-      join('',map(p_getValue($_),@args)); }
+      join('',grep(defined $_,map(p_getValue($_),@args))); }
     else {
       $$node[1]{name}; }}
   else {			# ????
@@ -781,11 +781,13 @@ sub Fence {
   my $c = p_getValue($close);
   my $n = int((scalar(@stuff)-2+1)/2);
   my @p= map(p_getValue(@stuff[2*$_]), 1..$n-1);
-  my $op = ($n==1
-	    ?  $enclose1{$o.'@'.$c}
-	    : ($n==2 
-	      ? ($enclose2{$o.'@'.$p[0].'@'.$c} || 'list')
-	       : ($encloseN{$o.'@'.$p[0].'@'.$c} || 'list')));
+  my $op = ($n==0
+	    ? undef
+	    : ($n==1
+	       ?  $enclose1{$o.'@'.$c}
+	       : ($n==2 
+		  ? ($enclose2{$o.'@'.$p[0].'@'.$c} || 'list')
+		  : ($encloseN{$o.'@'.$p[0].'@'.$c} || 'list'))));
   # When we're parsing XMWrap, we shouldn't try so hard to infer a meaning (it'll usually be wrong)
   $op = undef unless $LaTeXML::MathParser::STRICT;
   if(($n==1) && (!defined $op)){ # Simple case.
@@ -839,13 +841,13 @@ sub LeftRec {
 # then combine as nary.
 sub ApplyNary {
   my($op,$arg1,$arg2)=@_;
-  my $opname = p_getTokenMeaning($op);
-  my $opcontent = p_getValue($op);
+  my $opname    = p_getTokenMeaning($op) ||'__undef_meaning__';
+  my $opcontent = p_getValue($op)  ||'__undef_content__';
   my @args = ();
   if(p_getQName($arg1) eq 'ltx:XMApp'){
     my($op1,@args1)=p_element_nodes($arg1);
-    if((p_getTokenMeaning($op1) eq $opname)
-       && (p_getValue($op1) eq $opcontent)
+    if(((p_getTokenMeaning($op1)||'__undef_meaning__') eq $opname)
+       && ((p_getValue($op1) || '__undef_content__') eq $opcontent)
        && !grep($_ ,map((p_getAttribute($op,$_)||'<none>') ne (p_getAttribute($op1,$_)||'<none>'),
 			qw(style)))) { # Check ops are used in similar way
       push(@args,@args1); }

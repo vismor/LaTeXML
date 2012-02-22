@@ -20,7 +20,7 @@ element document { document_attributes, document_model }
 
 
 ## The content allowable as the main body of the document.
-document.body.class = Para.model | paragraph | subsubsection | subsection | section | chapter | part
+document.body.class = Para.model | paragraph | subsubsection | subsection | section | chapter | part 
 
 ## Attributes for \elementref{document}.
 document_attributes = Sectional.attributes
@@ -29,8 +29,8 @@ document_attributes = Sectional.attributes
 ## Content model for \elementref{document}.
 document_model =
  (FrontMatter.class | SectionalFrontMatter.class | Meta.class | titlepage)*,
-  document.body.class*,
-  BackMatter.class*
+ (document.body.class | element slide {document_attributes,document.body.class})*,
+ BackMatter.class*
 
 #======================================================================
 
@@ -45,7 +45,8 @@ part.body.class = Para.model | chapter
 part_attributes = Sectional.attributes
 
 ## Content model for \elementref{part}.
-part_model = SectionalFrontMatter.class*, part.body.class*
+part_model = SectionalFrontMatter.class*, 
+	   (part.body.class | element slide {part_attributes,part.body.class})*
 
 #----------------------------------------------------------------------
 
@@ -60,7 +61,8 @@ chapter.body.class = Para.model | subparagraph | paragraph | subsubsection | sub
 chapter_attributes = Sectional.attributes
 
 ## Content model for \elementref{chapter}.
-chapter_model = SectionalFrontMatter.class*, chapter.body.class*
+chapter_model = SectionalFrontMatter.class*, 
+	      (chapter.body.class| element slide {chapter_attributes,chapter.body.class})*
 
 #----------------------------------------------------------------------
 
@@ -75,8 +77,9 @@ section.body.class = Para.model | subparagraph | paragraph | subsubsection | sub
 section_attributes = Sectional.attributes
 
 ## Content model for \elementref{section}.
-section_model = SectionalFrontMatter.class*, section.body.class*
-
+section_model = SectionalFrontMatter.class*, 
+	      (section.body.class| element slide {section_attributes,section.body.class})*
+ 
 #----------------------------------------------------------------------
 
 subsection =
@@ -90,7 +93,8 @@ subsection.body.class = Para.model | subparagraph | paragraph | subsubsection
 subsection_attributes = Sectional.attributes
 
 ## Content model for \elementref{subsection}.
-subsection_model = SectionalFrontMatter.class*, subsection.body.class*
+subsection_model = SectionalFrontMatter.class*,
+	      (subsection.body.class| element slide {subsection_attributes,subsection.body.class})*
 
 #----------------------------------------------------------------------
 
@@ -105,7 +109,8 @@ subsubsection.body.class = Para.model | subparagraph | paragraph
 subsubsection_attributes = Sectional.attributes
 
 ## Content model for \elementref{subsubsection}.
-subsubsection_model = SectionalFrontMatter.class*, subsubsection.body.class*
+subsubsection_model = SectionalFrontMatter.class*,
+	      (subsubsection.body.class| element slide {subsubsection_attributes,subsubsection.body.class})*
 
 #----------------------------------------------------------------------
 
@@ -121,7 +126,8 @@ paragraph.body.class = Para.model | subparagraph
 paragraph_attributes = Sectional.attributes
 
 ## Content model for \elementref{paragraph}.
-paragraph_model = SectionalFrontMatter.class*, paragraph.body.class*
+paragraph_model = SectionalFrontMatter.class*, 
+	      (paragraph.body.class| element slide {paragraph_attributes,paragraph.body.class})*
 
 
 #----------------------------------------------------------------------
@@ -137,7 +143,8 @@ subparagraph.body.class = Para.model
 subparagraph_attributes = Sectional.attributes
 
 ## Content model for \elementref{subparagraph}.
-subparagraph_model = SectionalFrontMatter.class*, subparagraph.body.class*
+subparagraph_model = SectionalFrontMatter.class*,
+	      (subparagraph.body.class| element slide {subparagraph_attributes,subparagraph.body.class})*
 
 #======================================================================
 
@@ -241,7 +248,14 @@ title_attributes =
   Common.attributes,
 
   ## The font prefered for the title.
-  attribute font { text }?
+  attribute font { text }?,
+
+  ## Indicates the text size to use. (See \elementref{text})
+  attribute size { "Huge" | "huge" | "LARGE" | "Large" | "large" | "normal"
+                 | "small" | "footnote" | "tiny" | text }?,
+
+  ## the color to use; any CSS compatible color specification.
+  attribute color { text }?
 
 ## Content model for \elementref{title},
 ## basically Inline.model with tag included (normally, but not necessarily, tag would come first).
@@ -375,7 +389,7 @@ keywords =
 element keywords { keywords_attributes, keywords_model }
 
 ## Attributes for \elementref{keywords}.
-keywords_attributes = Common.attributes, FrontMatter.attributes
+keywords_attributes = Common.attributes, FrontMatter.attributes,
 
   ## indicates the RDFa property.
   attribute property { text }?,

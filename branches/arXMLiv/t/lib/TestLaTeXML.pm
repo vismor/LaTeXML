@@ -20,7 +20,7 @@ sub latexml_tests {
     do_fail($directory,"Couldn't read directory $directory:$!"); }
   else {
     local $Test::Builder::Level =  $Test::Builder::Level+1;
-    my @tests = map("$directory/$_", grep(s/\.tex$//, readdir(DIR)));
+    my @tests = map("$directory/$_", grep(s/\.tex$//, sort readdir(DIR)));
     closedir(DIR);
     $Test->expected_tests(1+scalar(@tests)+$Test->expected_tests);
     eval { use_ok("LaTeXML"); }; # || skip_all("Couldn't load LaTeXML"); }
@@ -89,7 +89,7 @@ sub is_strings {
   my($strings1,$strings2,$name)=@_;
   my $max = $#$strings1 > $#$strings2 ? $#$strings1 : $#$strings2;
   my $ok = 1;
-  for(my $i = 0; $i < $max; $i++){
+  for(my $i = 0; $i <= $max; $i++){
     my $string1 = $$strings1[$i];
     my $string2 = $$strings2[$i];
     if(defined $string1){

@@ -22,6 +22,7 @@ use LaTeXML::Object;
 use LaTeXML::MathParser;
 use LaTeXML::Util::Pathname;
 use LaTeXML::Bib;
+use LaTeXML::Package;
 use Encode;
 our @ISA = (qw(LaTeXML::Object));
 
@@ -50,7 +51,7 @@ sub new {
   $state->assignValue(GRAPHICSPATHS=> [ map(pathname_absolute(pathname_canonical($_)),
 					    @{$options{graphicspaths} || []}) ],'global');
   $state->assignValue(INCLUDE_STYLES=>$options{includeStyles}|| 0,'global');
-  $state->assignValue(INPUT_ENCODING=>$options{inputencoding}) if $options{inputencoding};
+  $state->assignValue(PERL_INPUT_ENCODING=>$options{inputencoding}) if $options{inputencoding};
   bless {state   => $state, 
 	 nomathparse=>$options{nomathparse}||0,
 	 preload=>$options{preload},
@@ -99,8 +100,9 @@ sub digestFile {
 
      my $pathname = pathname_find($file,types=>['tex','']);
      Fatal(":missing_file:$file Cannot find TeX file $file") unless $pathname;
-     $state->assignValue(SOURCEFILE=>$pathname);
      my($dir,$name,$ext)=pathname_split($pathname);
+     $state->assignValue(SOURCEFILE=>$pathname);
+     $state->assignValue(SOURCEDIRECTORY=>$dir);
      $state->unshiftValue(SEARCHPATHS=>$dir) unless grep($_ eq $dir, @{$state->lookupValue('SEARCHPATHS')});
      $state->unshiftValue(GRAPHICSPATHS=>$dir) unless grep($_ eq $dir, @{$state->lookupValue('GRAPHICSPATHS')});
 
@@ -108,14 +110,17 @@ sub digestFile {
 							Tokens(Explode($name))));
      my $stomach=$state->getStomach;
      my @stuff=();
-     push(@stuff,$self->loadPreamble($options{preamble})) if $options{preamble};
+     #push(@stuff,$self->loadPreamble($options{preamble})) if $options{preamble};
+     $self->loadPostamble($options{postamble}) if $options{postamble};
 
      $stomach->getGullet->input($pathname);
+
+     $self->loadPreamble($options{preamble}) if $options{preamble};
+     #push(@stuff,$self->loadPostamble($options{postamble})) if $options{postamble};
+#     my $list = $self->finishDigestion;
+
      while($stomach->getGullet->getMouth->hasMoreInput){
        push(@stuff,$stomach->digestNextBody); }
-
-     push(@stuff,$self->loadPreamble($options{postamble})) if $options{postamble};
-#     my $list = $self->finishDigestion;
      my $list = LaTeXML::List->new(@stuff);
      NoteEnd("Digesting $file");
      $list; });
@@ -130,13 +135,16 @@ sub digestString {
      my $stomach=$state->getStomach;
      my @stuff=();
 
-     push(@stuff,$self->loadPreamble($options{preamble})) if $options{preamble};
+     #push(@stuff,$self->loadPreamble($options{preamble})) if $options{preamble};
+     $self->loadPostamble($options{postamble}) if $options{postamble};
 
      $stomach->getGullet->openMouth(LaTeXML::Mouth->new($string),0);
+
+     $self->loadPreamble($options{preamble}) if $options{preamble};
+     #push(@stuff,$self->loadPostamble($options{postamble})) if $options{postamble};
+
      while($stomach->getGullet->getMouth->hasMoreInput){
        push(@stuff,$stomach->digestNextBody); }
-
-     push(@stuff,$self->loadPreamble($options{postamble})) if $options{postamble};
 
      # my $list = $self->finishDigestion;
      my $list = LaTeXML::List->new(@stuff);
@@ -169,10 +177,17 @@ sub digestBibTeXFile {
      $state->getStomach->getGullet->inputConfigfile($name); #  Load configuration for this source, if any.
 
      my $tex = $bib->toTeX;
+
+     my $stomach=$state->getStomach;
+     my @stuff=();
      $state->getStomach->getGullet->openMouth(LaTeXML::Mouth->new($tex),0);
-     my $line = $self->finishDigestion;
+     while($stomach->getGullet->getMouth->hasMoreInput){
+       push(@stuff,$stomach->digestNextBody); }
+     my $list = LaTeXML::List->new(@stuff);
+
+#     my $list = $self->finishDigestion;
      NoteEnd("Digesting bibliography $file");
-     $line; });
+     $list; });
 }
 
 sub finishDigestion {
@@ -189,27 +204,29 @@ sub loadPreamble {
   my($self,$preamble)=@_;
   my $state = $$self{state};
   my $stomach  = $state->getStomach; # The current Stomach;
-  my @stuff = ();
+  #my @stuff = ();
   if($preamble eq 'standard_preamble.tex'){
-     $stomach->getGullet->openMouth(LaTeXML::Mouth->new('\documentclass{article}\begin{document}'),0); }
+    $stomach->getGullet->openMouth(LaTeXML::Mouth->new('\begin{document}'),0); }
   else {
-     $stomach->getGullet->input($preamble); }
-  while($stomach->getGullet->getMouth->hasMoreInput){
-    push(@stuff,$stomach->digestNextBody); }
-  LaTeXML::List->new(@stuff); }
+    $stomach->getGullet->input($preamble); }
+  #while($stomach->getGullet->getMouth->hasMoreInput){
+  #push(@stuff,$stomach->digestNextBody); }
+  #LaTeXML::List->new(@stuff); 
+}
 
 sub loadPostamble {
   my($self,$postamble)=@_;
   my $state = $$self{state};
   my $stomach  = $state->getStomach; # The current Stomach;
-  my @stuff = ();
+  #my @stuff = ();
   if($postamble eq 'standard_postamble.tex'){
      $stomach->getGullet->openMouth(LaTeXML::Mouth->new('\end{document}'),0); }
   else {
      $stomach->getGullet->input($postamble); }
-  while($stomach->getGullet->getMouth->hasMoreInput){
-    push(@stuff,$stomach->digestNextBody); }
-  LaTeXML::List->new(@stuff); }
+  #while($stomach->getGullet->getMouth->hasMoreInput){
+  #push(@stuff,$stomach->digestNextBody); }
+  #LaTeXML::List->new(@stuff); 
+}
 
 sub convertDocument {
   my($self,$digested)=@_;
@@ -224,8 +241,10 @@ sub convertDocument {
 	 $document->insertPI('latexml',searchpaths=>join(',',@$paths)); }}
      foreach my $preload (@{$$self{preload}}){
        next if $preload=~/\.pool$/;
+       $preload =~ s/^\[([^\]]*)\]//;
+       my $options = $1;
        $preload =~ s/\.sty$//;
-       $document->insertPI('latexml',package=>$preload); }
+       $document->insertPI('latexml',package=>$preload,($options ? (options=>$options):())); }
      $document->absorb($digested);
      NoteEnd("Building");
 
@@ -257,10 +276,19 @@ sub initializeState {
   $stomach->initialize;
   my $paths = $STATE->lookupValue('SEARCHPATHS');
   foreach my $preload (@files){
-    if(my $loadpath = pathname_find("$preload.ltxml",paths=>$paths,installation_subdir=>'Package')){
-      $gullet->input($loadpath); }
-    else {
-      Fatal(":missing_file:$preload Couldn't find $preload to preload"); }}
+    my($options,$type);
+    $options = $1 if $preload =~ s/^\[([^\]]*)\]//;
+    $type    = ($preload =~ s/\.(\w+)$// ? $1 : 'sty');
+    my $handleoptions = ($type eq 'sty')||($type eq 'cls');
+    if($options){
+      if($handleoptions){
+	$options = [split(/,/,$options)]; }
+      else {
+	Warn(":unexpected:options Attempting to pass options [$options] to $preload.$type"
+	   ."which is not a style or class file"); }}
+    LaTeXML::Package::InputDefinitions($preload,type=>$type,
+				       handleoptions=>$handleoptions, options=>$options)
+      || Fatal(":missing_file:$preload.$type Couldn't find $preload.$type to preload"); }
 
   # NOTE: This is seemingly a result of a not-quite-right
   # processing model.  Opening a new mouth to tokenize & digest

@@ -27,6 +27,7 @@ sub new {
   $$self{ref_show} = ($options{number_sections} ? "typerefnum" : "title");
   $$self{min_ref_length} = (defined $options{min_ref_length} ? $options{min_ref_length} : 1);
   $$self{ref_join} = (defined $options{ref_join} ? $options{ref_join} : " \x{2023} "); # or " in " or ... ?
+  $$self{navigation_toc} = $options{navigation_toc};
   $self; }
 
 sub process {
@@ -34,6 +35,12 @@ sub process {
   $self->ProgressDetailed($doc,"Beginning cross-references");
   my $root = $doc->getDocumentElement;
   local %LaTeXML::Post::CrossRef::MISSING=();
+  if(my $navtoc = $$self{navigation_toc}){ # If a navigation toc requested, put a toc in nav; will get filled in
+    my $toc = ['ltx:TOC',{format=>$navtoc}];
+    if(my $nav = $doc->findnode('//ltx:navigation')){
+      $doc->addNodes($nav,$toc); }
+    else {
+      $doc->addNodes($doc->getDocumentElement,['ltx:navigation',{},$toc]); }}
   $self->fill_in_tocs($doc);
   $self->fill_in_frags($doc);
   $self->fill_in_refs($doc);
@@ -208,7 +215,7 @@ sub make_bibcite {
 
   my $sep  = $bibref->getAttribute('separator') || ',';
   my $yysep= $bibref->getAttribute('yyseparator') || ',';
-  my @phrases = $bibref->getChildNodes();	  # get the ltx;note's in the bibref!
+  my @phrases = $bibref->getChildNodes();	  # get the ltx;bibrefphrase's in the bibref!
   # Collect all the data from the bibliography
   my @data = ();
   foreach my $key (@keys){
@@ -290,28 +297,29 @@ sub make_bibcite {
 sub generateURL {
   my($self,$doc,$id)=@_;
   my($object,$location);
-  if(($object = $$self{db}->lookup("ID:".$id))
-     && ($location = $object->getValue('location'))){
-    my $doclocation = $self->siteRelativePathname($doc->getDestination);
-    my $pathdir = pathname_directory($doclocation);
-    my $url = pathname_relative(($location =~ m|^/| ? $location : '/'.$location),
-				($pathdir  =~ m|^/| ? $pathdir  : '/'.$pathdir));
-    my $format = $$self{format} || 'xml';
-    my $urlstyle = $$self{urlstyle}||'file';
-    if($urlstyle eq 'server'){
-      $url =~ s/(^|\/)index.\Q$format\E$/$1/; } # Remove trailing index.$format
-    elsif($urlstyle eq 'negotiated'){
-      $url =~ s/\.\Q$format\E$//; # Remove trailing $format
-      $url =~ s/(^|\/)index$/$1/; # AND trailing index
-    }
-    $url = '.' unless $url;
-#    $url .= '/' if ($url ne '.') && ($url =~ /\/$/);
-    if(my $fragid = $object->getValue('fragid')){
-      $url = '' if ($url eq '.') or ($location eq $doclocation);
-      $url .= '#'.$fragid; }
-    elsif($location eq $doclocation){
-      $url = ''; }
-    $url; }
+  if($object = $$self{db}->lookup("ID:".$id)){
+    if($location = $object->getValue('location')){
+      my $doclocation = $self->siteRelativePathname($doc->getDestination);
+      my $pathdir = pathname_directory($doclocation);
+      my $url = pathname_relative(($location =~ m|^/| ? $location : '/'.$location),
+				  ($pathdir  =~ m|^/| ? $pathdir  : '/'.$pathdir));
+      my $format = $$self{format} || 'xml';
+      my $urlstyle = $$self{urlstyle}||'file';
+      if($urlstyle eq 'server'){
+	$url =~ s/(^|\/)index.\Q$format\E$/$1/; } # Remove trailing index.$format
+      elsif($urlstyle eq 'negotiated'){
+	$url =~ s/\.\Q$format\E$//; # Remove trailing $format
+	$url =~ s/(^|\/)index$/$1/; # AND trailing index
+      }
+      $url = '.' unless $url;
+      if(my $fragid = $object->getValue('fragid')){
+	$url = '' if ($url eq '.') or ($location eq $doclocation);
+	$url .= '#'.$fragid; }
+      elsif($location eq $doclocation){
+	$url = ''; }
+      $url; }
+    else {
+      $self->note_missing('Location for ID',$id); }}
   else {
     $self->note_missing('ID',$id); }}
 
@@ -377,25 +385,26 @@ sub generateRef_aux {
   $show =~ s/typerefnum\s*title/title/; # Same thing NOW!!!
   while($show){
     if($show =~ s/^type(\.?\s*)refnum(\.?\s*)//){
-      my $frefnum  = $entry->getValue('frefnum') || $entry->getValue('refnum');
-      if($frefnum){
+      my @frefnum  = $doc->trimChildNodes($entry->getValue('frefnum') || $entry->getValue('refnum'));
+      if(@frefnum){
 	$OK = 1;
-	push(@stuff, ['ltx:text',{class=>'tag'},$frefnum]); }}
+	push(@stuff, ['ltx:text',{class=>'reftag'},@frefnum]); }}
     elsif($show =~ s/^refnum(\.?\s*)//){
-      if(my $refnum = $entry->getValue('refnum')){
+      if(my @refnum = $doc->trimChildNodes($entry->getValue('refnum'))){
 	$OK = 1;
-	push(@stuff, ['ltx:text',{class=>'tag'},$refnum]); }}
+	push(@stuff, ['ltx:text',{class=>'reftag'},@refnum]); }}
     elsif($show =~ s/^toctitle//){
-      my $title = $self->fillInTitle($doc,$entry->getValue('toctitle')||$entry->getValue('title'));
+      my $title = $self->fillInTitle($doc,$entry->getValue('toctitle')||$entry->getValue('title')
+				     || $entry->getValue('toccaption'));
       if($title){
 	$OK = 1;
-	push(@stuff, ['ltx:text',{class=>'title'},$doc->trimChildNodes($title)]); }}
+	push(@stuff, ['ltx:text',{class=>'reftitle'},$doc->trimChildNodes($title)]); }}
 
     elsif($show =~ s/^title//){
-      my $title= $self->fillInTitle($doc,$entry->getValue('title'));
+      my $title= $self->fillInTitle($doc,$entry->getValue('title') || $entry->getValue('toccaption')); # !!!
       if($title){
 	$OK = 1;
-	push(@stuff, ['ltx:text',{class=>'title'},$doc->trimChildNodes($title)]); }}
+	push(@stuff, ['ltx:text',{class=>'reftitle'},$doc->trimChildNodes($title)]); }}
     elsif($show =~ s/^(.)//){
       push(@stuff, $1); }}
   ($OK ? @stuff : ()); }
@@ -406,7 +415,7 @@ sub generateTitle {
   # Add author, if any ???
   my $string = "";
   while(my $entry = $id && $$self{db}->lookup("ID:$id")){
-    my $title  = $self->fillInTitle($doc,$entry->getValue('title'))
+    my $title  = $self->fillInTitle($doc,$entry->getValue('title')) #|| $entry->getValue('toccaption'))
       || $entry->getValue('frefnum') || $entry->getValue('refnum');
     $title = $title->textContent if $title && ref $title;
     $title =~ s/^\s+// if $title;

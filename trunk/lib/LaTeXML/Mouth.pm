@@ -52,19 +52,17 @@ sub finish {
 
 # This is (hopefully) a platform independent way of splitting a string
 # into "lines" ending with CRLF, CR or LF (DOS, Mac or Unix).
+# Note that TeX considers newlines to be \r, ie CR, ie ^^M
 sub splitString {
   my($self,$string)=@_;
-#  $string =~ s/(?:\015\012|\015|\012)$//; # Remove trailing lineend, if any
-#  $string =~ s/(?:\015\012|\015|\012)/\n/sg; #  Normalize remaining
-#  ($string ? split("\n",$string) : ("")); }		  # And split.
-  $string =~ s/(?:\015\012|\015|\012)/\n/sg; #  Normalize remaining
-  split("\n",$string); }		  # And split.
+  $string =~ s/(?:\015\012|\015|\012)/\r/sg; #  Normalize remaining
+  split("\r",$string); }		  # And split.
 
 sub getNextLine {
   my($self)=@_;
   return undef unless scalar(@{$$self{buffer}});
   my $line = shift(@{$$self{buffer}});
-  (scalar(@{$$self{buffer}}) ? $line . "\n" : $line); }	# No cr on last line!
+  (scalar(@{$$self{buffer}}) ? $line . "\r" : $line); }	# No CR on last line!
 
 sub hasMoreInput {
   my($self)=@_;
@@ -89,8 +87,9 @@ sub getNextChar {
 	splice(@{$$self{chars}},$$self{colno}-1,4,$ch);
 	$$self{nchars} -= 3; }
       else {			# OR ^^ followed by a SINGLE Control char type code???
-	my $c=ord($$self{chars}->[$$self{colno}+1]);
-	$ch = chr($c + ($c > 64 ? -64 : 64));
+	my $c=$$self{chars}->[$$self{colno}+1];
+	my $cn = ord($c);
+	$ch = chr($cn + ($cn > 64 ? -64 : 64));
 	splice(@{$$self{chars}},$$self{colno}-1,3,$ch);
 	$$self{nchars} -= 2; }
       $cc = $STATE->lookupCatcode($ch); }
@@ -110,13 +109,14 @@ sub getLocator {
   my $msg =  "at $$self{source}; line $l col $c";
   if($long && (defined $l || defined $c)){
     my $chars=$$self{chars};
-    my $n = $$self{nchars}; 
-    $c=$n-1 if $c >=$n;
-    my $c0 = ($c > 50 ? $c-40 : 0);
-    my $cn = ($n-$c > 50 ? $c+40 : $n-1);
-    my $p1 = join('',@$chars[$c0..$c-1])||''; chomp($p1);
-    my $p2 = join('',@$chars[$c..$cn])||''; chomp($p2);
-    $msg .="\n  ".$p1."\n  ".(' ' x ($c-$c0)).'^'.' '.$p2; }
+    if(my $n = $$self{nchars}){
+      $c=$n-1 if $c >=$n;
+      my $c0 = ($c > 50 ? $c-40 : 0);
+      my $cm = ($c < 1 ? 0 : $c-1);
+      my $cn = ($n-$c > 50 ? $c+40 : $n-1);
+      my $p1 = ($c0 <= $cm ? join('',@$chars[$c0..$cm]) : ''); chomp($p1);
+      my $p2 = ($c  <= $cn ? join('',@$chars[$c..$cn])  : ''); chomp($p2);
+      $msg .="\n  ".$p1."\n  ".(' ' x ($c-$c0)).'^'.' '.$p2; }}
   $msg; }
 
 sub getSource {
@@ -132,8 +132,8 @@ sub handle_escape {		# Read control sequence
   # NOTE: We're using control sequences WITH the \ prepended!!!
   my $cs = "\\";		# I need this standardized to be able to lookup tokens (A better way???)
   my($ch,$cc)=$self->getNextChar;
-  if($cc == CC_EOL){	# I _think_ this is what Knuth is sayin' !?!?
-    ($ch,$cc)=(' ',CC_SPACE); }
+  # Knuth, p.46 says that Newlines are converted to spaces,
+  # Bit I believe that he does NOT mean within control sequences
   $cs .= $ch;
   if ($cc == CC_LETTER) {	# For letter, read more letters for csname.
     while ((($ch,$cc)=$self->getNextChar) && $ch && ($cc == CC_LETTER)){
@@ -147,11 +147,13 @@ sub handle_escape {		# Read control sequence
 
 sub handle_EOL {
   my($self)=@_;
-  ($$self{colno}==1
-#   ? ($STATE->lookupValue('inPreamble') ? T_SPACE : T_CS('\par'))
-   ? T_CS('\par')
-   : ($STATE->lookupValue('PRESERVE_NEWLINES') ? Token("\n",CC_SPACE) : T_SPACE)); 
-}
+  # Note that newines should be converted to space (with " " for content)
+  # but it makes nicer XML with occasional \n. Hopefully, this is harmless?
+  my $token = ($$self{colno}==1
+	       ? T_CS('\par')
+	       : ($STATE->lookupValue('PRESERVE_NEWLINES') ? Token("\n",CC_SPACE) : T_SPACE));
+  $$self{colno} = $$self{nchars}; # Ignore any remaining characters after EOL
+  $token; }
 
 sub handle_comment {
   my($self)=@_;
@@ -159,7 +161,7 @@ sub handle_comment {
   $$self{colno} = $$self{nchars};
   my $comment = join('',@{$$self{chars}}[$n..$$self{nchars}-1]);
   $comment =~ s/^\s+//; $comment =~ s/\s+$//;
-  ($comment && $STATE->lookupValue('INCLUDE_COMMENTS') ? T_COMMENT($comment) : $self->readToken); }
+  ($comment && $STATE->lookupValue('INCLUDE_COMMENTS') ? T_COMMENT($comment) : undef); }
 
 # Some caches
 my %LETTER =();
@@ -176,8 +178,8 @@ my @DISPATCH
       T_PARAM,			# T_PARAM
       T_SUPER,			# T_SUPER
       T_SUB,			# T_SUB
-      sub { $_[0]->readToken; }, # T_IGNORE
-      T_SPACE,			 # T_SPACE
+      sub { undef; },		# T_IGNORE (we'll read next token)
+      T_SPACE,		        # T_SPACE
       sub { $LETTER{$_[1]} || ($LETTER{$_[1]}=T_LETTER($_[1])); }, # T_LETTER
       sub { $OTHER{$_[1]}  || ($OTHER{$_[1]} =T_OTHER($_[1])); }, # T_OTHER
       sub { $ACTIVE{$_[1]} || ($ACTIVE{$_[1]}=T_ACTIVE($_[1])); }, # T_ACTIVE
@@ -191,32 +193,34 @@ my @DISPATCH
 # LaTeXML::Gullet intercepts them and passes them on at appropriate times.
 sub readToken {
   my($self)=@_;
-  # ===== Get next line, if we need to.
-  if ($$self{colno} >= $$self{nchars}) {
-    $$self{lineno}++;
-    $$self{colno}=0;
-    my $line = $self->getNextLine; 
-    if (!defined $line) {	# Exhausted the input.
-      $$self{chars}=[];
-      $$self{nchars}=0;
-      return undef;  }
-    $line =~ s/\s*$/\n/s;
-    $$self{chars}=[split('',$line)];
-    $$self{nchars} = scalar(@{$$self{chars}});
-    while(($$self{colno} < $$self{nchars})
-	  && (($$STATE{table}{catcode}{$$self{chars}->[$$self{colno}]}[0]||CC_OTHER)==CC_SPACE)){
-      $$self{colno}++; }
+  while(1){			# Iterate till we find a token, or run out. (use return)
+    # ===== Get next line, if we need to.
+    if ($$self{colno} >= $$self{nchars}) {
+      $$self{lineno}++;
+      $$self{colno}=0;
+      my $line = $self->getNextLine; 
+      if (!defined $line) {	# Exhausted the input.
+	$$self{chars}=[];
+	$$self{nchars}=0;
+	return undef;  }
+      # Remove trailing space, but NOT a control space!  End with CR (not \n) since this gets tokenized!
+      $line =~ s/((\\ )*)\s*$/$1\r/s;
+      $$self{chars}=[split('',$line)];
+      $$self{nchars} = scalar(@{$$self{chars}});
+      while(($$self{colno} < $$self{nchars})
+	    && (($$STATE{table}{catcode}{$$self{chars}->[$$self{colno}]}[0]||CC_OTHER)==CC_SPACE)){
+	$$self{colno}++; }
 
-    # Sneak a comment out, every so often.
-    if(!($$self{lineno} % 25)){
-      return T_COMMENT("**** $$self{source} Line $$self{lineno} ****")
-	if $STATE->lookupValue('INCLUDE_COMMENTS'); }
-  }
-  # ==== Extract next token from line.
-  my($ch,$cc)=$self->getNextChar;
-  my $dispatch = $DISPATCH[$cc];
-  (ref $dispatch eq 'CODE' ? &$dispatch($self,$ch) : $dispatch);
-}
+      # Sneak a comment out, every so often.
+      if((($$self{lineno} % 25)==0) && $STATE->lookupValue('INCLUDE_COMMENTS')){
+	return T_COMMENT("**** $$self{source} Line $$self{lineno} ****"); }
+    }
+    # ==== Extract next token from line.
+    my($ch,$cc)=$self->getNextChar;
+    my $token = $DISPATCH[$cc];
+    $token = &$token($self,$ch) if ref $token eq 'CODE';
+    return $token if defined $token; # Else, repeat till we get something or run out.
+}}
 
 #**********************************************************************
 # Read all tokens until a token equal to $until (if given), or until exhausted.
@@ -245,6 +249,8 @@ sub readRawLines {
     my $line;
     if($$self{colno} < $$self{nchars}){
       $line = join('',@{$$self{chars}}[$$self{colno}..$$self{nchars}-1]);
+      # End lines with \n, not CR, since the result will be treated as strings
+      $line =~ s/\r$/\n/;
       $$self{colno}=$$self{nchars}; }
     else {
       $line = $self->getNextLine; 
@@ -259,6 +265,8 @@ sub readRawLines {
     elsif(!$exact && ($line =~ /^(.*?)\Q$endline\E(.*)$/)){
       my($pre,$post)=($1,$2);
       push(@lines,$pre."\n") if $pre;
+      # Replace the \n with a \r in the line rest, since it will be tokenized
+      $line =~ s/\n$/\r/;
       $$self{chars}=[split('',$line)];
       $$self{nchars} = scalar(@{$$self{chars}});
       $$self{colno} = length($pre)+length($endline);
@@ -277,6 +285,7 @@ use LaTeXML::Global;
 use LaTeXML::Util::Pathname;
 use base qw(LaTeXML::Mouth);
 use Encode;
+
 sub new {
   my($class,$pathname)=@_;
   my $self =  bless {source=>pathname_relative($pathname,pathname_cwd)}, $class;
@@ -308,27 +317,6 @@ sub hasMoreInput {
   ($$self{colno} < $$self{nchars}) || scalar(@{$$self{buffer}}) || $$self{IN}; }
 our $WARNED_8BIT=0;
 
-sub XXXgetNextLine {
-  my($self)=@_;
-  if(! scalar(@{$$self{buffer}})){
-    return undef unless $$self{IN};
-    my $fh = \*{$$self{IN}};
-    my $line = <$fh>;
-    if(! defined $line){
-      close($fh); $$self{IN}=undef; }
-    else {
-      push(@{$$self{buffer}}, $self->splitString($line)); }}
-
-  my $line = (shift(@{$$self{buffer}})||''). "\n"; # put line ending back!
-  if($line){
-    if(my $encoding = $STATE->lookupValue('INPUT_ENCODING')){
-      $line = decode($encoding,$line); }
-    $line = encode('UTF-8',$line); }
-
-  if(!($$self{lineno} % 25)){
-    NoteProgress("[#$$self{lineno}]"); }
-  $line; }
-
 sub getNextLine {
   my($self)=@_;
   if(! scalar(@{$$self{buffer}})){
@@ -341,14 +329,15 @@ sub getNextLine {
     else {
       push(@{$$self{buffer}}, $self->splitString($line)); }}
 
-  my $line = (shift(@{$$self{buffer}})||''). "\n"; # put line ending back!
+  my $line = (shift(@{$$self{buffer}})||'');
   if($line){
-    my $encoding = $STATE->lookupValue('INPUT_ENCODING') || 'UTF-8';
-    # Note that if chars in the input cannot be decoded, they are replaced by \x{FFFD}
-    # I _think_ that for TeX's behaviour we actually should turn such un-decodeable chars in to space(?).
-    $line = decode($encoding, $line, Encode::FB_DEFAULT);
-    if($line =~ s/\x{FFFD}/ /g){	# Just remove the replacement chars, and warn (or Info?)
-      Info(":unexpected input isn't valid under encoding $encoding"); }}
+    if(my $encoding = $STATE->lookupValue('PERL_INPUT_ENCODING')){
+      # Note that if chars in the input cannot be decoded, they are replaced by \x{FFFD}
+      # I _think_ that for TeX's behaviour we actually should turn such un-decodeable chars in to space(?).
+      $line = decode($encoding, $line, Encode::FB_DEFAULT);
+      if($line =~ s/\x{FFFD}/ /g){	# Just remove the replacement chars, and warn (or Info?)
+	Info(":unexpected input isn't valid under encoding $encoding"); }}}
+  $line .= "\r"; # put line ending back!
 
   if(!($$self{lineno} % 25)){
     NoteProgress("[#$$self{lineno}]"); }
@@ -463,6 +452,10 @@ sub getSource {
 
 sub hasMoreInput { 0; }
 sub readToken { undef; }
+
+sub stringify {
+  my($self)=@_;
+  "PerlMouth[$$self{source}]"; }
 
 #**********************************************************************
 1;

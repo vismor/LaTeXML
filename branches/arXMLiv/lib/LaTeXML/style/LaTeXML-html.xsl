@@ -31,15 +31,6 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   </xsl:template>
 
-  <xsl:template name="add_id">
-    <!-- Is this safe now?
-    <xsl:if test="@fragid">
-      <a name="{@fragid}"></a>
-    </xsl:if>
-    -->
-    <xsl:attribute name="id"><xsl:value-of select="@fragid"/></xsl:attribute>
-  </xsl:template>
-
   <xsl:template match="/">
     <html>
       <xsl:call-template name="head"/>

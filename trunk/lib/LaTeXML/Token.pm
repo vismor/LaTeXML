@@ -77,8 +77,13 @@ our @NEUTRALIZABLE=(0,0,0,1,
 		    1,0,0,0,
 		    0,1,1,0,
 		    0,0);
+
+# neutralize really should only retroactively imitate what Semiverbatim would have done.
+# So, it needs to neutralize those in SPECIALS
 sub neutralize {
-  ($NEUTRALIZABLE[$_[0]->[1]] ? T_OTHER($_[0]->[0]) : $_[0]); }
+  my($ch,$cc)=@{$_[0]};
+  ($NEUTRALIZABLE[$cc] && grep($ch, @{ $LaTeXML::STATE->lookupValue('SPECIALS')})
+   ? T_OTHER($ch) : $_[0]); }
 
 #======================================================================
 # Note that this converts the string to a more `user readable' form using `standard' chars for catcodes.
@@ -108,10 +113,18 @@ sub equals {
     && ($$a[1] == $$b[1])
       && ($primitive_catcode[$$a[1]] || ($$a[0] eq $$b[0])); }
 
+our @CONTROLNAME=(qw( NUL SOH STX ETX EOT ENQ ACK BEL BS HT LF VT FF CR SO SI
+		      DLE DC1 DC2 DC3 DC4 NAK SYN ETB CAN EM SUB ESC FS GS RS US));
 # Primarily for error reporting.
 sub stringify {
   my($self)=@_;
-  $CC_SHORT_NAME[$$self[1]].'['.$$self[0].']'; }
+  my $string = $$self[0];
+  # Make the token's char content more printable, since this is for error messages.
+  if(length($string) == 1){
+    my $c = ord($string);
+    if($c < 0x020){
+      $string = 'U+'.sprintf("%04x",$c).'/'.$CONTROLNAME[$c]; }}
+  $CC_SHORT_NAME[$$self[1]].'['.$string.']'; }
 
 #**********************************************************************
 # LaTeXML::Tokens
