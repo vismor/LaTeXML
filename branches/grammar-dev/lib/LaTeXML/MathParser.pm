@@ -16,6 +16,7 @@
 package LaTeXML::MathParser;
 use strict;
 use Parse::RecDescent;
+use Data::Dumper;
 use LaTeXML::Global;
 use base (qw(Exporter));
 
@@ -47,8 +48,10 @@ our $DEFAULT_FONT = LaTeXML::MathFont->new(family=>'serif', series=>'medium',
 sub new {
   my($class,%options)=@_;
   require LaTeXML::MathGrammar;
+  require LaTeXML::MarpaGrammar;
 
-  my $internalparser = LaTeXML::MathGrammar->new();
+  #my $internalparser = LaTeXML::MathGrammar->new();
+  my $internalparser = LaTeXML::MarpaGrammar->new();
   die("Math Parser grammar failed") unless $internalparser;
 
   my $self = bless {internalparser => $internalparser},$class;
@@ -366,7 +369,8 @@ sub parse_single {
 
   # Failure? No result or uparsed lexemes remain.
   # NOTE: Should do script hack??
-  if((! defined $result) || $unparsed){
+#  if((! defined $result) || $unparsed){
+  if((! defined $result)){
     $self->failureReport($document,$mathnode,$rule,$unparsed,@nodes);
     undef; }
   # Success!
@@ -382,15 +386,17 @@ sub parse_internal {
   # Generate a textual token for each node; The parser operates on this encoded string.
   local $LaTeXML::MathParser::LEXEMES = {};
   my $i=0;
-  my $lexemes = '';
+  my $lexemes = [];
   foreach my $node (@nodes){
     my $role = $self->getGrammaticalRole($node);
     my $text = getTokenMeaning($node);
     $text = 'Unknown' unless defined $text;
     my $lexeme      = $role.":".$text.":".++$i;
     $lexeme =~ s/\s//g;
-    $$LaTeXML::MathParser::LEXEMES{$lexeme} = $node;
-    $lexemes .= ' '.$lexeme; }
+#    $$LaTeXML::MathParser::LEXEMES{$lexeme} = $node;
+    $$LaTeXML::MathParser::LEXEMES{$i} = $node;
+#    $lexemes .= ' '.$lexeme; }
+    push @$lexemes, $lexeme; }
 
   #------------
   # apply the parser to the textified sequence.
@@ -399,19 +405,22 @@ sub parse_internal {
   local %LaTeXML::MathParser::DISALLOWED_NOTATIONS = ();
   local $LaTeXML::MathParser::MAX_ABS_DEPTH = 1;
   my $unparsed = $lexemes;
-  my $result = $$self{internalparser}->$rule(\$unparsed);
+  #my $result = $$self{internalparser}->$rule(\$unparsed);
+  my $result = $$self{internalparser}->parse($rule,$unparsed);
   if(((! defined $result) || $unparsed) # If parsing Failed
      && $LaTeXML::MathParser::SEEN_NOTATIONS{QM}){ # & Saw some QM stuff.
     $LaTeXML::MathParser::DISALLOWED_NOTATIONS{QM} = 1; # Retry w/o QM notations
     $unparsed = $lexemes;
-    $result = $$self{internalparser}->$rule(\$unparsed); }
+    #$result = $$self{internalparser}->$rule(\$unparsed); }
+    $result = $$self{internalparser}->parse($rule,$unparsed); }
   while(((! defined $result) || $unparsed) # If parsing Failed
 	&& ($LaTeXML::MathParser::SEEN_NOTATIONS{AbsFail}) # & Attempted deeper abs nesting?
 	&& ($LaTeXML::MathParser::MAX_ABS_DEPTH < 3)){	   # & Not ridiculously deep
       delete $LaTeXML::MathParser::SEEN_NOTATIONS{AbsFail};
       ++$LaTeXML::MathParser::MAX_ABS_DEPTH; # Try deeper.
       $unparsed = $lexemes;
-      $result = $$self{internalparser}->$rule(\$unparsed); }
+      #$result = $$self{internalparser}->$rule(\$unparsed); }
+      $result = $$self{internalparser}->parse($rule,$unparsed); }
 
   # If still failed, try other strategies?
 

@@ -346,7 +346,7 @@ DefConditional('\ifcase Number', undef,
   skipper=>sub {
     my($gullet,$num)=@_;
     $num = $num->valueOf;
-    if($num > 0){ 
+    if($num > 0){
       LaTeXML::Conditional::skipConditionalBody($gullet,$num); }
     return; });
 
@@ -2797,8 +2797,8 @@ DefMathI('!',undef,'!', role=>'POSTFIX', meaning=>'factorial');
 DefMathI(',',undef,',', role=>'PUNCT');
 DefMathI('.',undef,'.', role=>'PERIOD');
 DefMathI(';',undef,';', role=>'PUNCT');
-DefMathI('(',undef,'(', role=>'OPEN'); DefMathI(')',undef,')', role=>'CLOSE');
-DefMathI('[',undef,'[', role=>'OPEN'); DefMathI(']',undef,']', role=>'CLOSE');
+DefMathI('(',undef,'(', role=>'OpenParen'); DefMathI(')',undef,')', role=>'CloseParen');
+DefMathI('[',undef,'[', role=>'OpenBracket'); DefMathI(']',undef,']', role=>'CloseBracket');
 DefMathI('|',undef,'|', role=>'VERTBAR');
 
 #DefMath(':',';', role=>'METARELOP', name=>'colon'); # Seems like good default role
@@ -3916,26 +3916,26 @@ DefMacro('\overleftarrow{}',  '\protect\ifmmode\math@overleftarrow{#1}\else$\mat
 # This meaning is handled in MathParser (for now)
 
 DefConstructorI('\{',undef,
-	       "?#isMath(<ltx:XMTok font='#font' role='OPEN'>{</ltx:XMTok>)({)",
+	       "?#isMath(<ltx:XMTok font='#font' role='OpenBrace'>{</ltx:XMTok>)({)",
 	       properties=>{font=>sub{ LookupValue('font')->specialize("{");}}); # Since not DefMath!
 DefConstructorI('\}',undef,
-	       "?#isMath(<ltx:XMTok font='#font' role='CLOSE'>}</ltx:XMTok>)(})",
+	       "?#isMath(<ltx:XMTok font='#font' role='CloseBrace'>}</ltx:XMTok>)(})",
 	       properties=>{font=>sub{ LookupValue('font')->specialize("}");}}); # Since not DefMath!
 Let(T_CS('\lbrace'),T_CS('\{'));
 Let(T_CS('\lbrack'),T_CS('['));
 Let(T_CS('\rbrace'),T_CS('\}'));
 Let(T_CS('\rbrack'),T_CS(']'));
-DefMathI('\lceil',    undef,"\x{2308}", role=>'OPEN');	# LEFT CEILING
-DefMathI('\rceil',    undef,"\x{2309}", role=>'CLOSE'); # RIGHT CEILING
-DefMathI('\lfloor',   undef,"\x{230A}", role=>'OPEN');	# LEFT FLOOR
-DefMathI('\rfloor',   undef,"\x{230B}", role=>'CLOSE'); # RIGHT FLOOR
+DefMathI('\lceil',    undef,"\x{2308}", role=>'OpenCeiling');	# LEFT CEILING
+DefMathI('\rceil',    undef,"\x{2309}", role=>'CloseCeiling'); # RIGHT CEILING
+DefMathI('\lfloor',   undef,"\x{230A}", role=>'OpenFloor');	# LEFT FLOOR
+DefMathI('\rfloor',   undef,"\x{230B}", role=>'CloseFloor'); # RIGHT FLOOR
 # Note: We should be using 27E8,27E9, which are "mathematical", not 2329,232A
-DefMathI('\langle',   undef,"\x{27E8}", role=>'OPEN'); # LEFT-POINTING ANGLE BRACKET
-DefMathI('\rangle',   undef,"\x{27E9}", role=>'CLOSE');	# RIGHT-POINTING ANGLE BRACKET
+DefMathI('\langle',   undef,"\x{27E8}", role=>'OpenAngle'); # LEFT-POINTING ANGLE BRACKET
+DefMathI('\rangle',   undef,"\x{27E9}", role=>'CloseAngle');	# RIGHT-POINTING ANGLE BRACKET
 
 # Not sure these should be defined here, or latex, or even latex compat mode.
-DefMathI('\lgroup',  undef,"(", font=>{series=>'bold'}, role=>'OPEN');
-DefMathI('\rgroup',  undef,")", font=>{series=>'bold'}, role=>'CLOSE');
+DefMathI('\lgroup',  undef,"(", font=>{series=>'bold'}, role=>'OpenParen');
+DefMathI('\rgroup',  undef,")", font=>{series=>'bold'}, role=>'CloseParen');
 DefMathI('\bracevert', undef, "|", font=>{series=>'bold'}, role=>'VERTBAR');
 
 ## DefMath('\lmoustache',"???", font=>{series=>'bold'}, role=>'OPEN');
@@ -3948,20 +3948,20 @@ DefMathI('\bracevert', undef, "|", font=>{series=>'bold'}, role=>'VERTBAR');
 
 # This duplicates in slightly different way what DefMath has put together.
 our %DELIMITER_MAP =
-  ('('           =>{char=>"(",        lrole=>'OPEN',    rrole=>'CLOSE'},
-   ')'           =>{char=>")",        lrole=>'OPEN',    rrole=>'CLOSE'},
-   '['           =>{char=>"[",        lrole=>'OPEN',    rrole=>'CLOSE'},
-   ']'           =>{char=>"]",        lrole=>'OPEN',    rrole=>'CLOSE'},
-   '\{'          =>{char=>"{",        lrole=>'OPEN',    rrole=>'CLOSE'},
-   '\}'          =>{char=>"}",        lrole=>'OPEN',    rrole=>'CLOSE'},
-   '\lfloor'     =>{char=>"\x{230A}", lrole=>'OPEN',    rrole=>'CLOSE', name=>'lfloor'},
-   '\rfloor'     =>{char=>"\x{230B}", lrole=>'OPEN',    rrole=>'CLOSE', name=>'rfloor'},
-   '\lceil'      =>{char=>"\x{2308}", lrole=>'OPEN',    rrole=>'CLOSE', name=>'lceil'},
-   '\rceil'      =>{char=>"\x{2309}", lrole=>'OPEN',    rrole=>'CLOSE', name=>'rceil'},
-   '\langle'     =>{char=>"\x{27E8}", lrole=>'OPEN',    rrole=>'CLOSE', name=>'langle'},
-   '\rangle'     =>{char=>"\x{27E9}", lrole=>'OPEN',    rrole=>'CLOSE', name=>'rangle'},
-   '<'           =>{char=>"\x{27E8}", lrole=>'OPEN',    rrole=>'CLOSE', name=>'langle'},
-   '>'           =>{char=>"\x{27E9}", lrole=>'OPEN',    rrole=>'CLOSE', name=>'rangle'},
+  ('('           =>{char=>"(",        lrole=>'OpenParen',    rrole=>'CloseParen'},
+   ')'           =>{char=>")",        lrole=>'OpenParen',    rrole=>'CloseParen'},
+   '['           =>{char=>"[",        lrole=>'OpenBracket',    rrole=>'OpenBracket'},
+   ']'           =>{char=>"]",        lrole=>'OpenBracket',    rrole=>'OpenBracket'},
+   '\{'          =>{char=>"{",        lrole=>'OpenBrace',    rrole=>'OpenBrace'},
+   '\}'          =>{char=>"}",        lrole=>'OpenBrace',    rrole=>'OpenBrace'},
+   '\lfloor'     =>{char=>"\x{230A}", lrole=>'OpenFloor',    rrole=>'CloseFloor', name=>'lfloor'},
+   '\rfloor'     =>{char=>"\x{230B}", lrole=>'OpenFloor',    rrole=>'CloseFloor', name=>'rfloor'},
+   '\lceil'      =>{char=>"\x{2308}", lrole=>'OpenCeiling',    rrole=>'CloseCeiling', name=>'lceil'},
+   '\rceil'      =>{char=>"\x{2309}", lrole=>'OpenCeiling',    rrole=>'CloseCeiling', name=>'rceil'},
+   '\langle'     =>{char=>"\x{27E8}", lrole=>'OpenAngle',    rrole=>'CloseAngle', name=>'langle'},
+   '\rangle'     =>{char=>"\x{27E9}", lrole=>'OpenAngle',    rrole=>'CloseAngle', name=>'rangle'},
+   '<'           =>{char=>"\x{27E8}", lrole=>'OpenAngle',    rrole=>'CloseAngle', name=>'langle'},
+   '>'           =>{char=>"\x{27E9}", lrole=>'OpenAngle',    rrole=>'CloseAngle', name=>'rangle'},
    '/'           =>{char=>"/",        lrole=>'MULOP',   rrole=>'MULOP'},
    '\backslash'  =>{char=>UTF(0x5C), lrole=>'MULOP',   rrole=>'MULOP', name=>'backslash'},
    '|'           =>{char=>"|",        lrole=>'VERTBAR', rrole=>'VERTBAR'},
@@ -3992,7 +3992,7 @@ DefConstructor('\@left Token',
 							    char=>$$entry{char},
 							    name=>$$entry{name});
 				    $whatsit->setFont($arg->getFont()); }
-				  elsif(($arg->getProperty('role')||'') eq 'OPEN'){}
+				  elsif(($arg->getProperty('role')||'') =~ /OPEN/i){}
 				  else {
 				    Warn(":expected:. Missing delimiter $delim (. inserted)"); }
 				  return; },
@@ -4008,7 +4008,7 @@ DefConstructor('\@right Token',
 							    char=>$$entry{char},
 							    name=>$$entry{name});
 				    $whatsit->setFont($arg->getFont()); }
-				  elsif(($arg->getProperty('role')||'') eq 'CLOSE'){}
+				  elsif(($arg->getProperty('role')||'') =~ /CLOSE/i){}
 				  else {
 				    Warn(":expected:. Missing delimiter $delim (. inserted)"); }
 				  return; },
@@ -4021,7 +4021,7 @@ sub addDelimiterRole {
   my $node         = $document->getLastChildElement($current) || $current;
   my $delim        = $node && $document->getFirstChildElement($node);
   my $delim_role   = (($delim && $delim->getAttribute('role')) || '');
-  my $wrapper_role = ($delim_role =~ /^(OPEN|MIDDLE|CLOSE|VERTBAR)$/ ? $role : $delim_role);
+  my $wrapper_role = ($delim_role =~ /^(OPEN|MIDDLE|CLOSE|VERTBAR)$/i ? $role : $delim_role);
 ## Maybe we shouldn't switch VERTBAR ?
 ## The catch is that occasionally people use a single \Bigl (or whatever)
 ## where they should have used a \Big
