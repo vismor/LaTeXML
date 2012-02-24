@@ -156,7 +156,7 @@ sub parse {
 #    Dumper($_) foreach @values;
 
   # TODO: Support multiple parses!
-  (@values>1) ? (['ltx:XMApp',{},New('Set'),@values]) : (@values);
+  (@values>1) ? (['ltx:XMApp',{},New('Set'),@values]) : (shift @values);
 }
 
 1;

@@ -27,6 +27,8 @@ sub set {
 }
 
 sub fenced {
+  # I admit, this looks weird...
+  #   sysobj, conc,   (  , $t, conc ,   )
   my (undef, undef, undef, $t, undef, undef) = @_;
   return $t;
 }
