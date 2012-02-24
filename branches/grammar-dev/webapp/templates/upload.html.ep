@@ -1,0 +1,49 @@
+% layout 'html5';
+% title 'Upload Interface';
+<%= javascript 'js/external/jquery.min.js' %>
+<link rel="stylesheet" type="text/css" href="css/upload/fileAPI.css" />
+
+<div style="margin:10px;">
+
+<h2>Upload Interface</h2>
+<p>This service converts TeX/LaTeX documents into XHTML.</p>
+<p>We can support flat setups of TeX files directly (no
+  subfolders).</p>
+<p>For
+complex multi-folder projects, please send a single ZIP archive,
+  containing all relevant sources (no styles required).</p>
+
+<h3>Choose file(s)</h3>
+<p>
+	<input id="files-upload" type="file" multiple>
+</p>
+<div style="display:inline; width: 40%;
+     word-wrap:break-word; float:left; margin: 15px;">
+<p id="drop-area">
+	<span class="drop-instructions">or drag and drop files here</span>
+	<span class="drop-over">Drop files here!</span>
+</p>
+
+<ul id="file-list">
+	<li class="no-items">(no files uploaded yet)</li>
+</ul>
+<%= javascript 'js/upload/fileAPI.js' %>
+</div>
+<div style="display:inline; width: 40%;
+     word-wrap:break-word; float:left; margin: 15px;"><b>
+</b></div>
+
+<!--<div style="display:inline; width: 40%;
+     word-wrap:break-word; float:left; margin: 15px;">
+  <%= form_for upload =>
+  (method => 'post', enctype => 'multipart/form-data') => begin %>
+  <%= file_field 'uploaded_archive' %>
+  <%= submit_button 'Upload' %>
+  <% end %>
+</div>-->
+<div style="clear:both; font-size:0px;">&nbsp;</div>
+
+<p><strong>Note:</strong> For uploads of several files the service
+  needs to maintain a session, via a session cookie, for which you
+  need cookies enabled.
+</div>

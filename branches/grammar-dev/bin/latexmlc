@@ -1,0 +1,164 @@
+#!/usr/bin/perl -w
+
+#######################
+# A Client for LaTeXML
+#######################
+
+use strict;
+use Pod::Usage;
+use Carp;
+use Cwd qw(cwd abs_path);
+use IO::Socket;
+use FindBin;
+use lib "$FindBin::RealBin/../lib";
+use LaTeXML;
+use LaTeXML::Util::Pathname;
+use LaTeXML::Util::Extras;
+use Storable qw(freeze thaw);
+use Encode;
+
+
+# Some defaults:
+my $opts={
+	  identity => "latexmlc (LaTeXML version $LaTeXML::VERSION)",
+	  profile => 'standard',
+	  'input_limit' => 100,
+	  timeout => -1, # Don't start a server as default
+	  port => 3354
+	 };
+
+ReadOptions($opts,\@ARGV);
+
+# Standard profile, unless specified
+$opts->{profile} = 'custom' unless defined $opts->{profile};
+#Need to make all paths absolute
+my %portlist = ( math=>3334, fragment=>3344, standard=>3354);
+$opts->{port} = $portlist{$opts->{profile}} unless $opts->{port};
+$opts->{port} = 3334 unless $opts->{port}; #Fall back to 3334 if all fails...
+
+#***************************************************************************
+#Add some base, so that relative paths work
+my $cdir = abs_path(cwd());
+$cdir =~ s/ /\\ /g;
+$opts->{base}=$cdir unless $opts->{base};
+
+# Record if destination exists, for summary
+
+my $deststat = (stat($opts->{destination}))[9] if ($opts->{destination});
+$deststat = 0 unless $deststat;
+
+# Revert to sockets if no --local
+if (!$opts->{local} && ($opts->{destination} || $opts->{log}))
+  {carp "I/O from filesystem not allowed without --local!\n".
+     " Will revert to sockets!\n";
+   undef $opts->{destination}; undef $opts->{log}; }
+
+push @{$opts->{paths}}, $cdir;#add current path, to ensure never empty
+
+#***************************************************************************
+# Prepare output variables:
+my  ($result, $status, $log);
+
+#Setup client and communicate
+my $sock = new IO::Socket::INET
+  ( PeerAddr => '127.0.0.1',
+    PeerPort => $opts->{port},
+    Proto => 'tcp',
+  ); #Attempt connecting to a service
+if ((!$sock) && ($opts->{timeout} == -1)) {
+  # Don't boot a server, single job requested:
+  require LaTeXML::Util::Startup;
+  my $startup =  LaTeXML::Util::Startup->new(cache=>0); # Don't write a DB file
+  my $source = $opts->{source}; 
+  delete $opts->{source};
+  my $daemon = $startup->find_daemon($opts);
+  $daemon->prepare_session($opts);
+  my $response = $daemon->convert($source);
+  ($result, $status, $log) = map { $response->{$_} } qw(result status log) if defined $response;
+  $result=$result->toString(1);
+} else {
+  #Startup daemon and feed in args, if needed
+  system('latexmls','--port='.$opts->{port},'--timeout='.$opts->{timeout}) unless $sock;
+
+  #Daemon is running, reconnect and feed in request
+  $sock = new IO::Socket::INET 
+    ( PeerAddr => '127.0.0.1',
+      PeerPort => $opts->{port},
+      Proto => 'tcp',
+    );
+  croak "Could not create socket: $!\n" unless $sock; 
+  my ($response,$batch);
+  $sock->send(freeze($opts)."\nEND REQUEST\n");
+  do {
+    $sock->recv($batch,1024);
+    $response.=$batch;
+  } while ($batch);
+  close($sock);
+
+  $response = thaw($response);
+  ($result, $status, $log) = map { $response->{$_} } qw(result status log) if defined $response;
+}
+
+
+#***************************************************************************
+### Common treatment of output:
+
+# Special features for latexmls:
+if ($log) {
+  if ($opts->{log} && $opts->{local}) {
+    my $clog = $opts->{log};
+    open(LOG,">",$clog) or croak "Couldn't open log file $clog : $!\n";
+    print LOG encode('UTF-8',$log);
+    close LOG;
+  } else {print STDERR encode('UTF-8',$log),"\n";}#STDERR log otherwise
+}
+
+if ($result) {
+
+  if ($opts->{destination} && $opts->{local}) {
+    open(OUT,">",$opts->{destination}) or croak "Couldn't open output file ".$opts->{destination}.": $!";
+    print OUT encode('UTF-8',$result);
+    close OUT;
+  } else { print STDOUT encode('UTF-8',$result),"\n"; } #Output to STDOUT
+}
+
+# Print summary, if requested, to STDERR
+if ($opts->{destination}) {
+  print STDERR $status;
+  print STDERR summary($opts->{destination},$deststat);
+}
+
+# == Helpers ==
+sub summary {
+  my ($dest,$deststat) = @_;
+  my $newstat = (stat($dest))[9];
+  $newstat = 0 unless $newstat;
+  if ($newstat && ($deststat != $newstat)) { "\nWrote $dest\n"; }
+  else { "\nError! Did not write file $dest\n"; }
+}
+
+#**********************************************************************
+__END__
+
+=head1 NAME
+
+C<latexmlc> - A client for L<latexml>, L<latexmlpost> and L<latexmlmath>.
+
+=head1 SYNOPSIS
+
+See L<latexmls> for allowed options.
+
+=head1 DESCRIPTION
+
+L<latexmlc> provides a client which automatically sets up a LaTeXML local server if necessary
+(via L<latexmls>).
+
+If such server already exists, the client proceeds to communicate normally.
+
+=head1 SEE ALSO
+
+L<latexmls>, L<ltxmojo>
+
+=cut
+#**********************************************************************
+
