@@ -27,7 +27,8 @@ use base (qw(Exporter));
 ### A Grammar for Mathematical Expressions:
 our $FEATURES = {
    type => {default=>'anytype',
-            anytype=>{e=>[qw(term formula)],
+            anytype=>{
+		      e=>[qw(term formula)],
                       ee=>[qw(tt tf ft ff)], 
                       eee =>{operator=>[qw( ttt )],
                              modifier=>[qw(tft ftt)],
@@ -39,7 +40,7 @@ our $FEATURES = {
               any=>{atom=>undef,
                     expression=>{'fenced'=>undef,
                                  'unfenced'=>['conc_apply','op_apply']},
-                    argument=>[qw(fenced atom conc_apply)]}}
+                    argument=>[qw(fenced atom), argument_relaxed=>[qw(fenced atom conc_apply)]}}
 };
 
 
@@ -49,11 +50,12 @@ our $FEATURES = {
 # Any grammar rule contains a lhs and rhs, just as in Marpa:
 our $RULES = [ #        LHS                          RHS
               # Concatenation - Generic
-              [{type=>"term",struct=>"conc_apply"}, [{type=>"term",struct=>"argument"},
-                                                   'CONCAT',
-                                                   {type=>"term",struct=>"argument"}
-                                                  ],  # 2xy (left-to-right)
-                                                      # f g(x) (right-to-left)
+              [{type=>"term",struct=>"conc_apply"},
+	                                           [{type=>"term",struct=>"argument_relaxed"},
+						    'CONCAT',
+						    {type=>"term",struct=>"argument_relaxed"}
+						   ],  # 2xy (left-to-right)
+                                                       # f g(x) (right-to-left)
                'concat_apply'],
               # Infix Operator - Generic
               [{type=>"term",struct=>"op_apply"}, [{type=>"term",struct=>"any"},
@@ -105,6 +107,11 @@ our $RULES = [ #        LHS                          RHS
               [{type=>"any", struct=>"atom"},['UNKNOWN']],
               [{type=>"relation", struct=>"atom"},['RELOP']],
               [{type=>"fff", struct=>"atom"},['METARELOP']],
+              ['fff_atom',['METARELOP']],
+
+	     [ 'OPEN', 'OpenParanthesis'],
+	     [ 'OPEN', 'OpenBracket'],
+	      ...
              [ 'SuchThat', [qw/Bar/]],
              [ 'SuchThat', [qw/Colon/]],
              ['Atom', [qw/UNKNOWN/]],
