@@ -28,7 +28,8 @@ use base (qw(Exporter));
 our $FEATURES = {
    type => {default=>'anytype',
             anytype=>{
-		      e=>[qw(term formula)],
+		      e=>{term=>[qw(additive factor)],
+			  formula=>undef},
                       ee=>[qw(tt tf ft ff)], 
                       eee =>{operator=>[qw( ttt )],
                              modifier=>[qw(tft ftt)],
@@ -38,9 +39,8 @@ our $FEATURES = {
 #   domain => {default=>'arithmetic',anydomain=>[qw(arithmetic algebra relation geometry setth cattheory)]},
    struct => {default=>'any',
               any=>{atom=>undef,
-                    expression=>{'fenced'=>undef,
-                                 'unfenced'=>['conc_apply','op_apply']},
-                    argument=>[qw(fenced atom), argument_relaxed=>[qw(fenced atom conc_apply)]}}
+                    expression=>[qw(fenced unfenced)],
+                    argument=>[qw(fenced atom)]}}
 };
 
 
@@ -49,40 +49,63 @@ our $FEATURES = {
 
 # Any grammar rule contains a lhs and rhs, just as in Marpa:
 our $RULES = [ #        LHS                          RHS
-              # Concatenation - Generic
-              [{type=>"term",struct=>"conc_apply"},
-	                                           [{type=>"term",struct=>"argument_relaxed"},
+              # 1.0 Concatenation - Generic Arguments
+              [{type=>"factor",struct=>"unfenced"},
+	                                           [{type=>"term",struct=>"argument"},
 						    'CONCAT',
-						    {type=>"term",struct=>"argument_relaxed"}
+						    {type=>"term",struct=>"argument"}
 						   ],  # 2xy (left-to-right)
                                                        # f g(x) (right-to-left)
                'concat_apply'],
-              # Infix Operator - Generic
-              [{type=>"term",struct=>"op_apply"}, [{type=>"term",struct=>"any"},
+              # 1.1. Concatenation - Factors
+              [{type=>"factor",struct=>"unfenced"},
+	                                           [{type=>"factor",struct=>"unfenced"},
+						    'CONCAT',
+						    {type=>"term",struct=>"argument"}
+						   ],  # 2xy (left-to-right)
+               'concat_apply'],
+              [{type=>"factor",struct=>"unfenced"},
+	                                           [{type=>"term",struct=>"argument"},
+						    'CONCAT',
+						    {type=>"factor",struct=>"unfenced"},
+						   ],  # f g(x) (right-to-left)
+               'concat_apply'],
+
+              # 2.1 Infix Operator - Factors
+              [{type=>"factor",struct=>"unfenced"}, [{type=>"factor",struct=>"any"},
                                                    'CONCAT',
-                                                   {type=>"operator", struct=>"atom"},
+                                                   'MULOP',
                                                    'CONCAT',
-                                                   {type=>"term",struct=>"argument"} # Constrain struct to assure left-associative
-                                                  ],
-               'infix_apply'], #ACTION
+                                                   {type=>"term",struct=>"argument"}
+                                                  ],               'infix_apply'], #ACTION
+
+              [{type=>"factor",struct=>"unfenced"}, [{type=>"additive",struct=>"argument"},
+                                                   'CONCAT',
+                                                   'MULOP',
+                                                   'CONCAT',
+                                                   {type=>"term",struct=>"argument"}
+                                                  ],               'infix_apply'], #ACTION
+	      # 2.2 Infix Operator - Additives
+              [{type=>"additive",struct=>"unfenced"}, [{type=>"term",struct=>"any"},
+                                                   'CONCAT',
+                                                   'ADDOP',
+                                                   'CONCAT',
+                                                   {type=>"term",struct=>"argument"}
+                                                  ],               'infix_apply'], #ACTION
 
               # Infix Relation - Generic
-              [{type=>"formula",struct=>"op_apply"}, [{type=>"term",struct=>"any"},
+              [{type=>"formula",struct=>"unfenced"}, [{type=>"term",struct=>"any"},
                                                       'CONCAT',
                                                       {type=>'ttf',struct=>'atom'},
                                                       'CONCAT',
                                                       {type=>"term",struct=>"any"}
-                                                      # Type change, no need to constrain struct
-                                                     ],
-               'infix_apply'], #ACTION
-              [{type=>"formula",struct=>"op_apply"}, [{type=>"formula",struct=>"any"},
+                                                     ],               'infix_apply'], #ACTION
+              [{type=>"formula",struct=>"unfenced"}, [{type=>"formula",struct=>"any"},
                                                       'CONCAT',
                                                       {type=>'ftf',struct=>'atom'},
                                                       'CONCAT',
-                                                      {type=>"term",struct=>"any"} 
-                                                      # Type change, no need to constrain struct
-                                                     ],
-               'infix_apply'], #ACTION
+                                                      {type=>"term",struct=>"any"}
+                                                     ],               'infix_apply'], #ACTION
 
 
               # Set constructor
@@ -95,28 +118,18 @@ our $RULES = [ #        LHS                          RHS
               [{type=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT',
                                                  {type=>"term",struct=>'any'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
-              [{type=>"term",struct=>"fenced"}, ['OpenParen', 'CONCAT',
-                                                 {type=>"term",struct=>'any'}, 'CONCAT', 'CloseParen'],
-               'fenced'], #ACTION
 
               # Lexicon:
-              [{type=>"operator", struct=>"atom"}, ['ADDOP']],
-              [{type=>"operator", struct=>"atom"}, ['MULOP']],
               [{type=>"e", struct=>"atom"},['Atom']],
               [{type=>"term", struct=>"atom"},['NUMBER']],
               [{type=>"any", struct=>"atom"},['UNKNOWN']],
               [{type=>"relation", struct=>"atom"},['RELOP']],
               [{type=>"fff", struct=>"atom"},['METARELOP']],
-              ['fff_atom',['METARELOP']],
-
-	     [ 'OPEN', 'OpenParanthesis'],
-	     [ 'OPEN', 'OpenBracket'],
-	      ...
-             [ 'SuchThat', [qw/Bar/]],
-             [ 'SuchThat', [qw/Colon/]],
-             ['Atom', [qw/UNKNOWN/]],
-             ['Term',[{type=>"term",struct=>"any"}]]
-            ];
+	      [ 'SuchThat', [qw/Bar/]],
+	      [ 'SuchThat', [qw/Colon/]],
+	      ['Atom', [qw/UNKNOWN/]],
+	      ['Term',[{type=>"term",struct=>"any"}]]
+	     ];
 
 
 
@@ -126,6 +139,7 @@ sub new {
   {   start   => {type=>"e", struct=>"any"},
       actions => 'LaTeXML::MathSemantics',
       features=>$FEATURES,rules=>$RULES,
+      mode=>"horizontal",
      default_action=>'first_arg'});
 
   $grammar->precompute();

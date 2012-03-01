@@ -26,6 +26,7 @@ sub new {
  delete $grammar->{features};
  delete $grammar->{flatmap};
  delete $grammar->{featmap};
+ delete $grammar->{mode};
  Marpa::XS::Grammar->new($grammar);
 }
 
@@ -43,6 +44,56 @@ sub new {
 sub grammar {my $self = shift; $self->{opts};}
 
 sub compile_grammar {
+  my ($self) = @_;
+  if ($self->{opts}->{mode} eq 'horizontal') {
+    $self->compile_horizontal;
+  } else { #Default is vertical
+    $self->compile_vertical;
+  }
+}
+
+sub compile_vertical {
+ my ($self) = @_;
+ my $opts=$self->{opts};
+ my ($features,$rules,$actions) = ($opts->{features},$opts->{rules},$opts->{actions});
+ my @featset = sort keys %$features;
+ my ($vertmap,$featmap) = ({},{});
+ # Caution: Assuming unique feature names for now
+ mkvertmap($_,$features->{$_},$vertmap) foreach(@featset);
+ mkfeatmap($features->{$_},$featmap,$_) foreach(@featset);
+ delete $flatmap->{default}; #Default is reserved!
+ $opts->{vertmap} = $vertmap;
+ print STDERR "\n\n",Dumper($featmap),"\n\n";
+ $opts->{featmap} = $featmap;
+ print STDERR "Flattening ".scalar(@$rules)." rules...\n";
+
+  # Explode each rules into a family of rules:
+  my $newrules = [];
+   # Create vertical hierarchy
+   my $vertrules = $self->mkvertrules;
+   push @$newrules, @$vertrules;
+   foreach my $r(@$rules) {
+     if ((ref $r) eq 'ARRAY') {
+       # Simple declaration:
+       my $flatrules = $self->vertsimplerule($self->mkcategories([$r->[0]]),
+                                           $self->mkcategories($r->[1]),
+                                           $r->[2]);
+       push @$newrules, @$flatrules;
+     }
+     elsif ((ref $r) eq 'HASH') {
+       # Structured declaration:
+       my $flatrules = $self->vertcomplexrule(
+                                            $self->mkcategories([$r->{lhs}]),
+                                            $self->mkcategories($r->{rhs}),
+                                            $r);
+       push @$newrules, @$flatrules;
+     }
+   }
+  print STDERR "Created ".scalar(@$newrules)." flat rules!\n";
+  $opts->{rules}=$newrules;
+}
+
+sub compile_horizontal {
   my ($self) = @_;
   my $opts = $self->{opts};
 
@@ -113,6 +164,34 @@ sub mkflatmap {
  $store->{$name}->{$_} = 1 foreach @flatfeats;
 }
 
+
+sub mkvertmap {
+ my ($name,$someref,$store) = @_;
+ my @subfeats;
+ # Recurs inside, two cases:
+ # I. Array ref
+ if (ref $someref eq 'ARRAY') {
+   @subfeats = @$someref;
+ # II. Hash ref
+ } elsif (ref $someref eq 'HASH') {
+   @subfeats = keys %$someref;
+   foreach my $subfeat(@subfeats) {
+     if ($someref->{$subfeat}) {
+       # This is a subfeature definition, process recursively:
+       mkvertmap($subfeat,$someref->{$subfeat},$store);
+     } else {
+       # No definition, hence base category or already defined, do nothing.
+     }
+   }
+ } # III. Base category, do nothing
+ else {return;}
+
+ # Add flatfeats to store:
+ $store->{$name} = {};
+ $store->{$name}->{$_} = 1 foreach @subfeats;
+}
+
+
 # Generate a flattened map between each terminal feature value (resp. category) and its feature name
 sub mkfeatmap {
  my ($hashref,$store,$featname) = @_;
@@ -120,6 +199,7 @@ sub mkfeatmap {
    if ((ref $hashref->{$key}) eq 'ARRAY') {
      $store->{$_} = $featname foreach @{$hashref->{$key}};
    } elsif ((ref $hashref->{$key}) eq 'HASH') {
+     $store->{$_} = $featname foreach (keys %{$hashref->{$key}});
      mkfeatmap($hashref->{$key},$store,$featname);
    }
  }
@@ -239,6 +319,12 @@ sub mkaction {
     &$action(@_,$lobj,$robj);
   };
   $subname;
+}
+
+### Vertical rules
+sub mkvertrules {
+ my ($self) = @_;
+ 
 }
 
 

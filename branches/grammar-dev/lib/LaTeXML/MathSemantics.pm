@@ -27,10 +27,10 @@ sub set {
 }
 
 sub fenced {
-  # I admit, this looks weird...
-  #   sysobj, conc,   (  , $t, conc ,   )
-  my (undef, undef, undef, $t, undef, undef) = @_;
-  return $t;
+  my (undef, $open, undef, $t, undef, $close) = @_;
+  $open=~/^([^:]+)\:/; $open=$1;
+  $close=~/^([^:]+)\:/; $close=$1;
+  Fence($open,$t,$close);
 }
 
 #sub infix_op {
