@@ -1,5 +1,5 @@
 package LaTeXML::MathSemantics;
-
+use Data::Dumper;
 # Startup actions: import the constructors
 { BEGIN{ use LaTeXML::MathParser qw(:constructors); 
 #### $::RD_TRACE=1;
@@ -8,7 +8,7 @@ package LaTeXML::MathSemantics;
 sub first_arg {
   return $_[1] if ref $_[1];
   my ($lex,$id) = split(/:/,$_[1]);
-  Lookup($id);
+  Lookup($id)||$lex;
 }
 
 sub infix_apply {
@@ -33,21 +33,13 @@ sub fenced {
   Fence($open,$t,$close);
 }
 
-#sub infix_op {
-# my (undef,$c,$op,$c2)=@_;
-# return $op;
-#}
-
-# sub sequence_base {
-#  my  (undef,$args,$op,$endarg,$lhs,$rhs) = @_;
-#  ["Apply",$op,@$args,$endarg];
-# }
-
-# sub sequence_op {
-#  my  (undef,@all) = @_;
-#  pop @all; pop @all; # Remove trailing lhs and rhs information
-#  [@all];
-# }
-
+sub fenced_empty {
+  # TODO: Semantically figure out list/function/set context,
+  # and place the correct OpenMath symbol instead!
+ my (undef, $open, $c, $close) = @_;
+ $open=~/^([^:]+)\:/; $open=$1;
+ $close=~/^([^:]+)\:/; $close=$1;
+ Fence($open,New('Empty'),$close);
+}
 
 1;

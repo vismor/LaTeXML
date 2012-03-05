@@ -1,6 +1,6 @@
 # /=====================================================================\ #
 # | LaTeXML::MarpaGrammar                                               | #
-# | A Marpa::Attributed grammar for mathematical expressions        :)    | #
+# | A Marpa::Attributed grammar for mathematical expressions            | #
 # |=====================================================================| #
 # | Part of LaTeXML:                                                    | #
 # |  Public domain software, produced as part of work done by the       | #
@@ -10,11 +10,15 @@
 # | http://dlmf.nist.gov/LaTeXML/                              (o o)    | #
 # \=========================================================ooo==U==ooo=/ #
 
+## Mantra in Programming: Premature optimisation is the root of all evil
+##         =>
+## In Grammar Design: Premature disambiguation is the root of all evil
+
 package LaTeXML::MarpaGrammar;
 use strict;
 
 # Startup actions: import the constructors
-{ BEGIN{ use LaTeXML::MathParser qw(:constructors); 
+{ BEGIN{ use LaTeXML::MathParser qw(:constructors);
 #### $::RD_TRACE=1;
 }}
 
@@ -35,8 +39,10 @@ our $FEATURES = {
                       'unary_relation',# tf
                       'unary_modifier',# ft
                       'unary_metarelation', #ff
+		      #'unary_separator', #ee???
                      ],
                  eee=>['binary_operator',# ttt
+		       'binary_separator',# eee???
                        'binary_modifier',# tft ftt
                        'binary_relation',# ttf ftf,
                        'binary_metarelation',# fff,
@@ -45,12 +51,15 @@ our $FEATURES = {
                 }
            },
    struct => {
-              default=>'expression',
-              expression=> {
-                            argument=>[qw(atom fenced)],
-                            unfenced=>undef
-                           }
-             }
+              default=>'any',
+	      any => {
+		      expression=>{
+				   argument=>[qw(atom fenced)],
+				   unfenced=>undef
+				  },
+		      sequence => [ 'element' ]
+		     }
+	      }
 };
 
 #Gramar categories can now be n-dimensional feature vectors,
@@ -59,12 +68,12 @@ our $FEATURES = {
 # Any grammar rule contains a lhs and rhs, just as in Marpa:
 our $RULES = [ #        LHS                          RHS
               # 1.0 Concatenation - Generic Arguments
-              ['ConcatArgument', [{type=>"factor",struct=>"unfenced"}]],
-              ['ConcatArgument', [{type=>"term",struct=>"argument"}]],
+              ['Concarg', [{type=>"factor",struct=>"unfenced"}]],
+              ['Concarg', [{type=>"term",struct=>"argument"}]],
               [{type=>"factor",struct=>"unfenced"},
-	                                           ['ConcatArgument',
+	                                           ['Concarg',
 						    'CONCAT',
-						    'ConcatArgument',
+						    'Concarg',
 						   ],  # 2xy (left-to-right)
                                                        # f g(x) (right-to-left)
                                                        # 2af(x) (mixed)
@@ -113,7 +122,7 @@ our $RULES = [ #        LHS                          RHS
                                                  {type=>'formula',struct=>'expression'}, 'CONCAT', 'CloseBrace'],
                'set'], #ACTION
 
-              # Fences
+              # Fences - type preserving
               [{type=>"additive",struct=>"fenced"}, ['OPEN', 'CONCAT',
                                                  {type=>"additive",struct=>'expression'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
@@ -123,28 +132,54 @@ our $RULES = [ #        LHS                          RHS
               [{type=>"formula",struct=>"fenced"}, ['OPEN', 'CONCAT',
                                                  {type=>"formula",struct=>'expression'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
+              [{type=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {type=>"term",struct=>'expression'}, 'CONCAT', 'CLOSE'],
+               'fenced'], #ACTION
 
+	      # Fences - empty
+              [{type=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT', 'CLOSE'],
+               'fenced_empty'], #ACTION
+	      # Fences - sequences
+	      [{type=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {type=>"term",struct=>'sequence'}, 'CONCAT', 'CLOSE'],
+               'fenced'], #ACTION
+	      
+	      # Sequences - base:
+	      [{type=>"factor",struct=>"element"}, [{type=>"factor",struct=>'expression'}]],
+	      [{type=>"term",struct=>"element"}, [{type=>"term",struct=>'expression'}]],
+
+	      # TODO: Groups (*,S)
+	      # TODO: Prevent this from overgenerating (what is happening ?!?!)
+	      # e.g. 1,2,,,,;,;,,;3 definitely shouldn't parse
+	      # Sequences - composed:
+	      [{type=>"factor",struct=>"sequence"}, [{type=>"factor",struct=>"element"},
+						     'CONCAT',
+						     {type=>"binary_separator",struct=>"atom"},
+						     'CONCAT',
+						     {type=>"factor",struct=>'element'}],
+               'infix_apply'], #ACTION,
 
               # Lexicon:
-              # TODO: New feature intuitions, require rewriting here!!!
+              # TODO: New feature intuitions, consider rewriting here!!!
               [{type=>"factor", struct=>"atom"},['NUMBER']],
               [{type=>"factor", struct=>"atom"},['UNKNOWN']], #TODO: Hm...
               [{type=>"formula", struct=>"atom"},['UNKNOWN']], #TODO: Hm...
               [{type=>"binary_operator", struct=>"atom"},['ADDOP']],
               [{type=>"binary_relation", struct=>"atom"},['RELOP']],
               [{type=>"binary_metarelation", struct=>"atom"},['METARELOP']],
+	      [{type=>"binary_separator", struct=>"atom"},['PUNCT']],
 	      [ 'SuchThat', [qw/Bar/]],
 	      [ 'SuchThat', [qw/Colon/]],
-	      ['Term',[{type=>"term",struct=>"expression"}]]
 	     ];
 
 sub new {
   my($class,%options)=@_;
   my $grammar = Marpa::Attributed->new(
-  {   start   => {type=>"e", struct=>"expression"},
+  {   start   => {type=>"e", struct=>"any"},
       actions => 'LaTeXML::MathSemantics',
       features=>$FEATURES,rules=>$RULES,
-     default_action=>'first_arg'});
+      default_action=>'first_arg',
+      default_null_value=>'no nullables in this grammar'});
 
   $grammar->precompute();
 
@@ -153,7 +188,7 @@ sub new {
 
 sub parse {
   my ($self,$rule,$unparsed) = @_;
-  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar}, ranking_method => 'high_rule_only'} );
+  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar}, ranking_method => 'high_rule_only', max_parses=>50 } );
 
   # Insert concatenation
   @$unparsed = map (($_, 'CONCAT::'), @$unparsed);

@@ -88,7 +88,6 @@ sub compile_grammar {
   push @$newrules, @$featrules;
   print STDERR " Final grammar has ".scalar(@$newrules)." rules!\n";
   $opts->{rules}=$newrules;
-
 }
 
 # Generate a flattened map for each feature class, to be used for rule generation
@@ -165,7 +164,7 @@ sub deccase {
  my $lstructs = [];
  foreach my $label(@$labels) {
    my $lstruct;
-   while ($label=~/([A-Z]([a-z]*))/g) {
+   while ($label=~/([A-Z]([a-z_]*))/g) {
      my $feat = lc ($1);
      if ($featmap->{$feat}) { #Feature:
        $lstruct->{$featmap->{$feat}} = $feat;
