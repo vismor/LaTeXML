@@ -28,7 +28,7 @@ use base (qw(Exporter));
 our $FEATURES = {
    type => {default=>'tp',
             tp=>{
-		      e=>{term=>[qw(additive factor)],
+		      e=>{term=>{additive=>{factor=>undef}},
 			  formula=>undef},
                       ee=>[qw(tt tf ft ff)], 
                       eee =>{operator=>[qw( ttt )],
@@ -43,41 +43,30 @@ our $FEATURES = {
 };
 
 #Gramar categories can now be n-dimensional feature vectors,
-#  but also classical atomic categories, e.g. in the case of some terminals
+#  but also classical atommic categories, e.g. in the case of some terminals
 
 # Any grammar rule contains a lhs and rhs, just as in Marpa:
 our $RULES = [ #        LHS                          RHS
               # 1.0 Concatenation - Generic Arguments
+              ['ConcatArgument', [{type=>"factor",struct=>"unfenced"}]],
+              ['ConcatArgument', [{type=>"term",struct=>"argument"}]],
               [{type=>"factor",struct=>"unfenced"},
-	                                           [{type=>"term",struct=>"argument"},
+	                                           ['ConcatArgument',
 						    'CONCAT',
-						    {type=>"term",struct=>"argument"},
+						    'ConcatArgument',
 						   ],  # 2xy (left-to-right)
                                                        # f g(x) (right-to-left)
                'concat_apply'],
-              # 1.1. Concatenation - Factors
-              [{type=>"factor",struct=>"unfenced"},
-	                                           [{type=>"factor",struct=>"unfenced"},
-						    'CONCAT',
-						    {type=>"term",struct=>"argument"},
-						   ],  # 2xy (left-to-right)
-               'concat_apply'],
-              [{type=>"factor",struct=>"unfenced"},
-	                                           [{type=>"term",struct=>"argument"},
-						    'CONCAT',
-						    {type=>"factor",struct=>"unfenced"},
-						   ],  # f g(x) (right-to-left)
-               'concat_apply'],
 
               # 2.1 Infix Operator - Factors
-              [{type=>"factor",struct=>"unfenced"}, [{type=>"factor",struct=>"expression"},
+              [{type=>"factor",struct=>"unfenced"}, [{type=>"factor",struct=>"unfenced"},
                                                    'CONCAT',
                                                    'MULOP',
                                                    'CONCAT',
                                                    {type=>"term",struct=>"argument"}
                                                   ],               'infix_apply'], #ACTION
 
-              [{type=>"factor",struct=>"unfenced"}, [{type=>"additive",struct=>"argument"},
+              [{type=>"factor",struct=>"unfenced"}, [{type=>"term",struct=>"argument"},
                                                    'CONCAT',
                                                    'MULOP',
                                                    'CONCAT',
@@ -88,7 +77,7 @@ our $RULES = [ #        LHS                          RHS
                                                    'CONCAT',
                                                    {type=>'ttt',struct=>'atom'},
                                                    'CONCAT',
-                                                   {type=>"term",struct=>"argument"},
+                                                   'ConcatArgument'
                                                   ],               'infix_apply'], #ACTION
 
               # Infix Relation - Generic
@@ -119,10 +108,9 @@ our $RULES = [ #        LHS                          RHS
 
               # Lexicon:
               # TODO: New feature intuitions, require rewriting here!!!
-              [{type=>"term", struct=>"atom"},['Atom']],
-              [{type=>"formula", struct=>"atom"},['Atom']],
-              [{type=>"term", struct=>"atom"},['NUMBER']],
-              [{type=>"term", struct=>"atom"},['UNKNOWN']], #TODO: Hm...
+              [{type=>"factor", struct=>"atom"},['NUMBER']],
+              [{type=>"factor", struct=>"atom"},['UNKNOWN']], #TODO: Hm...
+              [{type=>"formula", struct=>"atom"},['UNKNOWN']], #TODO: Hm...
               [{type=>"ttt", struct=>"atom"},['ADDOP']],
               [{type=>"ttf", struct=>"atom"},['RELOP']],
               [{type=>"ftf", struct=>"atom"},['RELOP']],

@@ -67,7 +67,7 @@ sub compile_grammar {
   # Add rules for the feature tree:
   my $featrules = $self->mkfeatrules;
   print STDERR " Flattened features into ".scalar(@$featrules)." rules...\n";
-  print STDERR " Feat rules: \n",Dumper($featrules),"\n\n";
+  #print STDERR " Feat rules: \n",Dumper($featrules),"\n\n";
   # Convert given grammar rules to Marpa syntax:
    foreach my $r(@$rules) {
      if ((ref $r) eq 'ARRAY') {
