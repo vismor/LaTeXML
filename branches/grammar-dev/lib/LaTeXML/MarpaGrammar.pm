@@ -26,19 +26,30 @@ use base (qw(Exporter));
 
 ### A Grammar for Mathematical Expressions:
 our $FEATURES = {
-   type => {default=>'tp',
+   type => {
+            default=>'tp',
             tp=>{
-		      e=>{term=>{additive=>{factor=>undef}},
-			  formula=>undef},
-                      ee=>[qw(tt tf ft ff)], 
-                      eee =>{operator=>[qw( ttt )],
-                             modifier=>[qw(tft ftt)],
-                             relation=>[qw(ttf ftf)],
-                             metarelation=>[qw(fff)],
-                             other=>[qw(fft)]}}},
-   struct => {default=>'expression',
-              expression=>{argument=>[qw(atom fenced)],
-                           unfenced=>undef}
+                 e=>{term=>{additive=>{factor=>undef}},
+                     formula=>undef},
+                 ee=>['unary_operator',# tt
+                      'unary_relation',# tf
+                      'unary_modifier',# ft
+                      'unary_metarelation', #ff
+                     ],
+                 eee=>['binary_operator',# ttt
+                       'binary_modifier',# tft ftt
+                       'binary_relation',# ttf ftf,
+                       'binary_metarelation',# fff,
+                       'binary_other',# fft
+                      ]
+                }
+           },
+   struct => {
+              default=>'expression',
+              expression=> {
+                            argument=>[qw(atom fenced)],
+                            unfenced=>undef
+                           }
              }
 };
 
@@ -76,7 +87,7 @@ our $RULES = [ #        LHS                          RHS
 	      # 2.2 Infix Operator - Additives
               [{type=>"additive",struct=>"unfenced"}, [{type=>"term",struct=>"expression"},
                                                    'CONCAT',
-                                                   {type=>'ttt',struct=>'atom'},
+                                                   {type=>'binary_operator',struct=>'atom'},
                                                    'CONCAT',
                                                    'ConcatArgument'
                                                   ],               'infix_apply'], #ACTION
@@ -84,13 +95,13 @@ our $RULES = [ #        LHS                          RHS
               # Infix Relation - Generic
               [{type=>"formula",struct=>"unfenced"}, [{type=>"term",struct=>"expression"},
                                                       'CONCAT',
-                                                      {type=>'ttf',struct=>'atom'},
+                                                      {type=>'binary_relation',struct=>'atom'},
                                                       'CONCAT',
                                                       {type=>"term",struct=>"expression"}
                                                      ],               'infix_apply'], #ACTION
               [{type=>"formula",struct=>"unfenced"}, [{type=>"formula",struct=>"expression"},
                                                       'CONCAT',
-                                                      {type=>'ftf',struct=>'atom'},
+                                                      {type=>'binary_relation',struct=>'atom'},
                                                       'CONCAT',
                                                       {type=>"term",struct=>"expression"}
                                                      ],               'infix_apply'], #ACTION
@@ -99,7 +110,7 @@ our $RULES = [ #        LHS                          RHS
               # Set constructor
               [{type=>"term",struct=>"fenced"}, ['OpenBrace', 'CONCAT',
                                                  {type=>"term",struct=>'expression'}, 'CONCAT', 'SuchThat', 'CONCAT',
-                                                 {type=>'f',struct=>'expression'}, 'CONCAT', 'CloseBrace'],
+                                                 {type=>'formula',struct=>'expression'}, 'CONCAT', 'CloseBrace'],
                'set'], #ACTION
 
               # Fences
@@ -119,13 +130,11 @@ our $RULES = [ #        LHS                          RHS
               [{type=>"factor", struct=>"atom"},['NUMBER']],
               [{type=>"factor", struct=>"atom"},['UNKNOWN']], #TODO: Hm...
               [{type=>"formula", struct=>"atom"},['UNKNOWN']], #TODO: Hm...
-              [{type=>"ttt", struct=>"atom"},['ADDOP']],
-              [{type=>"ttf", struct=>"atom"},['RELOP']],
-              [{type=>"ftf", struct=>"atom"},['RELOP']],
-              [{type=>"fff", struct=>"atom"},['METARELOP']],
+              [{type=>"binary_operator", struct=>"atom"},['ADDOP']],
+              [{type=>"binary_relation", struct=>"atom"},['RELOP']],
+              [{type=>"binary_metarelation", struct=>"atom"},['METARELOP']],
 	      [ 'SuchThat', [qw/Bar/]],
 	      [ 'SuchThat', [qw/Colon/]],
-	      ['Atom', [qw/UNKNOWN/]],
 	      ['Term',[{type=>"term",struct=>"expression"}]]
 	     ];
 

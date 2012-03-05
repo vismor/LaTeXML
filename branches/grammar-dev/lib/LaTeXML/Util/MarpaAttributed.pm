@@ -61,7 +61,6 @@ sub compile_grammar {
 
   $opts->{flatmap} = $flatmap;
   $opts->{featmap} = $featmap;
-  print STDERR "Flattening ".scalar(@$rules)." rules...\n";
 
   my $newrules = [];
   # Add rules for the feature tree:
@@ -85,7 +84,7 @@ sub compile_grammar {
      }
    }
 
-  print STDERR "Created ".scalar(@$newrules)." flat rules!\n";
+  print STDERR " Created ".scalar(@$newrules)." flat rules!\n";
   push @$newrules, @$featrules;
   print STDERR " Final grammar has ".scalar(@$newrules)." rules!\n";
   $opts->{rules}=$newrules;
