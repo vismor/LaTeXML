@@ -45,90 +45,51 @@ sub grammar {my $self = shift; $self->{opts};}
 
 sub compile_grammar {
   my ($self) = @_;
-  if ($self->{opts}->{mode} eq 'horizontal') {
-    $self->compile_horizontal;
-  } else { #Default is vertical
-    $self->compile_vertical;
-  }
-}
-
-sub compile_vertical {
- my ($self) = @_;
- my $opts=$self->{opts};
- my ($features,$rules,$actions) = ($opts->{features},$opts->{rules},$opts->{actions});
- my @featset = sort keys %$features;
- my ($vertmap,$featmap) = ({},{});
- # Caution: Assuming unique feature names for now
- mkvertmap($_,$features->{$_},$vertmap) foreach(@featset);
- mkfeatmap($features->{$_},$featmap,$_) foreach(@featset);
- delete $flatmap->{default}; #Default is reserved!
- $opts->{vertmap} = $vertmap;
- print STDERR "\n\n",Dumper($featmap),"\n\n";
- $opts->{featmap} = $featmap;
- print STDERR "Flattening ".scalar(@$rules)." rules...\n";
-
-  # Explode each rules into a family of rules:
-  my $newrules = [];
-   # Create vertical hierarchy
-   my $vertrules = $self->mkvertrules;
-   push @$newrules, @$vertrules;
-   foreach my $r(@$rules) {
-     if ((ref $r) eq 'ARRAY') {
-       # Simple declaration:
-       my $flatrules = $self->vertsimplerule($self->mkcategories([$r->[0]]),
-                                           $self->mkcategories($r->[1]),
-                                           $r->[2]);
-       push @$newrules, @$flatrules;
-     }
-     elsif ((ref $r) eq 'HASH') {
-       # Structured declaration:
-       my $flatrules = $self->vertcomplexrule(
-                                            $self->mkcategories([$r->{lhs}]),
-                                            $self->mkcategories($r->{rhs}),
-                                            $r);
-       push @$newrules, @$flatrules;
-     }
-   }
-  print STDERR "Created ".scalar(@$newrules)." flat rules!\n";
-  $opts->{rules}=$newrules;
-}
-
-sub compile_horizontal {
-  my ($self) = @_;
   my $opts = $self->{opts};
 
   my ($features,$rules,$actions) = ($opts->{features},$opts->{rules},$opts->{actions});
   my @featset = sort keys %$features;
   my ($flatmap,$featmap) = ({},{});
   # Caution: Assuming unique feature names for now
-  mkflatmap($_,$features->{$_},$flatmap) foreach(@featset);
-  mkfeatmap($features->{$_},$featmap,$_) foreach(@featset);
+  foreach my $featname(@featset) {
+    foreach (keys %{$features->{$featname}}) {
+      mkflatmap($_,$features->{$featname}->{$_},$flatmap);
+    }
+    mkfeatmap($featname,$features->{$featname},$featmap);
+  }
   delete $flatmap->{default}; #Default is reserved!
+
   $opts->{flatmap} = $flatmap;
   $opts->{featmap} = $featmap;
   print STDERR "Flattening ".scalar(@$rules)." rules...\n";
 
-  # Explode each rules into a family of rules:
   my $newrules = [];
+  # Add rules for the feature tree:
+  my $featrules = $self->mkfeatrules;
+  print STDERR " Flattened features into ".scalar(@$featrules)." rules...\n";
+  print STDERR " Feat rules: \n",Dumper($featrules),"\n\n";
+  # Convert given grammar rules to Marpa syntax:
    foreach my $r(@$rules) {
      if ((ref $r) eq 'ARRAY') {
        # Simple declaration:
-       my $flatrules = $self->mksimplerule($self->mkcategories([$r->[0]]),
-                                           $self->mkcategories($r->[1]),
-                                           $r->[2]);
-       push @$newrules, @$flatrules;
+       push @$newrules,  $self->mksimplerule($self->mkcategories([$r->[0]]),
+                                             $self->mkcategories($r->[1]),
+                                             $r->[2]);
      }
      elsif ((ref $r) eq 'HASH') {
        # Structured declaration:
-       my $flatrules = $self->mkcomplexrule(
-                                            $self->mkcategories([$r->{lhs}]),
-                                            $self->mkcategories($r->{rhs}),
-                                            $r);
-       push @$newrules, @$flatrules;
+       push @$newrules, $self->mkcomplexrule(
+                                             $self->mkcategories([$r->{lhs}]),
+                                             $self->mkcategories($r->{rhs}),
+                                             $r);
      }
    }
+
   print STDERR "Created ".scalar(@$newrules)." flat rules!\n";
+  push @$newrules, @$featrules;
+  print STDERR " Final grammar has ".scalar(@$newrules)." rules!\n";
   $opts->{rules}=$newrules;
+
 }
 
 # Generate a flattened map for each feature class, to be used for rule generation
@@ -138,23 +99,17 @@ sub mkflatmap {
  # Recurs inside, two cases:
  # I. Array ref
  if (ref $someref eq 'ARRAY') {
-   my @subfeats = @$someref;
-   # Fetch flat feats from store (base feature if not yet processed)
-   # CAVEAT: Needs to declare any feature prior to using it as a subfeature!
-   foreach (@subfeats) {
-     push @flatfeats, (exists $store->{$_}) ? (keys %{$store->{$_}}) : ($_);
-   }
+   @flatfeats = @$someref;
  # II. Hash ref
  } elsif (ref $someref eq 'HASH') {
-   my @subfeats = keys %$someref;
-   foreach my $subfeat(@subfeats) {
+   @flatfeats = keys %$someref;
+   foreach my $subfeat(@flatfeats) {
      if ($someref->{$subfeat}) {
        # This is a subfeature definition, process recursively:
        mkflatmap($subfeat,$someref->{$subfeat},$store);
      } else {
        # No definition, hence base category or already defined, do nothing.
      }
-     push @flatfeats, (exists $store->{$subfeat}) ? (keys %{$store->{$subfeat}}) : ($subfeat);
    }
  } # III. Base category, do nothing
  else {return;}
@@ -164,43 +119,17 @@ sub mkflatmap {
  $store->{$name}->{$_} = 1 foreach @flatfeats;
 }
 
-
-sub mkvertmap {
- my ($name,$someref,$store) = @_;
- my @subfeats;
- # Recurs inside, two cases:
- # I. Array ref
- if (ref $someref eq 'ARRAY') {
-   @subfeats = @$someref;
- # II. Hash ref
- } elsif (ref $someref eq 'HASH') {
-   @subfeats = keys %$someref;
-   foreach my $subfeat(@subfeats) {
-     if ($someref->{$subfeat}) {
-       # This is a subfeature definition, process recursively:
-       mkvertmap($subfeat,$someref->{$subfeat},$store);
-     } else {
-       # No definition, hence base category or already defined, do nothing.
-     }
-   }
- } # III. Base category, do nothing
- else {return;}
-
- # Add flatfeats to store:
- $store->{$name} = {};
- $store->{$name}->{$_} = 1 foreach @subfeats;
-}
-
-
 # Generate a flattened map between each terminal feature value (resp. category) and its feature name
 sub mkfeatmap {
- my ($hashref,$store,$featname) = @_;
+ my ($featname,$hashref,$store) = @_;
  foreach my $key(keys %$hashref) {
+   next if $key eq 'default'; #default is reserved
+   $store->{$key} = $featname;
    if ((ref $hashref->{$key}) eq 'ARRAY') {
      $store->{$_} = $featname foreach @{$hashref->{$key}};
    } elsif ((ref $hashref->{$key}) eq 'HASH') {
      $store->{$_} = $featname foreach (keys %{$hashref->{$key}});
-     mkfeatmap($hashref->{$key},$store,$featname);
+     mkfeatmap($featname,$hashref->{$key},$store);
    }
  }
 }
@@ -216,48 +145,19 @@ sub mkcategories {
 
  foreach $featstruct(@$itemlist) {
    my $resultcats = [];
-   if (! ref $featstruct) { push @$catlist, [$featstruct]; next;}
+   if (! ref $featstruct) { push @$catlist, $featstruct; next;}
    my @feats = map {$featstruct->{$_}||$features->{$_}->{default}} @featset;
-   foreach my $feature( @feats ) {
-     my $catparts = ccase($flatmap->{$feature}||{$feature=>undef});
-     if (@$resultcats) {
-       my @newcats = ();
-       foreach my $part(@$catparts) {
-         push @newcats, (map {$_.$part} @$resultcats);
-       }
-       $resultcats = \@newcats;
-     } else {
-       @$resultcats = @$catparts;
-     }
-   }
-   push @$catlist, $resultcats;
+   push @$catlist, join('', map (ccase($_), @feats));
  }
- 
- my $flatrules = [];
- foreach my $item(@$catlist) {
-   if (@$flatrules) {
-     my @newrules = ();
-     foreach my $cat(@$item) {
-       push @newrules, (map {[@{$_},$cat]} @$flatrules);
-     }
-     $flatrules = \@newrules;
-   } else {
-     @$flatrules = map {[$_]} @$item;
-   }
- }
- $flatrules;
+ $catlist;
 }
 
 
 # Convert array reference entries into Camel case fragments
 sub ccase {
- my ($args) = @_;
- my $out = [map {
-   $_ = lc($_);
-   s/^(\w)/uc($1)/e;
-   $_;
- } (keys %$args)];
- $out;
+  my ($word) = @_;
+  $word =~ s/^(\w)(.+)$/uc($1).lc($2)/e;
+  $word;
 }
 
 sub deccase {
@@ -280,17 +180,63 @@ sub deccase {
 }
 
 
+sub mkfeatrules {
+ my ($self) = @_;
+ my $opts = $self->{opts};
+ my $features = $opts->{features};
+ my $flatmap = $opts->{flatmap};
+ my $featmap = $opts->{featmap};
+ my @featsets = sort keys %$features;
+ my $keysets = [];
+ foreach my $featset (@featsets) {
+   my @set = grep {$featmap->{$_} eq $featset} (keys %$featmap);
+   push @$keysets, \@set;
+ }
+
+ my $final_rules = [];
+
+ foreach my $keysetid(0..(scalar(@$keysets)-1)) {
+   my $base_rules = [];
+   my $expanded_rules = [];
+
+   foreach my $innerid(0..(scalar(@$keysets)-1)) {
+     my $keyset = $$keysets[$innerid]; #inner key set
+     # If not $keysetid, we need identity:
+     my @new;
+     if ($innerid != $keysetid) {
+       @new = map {[$_,$_]} map {ccase($_)} @$keyset;
+     } else {
+       foreach $key(@$keyset) {
+         # $key is LHS and each of (keys %{$flatmap->{$key}}) is a separate RHS
+         my $Key = ccase("$key");
+         push @new, map { [$Key,ccase($_)] } (keys %{$flatmap->{$key}});
+       }
+     }
+
+     if (@$base_rules) {
+       # Multiply out with @new on all existing base rules:
+       foreach (@$base_rules) {
+         my $lhs = $$_[0];
+         my $rhs = $$_[1];
+         push @$expanded_rules, (map {[$lhs.($_->[0]),$rhs.($_->[1])]} @new);
+       }
+     } else { # First feature, just push in:
+       push @$expanded_rules, @new;
+     }
+
+     @$base_rules = @$expanded_rules;
+     @$expanded_rules = ();
+   }
+   push @$final_rules, map {my $r = {lhs=>$_->[0],rhs=>[$_->[1]],rank=>$keysetid+1}; $r} @$base_rules;
+ }
+ $final_rules;
+}
+
 sub mksimplerule {
  my ($self,$lhs,$rhs,$action) = @_;
  my $actions = $self->{opts}->{actions};
- my $rules = [];
  $action = $actions."::".$action if (defined $action && $action !~/::/);
- foreach my $litem(@$lhs) {
-   foreach my $ritem(@$rhs) {
-     push @$rules, [@{$litem}, $ritem, $action ? ($self->mkaction($litem,$ritem,$action)) : ()];
-   }
- }
- $rules;
+ [@{$lhs}, $rhs, $action ? ($self->mkaction($lhs,$rhs,$action)) : ()];
 }
 
 sub mkcomplexrule {
@@ -300,14 +246,9 @@ sub mkcomplexrule {
  delete $fields{lhs};
  delete $fields{rhs};
  $fields{action} = $actions."::".$fields{action} if (defined $fields{action} && $fields{action} !~/::/);
- my $rules = [];
- foreach my $litem(@$lhs) {
-   foreach my $ritem(@$rhs) {
-     $fields{action} = $self->mkaction($litem,$ritem,$fields{action}) if defined $fields{action};
-     push @$rules, {lhs=>@$litem, rhs=>$ritem, %fields};
-   }
- }
- $rules;
+ 
+ $fields{action} = $self->mkaction($lhs,$rhs,$fields{action}) if defined $fields{action};
+ {lhs=>$lhs, rhs=>$rhs, %fields};
 }
 
 sub mkaction {
@@ -320,12 +261,5 @@ sub mkaction {
   };
   $subname;
 }
-
-### Vertical rules
-sub mkvertrules {
- my ($self) = @_;
- 
-}
-
 
 1;

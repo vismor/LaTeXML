@@ -26,8 +26,8 @@ use base (qw(Exporter));
 
 ### A Grammar for Mathematical Expressions:
 our $FEATURES = {
-   type => {default=>'anytype',
-            anytype=>{
+   type => {default=>'tp',
+            tp=>{
 		      e=>{term=>[qw(additive factor)],
 			  formula=>undef},
                       ee=>[qw(tt tf ft ff)], 
@@ -36,13 +36,11 @@ our $FEATURES = {
                              relation=>[qw(ttf ftf)],
                              metarelation=>[qw(fff)],
                              other=>[qw(fft)]}}},
-#   domain => {default=>'arithmetic',anydomain=>[qw(arithmetic algebra relation geometry setth cattheory)]},
-   struct => {default=>'any',
-              any=>{atom=>undef,
-                    expression=>[qw(fenced unfenced)],
-                    argument=>[qw(fenced atom)]}}
+   struct => {default=>'expression',
+              expression=>{argument=>[qw(atom fenced)],
+                           unfenced=>undef}
+             }
 };
-
 
 #Gramar categories can now be n-dimensional feature vectors,
 #  but also classical atomic categories, e.g. in the case of some terminals
@@ -53,7 +51,7 @@ our $RULES = [ #        LHS                          RHS
               [{type=>"factor",struct=>"unfenced"},
 	                                           [{type=>"term",struct=>"argument"},
 						    'CONCAT',
-						    {type=>"term",struct=>"argument"}
+						    {type=>"term",struct=>"argument"},
 						   ],  # 2xy (left-to-right)
                                                        # f g(x) (right-to-left)
                'concat_apply'],
@@ -61,7 +59,7 @@ our $RULES = [ #        LHS                          RHS
               [{type=>"factor",struct=>"unfenced"},
 	                                           [{type=>"factor",struct=>"unfenced"},
 						    'CONCAT',
-						    {type=>"term",struct=>"argument"}
+						    {type=>"term",struct=>"argument"},
 						   ],  # 2xy (left-to-right)
                'concat_apply'],
               [{type=>"factor",struct=>"unfenced"},
@@ -72,7 +70,7 @@ our $RULES = [ #        LHS                          RHS
                'concat_apply'],
 
               # 2.1 Infix Operator - Factors
-              [{type=>"factor",struct=>"unfenced"}, [{type=>"factor",struct=>"any"},
+              [{type=>"factor",struct=>"unfenced"}, [{type=>"factor",struct=>"expression"},
                                                    'CONCAT',
                                                    'MULOP',
                                                    'CONCAT',
@@ -83,63 +81,64 @@ our $RULES = [ #        LHS                          RHS
                                                    'CONCAT',
                                                    'MULOP',
                                                    'CONCAT',
-                                                   {type=>"term",struct=>"argument"}
+                                                   {type=>"term",struct=>"argument"},
                                                   ],               'infix_apply'], #ACTION
 	      # 2.2 Infix Operator - Additives
-              [{type=>"additive",struct=>"unfenced"}, [{type=>"term",struct=>"any"},
+              [{type=>"additive",struct=>"unfenced"}, [{type=>"term",struct=>"expression"},
                                                    'CONCAT',
-                                                   'ADDOP',
+                                                   {type=>'ttt',struct=>'atom'},
                                                    'CONCAT',
-                                                   {type=>"term",struct=>"argument"}
+                                                   {type=>"term",struct=>"argument"},
                                                   ],               'infix_apply'], #ACTION
 
               # Infix Relation - Generic
-              [{type=>"formula",struct=>"unfenced"}, [{type=>"term",struct=>"any"},
+              [{type=>"formula",struct=>"unfenced"}, [{type=>"term",struct=>"expression"},
                                                       'CONCAT',
                                                       {type=>'ttf',struct=>'atom'},
                                                       'CONCAT',
-                                                      {type=>"term",struct=>"any"}
+                                                      {type=>"term",struct=>"expression"}
                                                      ],               'infix_apply'], #ACTION
-              [{type=>"formula",struct=>"unfenced"}, [{type=>"formula",struct=>"any"},
+              [{type=>"formula",struct=>"unfenced"}, [{type=>"formula",struct=>"expression"},
                                                       'CONCAT',
                                                       {type=>'ftf',struct=>'atom'},
                                                       'CONCAT',
-                                                      {type=>"term",struct=>"any"}
+                                                      {type=>"term",struct=>"expression"}
                                                      ],               'infix_apply'], #ACTION
 
 
               # Set constructor
               [{type=>"term",struct=>"fenced"}, ['OpenBrace', 'CONCAT',
-                                                 {type=>"term",struct=>'any'}, 'CONCAT', 'SuchThat', 'CONCAT',
+                                                 {type=>"term",struct=>'expression'}, 'CONCAT', 'SuchThat', 'CONCAT',
                                                  {type=>'f',struct=>'expression'}, 'CONCAT', 'CloseBrace'],
                'set'], #ACTION
 
               # Fences
               [{type=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {type=>"term",struct=>'any'}, 'CONCAT', 'CLOSE'],
+                                                 {type=>"term",struct=>'expression'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
 
               # Lexicon:
-              [{type=>"e", struct=>"atom"},['Atom']],
+              # TODO: New feature intuitions, require rewriting here!!!
+              [{type=>"term", struct=>"atom"},['Atom']],
+              [{type=>"formula", struct=>"atom"},['Atom']],
               [{type=>"term", struct=>"atom"},['NUMBER']],
-              [{type=>"any", struct=>"atom"},['UNKNOWN']],
-              [{type=>"relation", struct=>"atom"},['RELOP']],
+              [{type=>"term", struct=>"atom"},['UNKNOWN']], #TODO: Hm...
+              [{type=>"ttt", struct=>"atom"},['ADDOP']],
+              [{type=>"ttf", struct=>"atom"},['RELOP']],
+              [{type=>"ftf", struct=>"atom"},['RELOP']],
               [{type=>"fff", struct=>"atom"},['METARELOP']],
 	      [ 'SuchThat', [qw/Bar/]],
 	      [ 'SuchThat', [qw/Colon/]],
 	      ['Atom', [qw/UNKNOWN/]],
-	      ['Term',[{type=>"term",struct=>"any"}]]
+	      ['Term',[{type=>"term",struct=>"expression"}]]
 	     ];
-
-
 
 sub new {
   my($class,%options)=@_;
   my $grammar = Marpa::Attributed->new(
-  {   start   => {type=>"e", struct=>"any"},
+  {   start   => {type=>"e", struct=>"expression"},
       actions => 'LaTeXML::MathSemantics',
       features=>$FEATURES,rules=>$RULES,
-      mode=>"horizontal",
      default_action=>'first_arg'});
 
   $grammar->precompute();
@@ -149,7 +148,7 @@ sub new {
 
 sub parse {
   my ($self,$rule,$unparsed) = @_;
-  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar} } );
+  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar}, ranking_method => 'high_rule_only'} );
 
   # Insert concatenation
   @$unparsed = map (($_, 'CONCAT::'), @$unparsed);
@@ -159,9 +158,6 @@ sub parse {
     my ($category,$lexeme,$id) = split(':',$_);
     # Issues: 
     # 1. More specific categories for fences
-    # if (($category eq 'ADDOP') && ($lexeme eq 'plus')) {
-    #   $category = 'Plus';
-    # }
     print STDERR "$category:$lexeme\n";
 
     $rec->read($category,$lexeme.':'.$id);
