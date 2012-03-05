@@ -56,6 +56,7 @@ our $RULES = [ #        LHS                          RHS
 						    'ConcatArgument',
 						   ],  # 2xy (left-to-right)
                                                        # f g(x) (right-to-left)
+                                                       # 2af(x) (mixed)
                'concat_apply'],
 
               # 2.1 Infix Operator - Factors
@@ -102,9 +103,16 @@ our $RULES = [ #        LHS                          RHS
                'set'], #ACTION
 
               # Fences
-              [{type=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {type=>"term",struct=>'expression'}, 'CONCAT', 'CLOSE'],
+              [{type=>"additive",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {type=>"additive",struct=>'expression'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
+              [{type=>"factor",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {type=>"factor",struct=>'expression'}, 'CONCAT', 'CLOSE'],
+               'fenced'], #ACTION
+              [{type=>"formula",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {type=>"formula",struct=>'expression'}, 'CONCAT', 'CLOSE'],
+               'fenced'], #ACTION
+
 
               # Lexicon:
               # TODO: New feature intuitions, require rewriting here!!!
