@@ -8,7 +8,7 @@ use Data::Dumper;
 sub first_arg {
   return $_[1] if ref $_[1];
   my ($lex,$id) = split(/:/,$_[1]);
-  Lookup($id)||$lex;
+  Lookup($id);
 }
 
 sub infix_apply {

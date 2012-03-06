@@ -98,7 +98,7 @@ our $RULES = [ #        LHS                          RHS
                                                    'CONCAT',
                                                    {type=>'binary_operator',struct=>'atom'},
                                                    'CONCAT',
-                                                   'ConcatArgument'
+                                                   'Concarg'
                                                   ],               'infix_apply'], #ACTION
 
               # Infix Relation - Generic
@@ -144,20 +144,39 @@ our $RULES = [ #        LHS                          RHS
                                                  {type=>"term",struct=>'sequence'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
 	      
-	      # Sequences - base:
+	      # Sequences - base elements:
 	      [{type=>"factor",struct=>"element"}, [{type=>"factor",struct=>'expression'}]],
 	      [{type=>"term",struct=>"element"}, [{type=>"term",struct=>'expression'}]],
 
 	      # TODO: Groups (*,S)
 	      # TODO: Prevent this from overgenerating (what is happening ?!?!)
 	      # e.g. 1,2,,,,;,;,,;3 definitely shouldn't parse
-	      # Sequences - composed:
-	      [{type=>"factor",struct=>"sequence"}, [{type=>"factor",struct=>"element"},
+	      # Sequences - composition:
+	      [{type=>"factor",struct=>"sequence"}, [{type=>"factor",struct=>"sequence"},
 						     'CONCAT',
 						     {type=>"binary_separator",struct=>"atom"},
 						     'CONCAT',
 						     {type=>"factor",struct=>'element'}],
                'infix_apply'], #ACTION,
+	      [{type=>"additive",struct=>"sequence"}, [{type=>"additive",struct=>"sequence"},
+						     'CONCAT',
+						     {type=>"binary_separator",struct=>"atom"},
+						     'CONCAT',
+						     {type=>"additive",struct=>'element'}],
+               'infix_apply'], #ACTION,
+	      [{type=>"term",struct=>"sequence"}, [{type=>"term",struct=>"sequence"},
+						     'CONCAT',
+						     {type=>"binary_separator",struct=>"atom"},
+						     'CONCAT',
+						     {type=>"term",struct=>'element'}],
+               'infix_apply'], #ACTION,
+	      # What we _REALLY_ want to say here:
+	      # [{type=>"[e]",struct=>"sequence"}, [{type=>"[1]",struct=>"sequence"},
+	      # 					     'CONCAT',
+	      # 					     {type=>"binary_separator",struct=>"atom"},
+	      # 					     'CONCAT',
+	      # 					     {type=>"[1]",struct=>'element'}],
+              #  'infix_apply'], #ACTION,
 
               # Lexicon:
               # TODO: New feature intuitions, consider rewriting here!!!
@@ -188,7 +207,7 @@ sub new {
 
 sub parse {
   my ($self,$rule,$unparsed) = @_;
-  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar}, ranking_method => 'high_rule_only', max_parses=>50 } );
+  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar}, ranking_method => 'high_rule_only', max_parses=>50} );
 
   # Insert concatenation
   @$unparsed = map (($_, 'CONCAT::'), @$unparsed);
@@ -200,7 +219,7 @@ sub parse {
     # 1. More specific categories for fences
     print STDERR "$category:$lexeme\n";
 
-    $rec->read($category,$lexeme.':'.$id);
+    last unless $rec->read($category,$lexeme.':'.$id);
   }
 
   my @values = ();
