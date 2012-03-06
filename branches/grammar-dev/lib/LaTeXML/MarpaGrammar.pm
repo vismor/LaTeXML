@@ -123,60 +123,31 @@ our $RULES = [ #        LHS                          RHS
                'set'], #ACTION
 
               # Fences - type preserving
-              [{type=>"additive",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {type=>"additive",struct=>'expression'}, 'CONCAT', 'CLOSE'],
+              [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {type=>"[1]",struct=>'expression'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
-              [{type=>"factor",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {type=>"factor",struct=>'expression'}, 'CONCAT', 'CLOSE'],
-               'fenced'], #ACTION
-              [{type=>"formula",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {type=>"formula",struct=>'expression'}, 'CONCAT', 'CLOSE'],
-               'fenced'], #ACTION
-              [{type=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {type=>"term",struct=>'expression'}, 'CONCAT', 'CLOSE'],
-               'fenced'], #ACTION
-
 	      # Fences - empty
-              [{type=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT', 'CLOSE'],
+              [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT', 'CLOSE'],
                'fenced_empty'], #ACTION
-	      # Fences - sequences
-	      [{type=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {type=>"term",struct=>'sequence'}, 'CONCAT', 'CLOSE'],
+
+	      # Fences - cast sequences to expressions, preserve type
+	      [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {type=>"[e]",struct=>'sequence'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
 	      
-	      # Sequences - base elements:
-	      [{type=>"factor",struct=>"element"}, [{type=>"factor",struct=>'expression'}]],
-	      [{type=>"term",struct=>"element"}, [{type=>"term",struct=>'expression'}]],
+	      # Elementhood - cast expressions into sequences, preserve type:
+	      [{type=>"[e]",struct=>"element"}, [{type=>"[1]",struct=>'expression'}]],
 
 	      # TODO: Groups (*,S)
 	      # TODO: Prevent this from overgenerating (what is happening ?!?!)
 	      # e.g. 1,2,,,,;,;,,;3 definitely shouldn't parse
 	      # Sequences - composition:
-	      [{type=>"factor",struct=>"sequence"}, [{type=>"factor",struct=>"sequence"},
-						     'CONCAT',
-						     {type=>"binary_separator",struct=>"atom"},
-						     'CONCAT',
-						     {type=>"factor",struct=>'element'}],
+	      [{type=>"[e]",struct=>"sequence"}, [{type=>"[1]",struct=>"sequence"},
+	      					     'CONCAT',
+	      					     {type=>"binary_separator",struct=>"atom"},
+	      					     'CONCAT',
+	      					     {type=>"[1]",struct=>'element'}],
                'infix_apply'], #ACTION,
-	      [{type=>"additive",struct=>"sequence"}, [{type=>"additive",struct=>"sequence"},
-						     'CONCAT',
-						     {type=>"binary_separator",struct=>"atom"},
-						     'CONCAT',
-						     {type=>"additive",struct=>'element'}],
-               'infix_apply'], #ACTION,
-	      [{type=>"term",struct=>"sequence"}, [{type=>"term",struct=>"sequence"},
-						     'CONCAT',
-						     {type=>"binary_separator",struct=>"atom"},
-						     'CONCAT',
-						     {type=>"term",struct=>'element'}],
-               'infix_apply'], #ACTION,
-	      # What we _REALLY_ want to say here:
-	      # [{type=>"[e]",struct=>"sequence"}, [{type=>"[1]",struct=>"sequence"},
-	      # 					     'CONCAT',
-	      # 					     {type=>"binary_separator",struct=>"atom"},
-	      # 					     'CONCAT',
-	      # 					     {type=>"[1]",struct=>'element'}],
-              #  'infix_apply'], #ACTION,
 
               # Lexicon:
               # TODO: New feature intuitions, consider rewriting here!!!

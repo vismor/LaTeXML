@@ -24,6 +24,7 @@ sub new {
  my $grammar = $compiler->grammar;
 
  delete $grammar->{features};
+ delete $grammar->{featsets};
  delete $grammar->{flatmap};
  delete $grammar->{featmap};
  delete $grammar->{mode};
@@ -32,6 +33,7 @@ sub new {
 
 
 package Marpa::Attributed::Compiler;
+use Clone qw(clone);
 use Data::Dumper;
 sub new {
  my ($class,$opts) = @_;
@@ -48,10 +50,12 @@ sub compile_grammar {
   my $opts = $self->{opts};
 
   my ($features,$rules,$actions) = ($opts->{features},$opts->{rules},$opts->{actions});
-  my @featset = sort keys %$features;
+  my @featsets = sort keys %$features;
+  $opts->{featsets} = \@featsets;
+  $self->{opts}->{featsets}=\@featsets;
   my ($flatmap,$featmap) = ({},{});
   # Caution: Assuming unique feature names for now
-  foreach my $featname(@featset) {
+  foreach my $featname(@featsets) {
     foreach (keys %{$features->{$featname}}) {
       mkflatmap($_,$features->{$featname}->{$_},$flatmap);
     }
@@ -65,26 +69,42 @@ sub compile_grammar {
   my $newrules = [];
   # Add rules for the feature tree:
   my $featrules = $self->mkfeatrules;
-  print STDERR " Flattened features into ".scalar(@$featrules)." rules...\n";
-  #print STDERR " Feat rules: \n",Dumper($featrules),"\n\n";
+  print STDERR "\n Flattened features into ".scalar(@$featrules)." rules...\n";
+
   # Convert given grammar rules to Marpa syntax:
+  # TODO: Keep in mind the [e] expansion generates redundant rules, that might make conflicts.
+  # Make sure "most specific" rules are either evaluated first or ranked highest, whatever makes sense
    foreach my $r(@$rules) {
      if ((ref $r) eq 'ARRAY') {
        # Simple declaration:
-       push @$newrules,  $self->mksimplerule($self->mkcategories([$r->[0]]),
-                                             $self->mkcategories($r->[1]),
-                                             $r->[2]);
+       my $action = $r->[2];
+       my @cats = $self->mkcategories($r->[0],@{$r->[1]});
+       foreach my $pair(@cats) {
+	 push @$newrules, $self->mksimplerule($pair->[0],$pair->[1],$action);
+       }
+       #my @lcats = $self->mkcategory([$r->[0]]);
+       #my @rcats = $self->mkcategory($r->[1]);
+       #foreach my $lcat(@lcats) {
+	 # foreach my $rcat(@rcats) {
+	 #   push @$newrules,  $self->mksimplerule($lcat,$rcat,$action);
+	 # }}
      }
      elsif ((ref $r) eq 'HASH') {
        # Structured declaration:
-       push @$newrules, $self->mkcomplexrule(
-                                             $self->mkcategories([$r->{lhs}]),
-                                             $self->mkcategories($r->{rhs}),
-                                             $r);
+       my @cats = $self->mkcategories($r->{lhs},@{$r->{rhs}});
+       foreach my $pair(@cats) {
+        push @$newrules, $self->mkcomplexrule($pair->[0],$pair->[1],$r);
+       }
+       # my @lcats = $self->mkcategory([$r->{lhs}]);
+       # my @rcats = $self->mkcategory($r->{rhs});
+       # foreach my $lcat(@lcats) {
+       # 	 foreach my $rcat(@rcats) {
+       # 	   push @$newrules, $self->mkcomplexrule($lcat,$rcat,$r);
+       # 	 }}
      }
    }
 
-  print STDERR " Created ".scalar(@$newrules)." flat rules!\n";
+  print STDERR " Created ".scalar(@$newrules)." flat rules from ".scalar(@$rules)." attributed rules!\n";
   push @$newrules, @$featrules;
   print STDERR " Final grammar has ".scalar(@$newrules)." rules!\n";
   $opts->{rules}=$newrules;
@@ -133,23 +153,78 @@ sub mkfeatmap {
 }
 
 
-sub mkcategories {
+sub mkcategory {
  my ($self,$itemlist) = @_;
  my $opts = $self->{opts};
- my $features = $opts->{features};
- my $flatmap = $opts->{flatmap};
- my @featset = sort keys %$features;
+ my @featsets = @{$opts->{featsets}};
  my $catlist = [];
 
  foreach $featstruct(@$itemlist) {
    my $resultcats = [];
    if (! ref $featstruct) { push @$catlist, $featstruct; next;}
-   my @feats = map {$featstruct->{$_}||$features->{$_}->{default}} @featset;
+   my @feats = map {$featstruct->{$_}||$features->{$_}->{default}} @featsets;
    push @$catlist, join('', map (ccase($_), @feats));
  }
- $catlist;
+ ($catlist);
 }
 
+sub mkcategories {
+ my ($self,@cats) = @_;
+ my $opts = $self->{opts};
+ my $features = $opts->{features};
+ my $flatmap = $opts->{flatmap};
+ my @featsets = @{$opts->{featsets}};
+ my $catcount = scalar(@cats)-1;
+ # Recursively expand all [placeholders], keeping track of the coordinating [1]...[n] refs
+ for my $i(0..$catcount) {
+   my $cat = $cats[$i];
+   next unless ref $cat;
+   my $wild;
+   foreach my $featname(@featsets) {
+     if ($cat->{$featname} && ($cat->{$featname} =~ /^\[(\D+)\]$/)) {
+       $wild=[$featname,$1]; last;
+     }
+   }
+   if ($wild) { # Found wildcard, iteratively expand and substitute once and then recursively collect subresults:
+     my $once_expanded_cats = expand_and_substitute(\@cats,$i,$wild,$flatmap);
+     return ( map { $self->mkcategories(@$_) } @$once_expanded_cats);
+   }
+ }
+ # No wildcards found, fallback to basic support:
+ return ( [$self->mkcategory([$cats[0]]),$self->mkcategory([@cats[1..$catcount]])] );
+}
+
+sub expand_and_substitute {
+  my ($cats,$i,$wild,$flatmap) = @_;
+  my @vals;
+  my @next = ($wild->[1]);
+  while (@next) {
+    my $featname = shift @next;
+    push @vals, $featname;
+    push @next, keys %{$flatmap->{$featname}};
+  }
+  [ map {substitute($cats,$i,$wild->[0],$_)} @vals ]; # One-level expansion of $cats
+}
+
+sub substitute {
+  my ($given_cats,$i,$feat,$val) = @_;
+  # We should clone $cats here, as we're making a new rule
+  my $cats = clone($given_cats);
+  my $cat=$cats->[$i];
+  $cat->{$feat} = $val;
+  for my $j(0..scalar(@$cats)-1) {
+    next if $j==$i;
+    my $check_cat = $cats->[$j];
+    if ($check_cat->{$feat} && ($check_cat->{$feat} =~ /^\[(\d+)\]$/)) {
+      if ($1 eq '1') {
+	$check_cat->{$feat} = $val;
+      } else {
+	$check_cat->{$feat} = '['.($1-1).']';
+      }
+    }
+  }
+  $cats;
+}
 
 # Convert array reference entries into Camel case fragments
 sub ccase {
@@ -184,7 +259,7 @@ sub mkfeatrules {
  my $features = $opts->{features};
  my $flatmap = $opts->{flatmap};
  my $featmap = $opts->{featmap};
- my @featsets = sort keys %$features;
+ my @featsets = @{$opts->{featsets}};
  my $keysets = [];
  foreach my $featset (@featsets) {
    my @set = grep {$featmap->{$_} eq $featset} (keys %$featmap);
