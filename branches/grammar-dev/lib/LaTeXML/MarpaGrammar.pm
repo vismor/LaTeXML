@@ -141,7 +141,7 @@ our $RULES = [ #        LHS                          RHS
 	      # TODO: Prevent this from overgenerating (what is happening ?!?!)
 	      # e.g. 1,2,,,,;,;,,;3 definitely shouldn't parse
 	      # Lists - composition:
-	      [{type=>"[e]",struct=>"list"}, [{type=>"[1]",struct=>"sequence"},
+	      [{type=>"[tp]",struct=>"list"}, [{type=>"[1]",struct=>"sequence"},
 	      					     'CONCAT',
 	      					     {type=>"binary_separator",struct=>"atom"},
 	      					     'CONCAT',
@@ -152,7 +152,11 @@ our $RULES = [ #        LHS                          RHS
               # TODO: New feature intuitions, consider rewriting here!!!
               [{type=>"factor", struct=>"atom"},['NUMBER']],
               [{type=>"factor", struct=>"atom"},['UNKNOWN']],
-#              [{type=>"formula", struct=>"atom"},['UNKNOWN']], # TODO: Do we really need formulas here????
+              [{type=>"formula", struct=>"atom"},['UNKNOWN']], # TODO: Do we really need formulas here????
+	      # It seems we do e.g. (x \wedge y), but then things like '(a)' have two parses that are the same tree
+	      # where one parse means 'term' , the other 'formula'... But then, that's ok,
+	      # the CDLF processing can weed out equivalent parses in any case! So leaving formulas in.
+
               [{type=>"binary_operator", struct=>"atom"},['ADDOP']],
               [{type=>"binary_relation", struct=>"atom"},['RELOP']],
               [{type=>"binary_metarelation", struct=>"atom"},['METARELOP']],
@@ -161,8 +165,8 @@ our $RULES = [ #        LHS                          RHS
 	      [ 'SuchThat', [qw/Colon/]],
 
 	      # Start category:
-	      ['StartCat',[{type=>"e", struct=>"expression"}]],
-	      ['StartCat',[{type=>"e", struct=>"list"}]],
+	      ['StartCat',[{type=>"e", struct=>"expression"}]], # If expression - real math only
+	      ['StartCat',[{type=>"tp", struct=>"list"}]], # If list, anything goes
 	     ];
 
 sub new {
