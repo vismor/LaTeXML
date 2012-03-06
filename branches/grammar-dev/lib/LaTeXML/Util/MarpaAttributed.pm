@@ -12,9 +12,9 @@
 # | http://kwarc.info/people/dginev                            (o o)    | #
 # \=========================================================ooo==U==ooo=/ #
 
-use Marpa::XS;
 package Marpa::Attributed;
-
+use Marpa::XS;
+use Data::Dumper;
 sub new {
  my ($class,$opts) = @_;
 
@@ -28,6 +28,7 @@ sub new {
  delete $grammar->{flatmap};
  delete $grammar->{featmap};
  delete $grammar->{mode};
+# print STDERR "Final grammar rules: ", Dumper($grammar),"\n\n\n";
  Marpa::XS::Grammar->new($grammar);
 }
 
@@ -78,9 +79,9 @@ sub compile_grammar {
      if ((ref $r) eq 'ARRAY') {
        # Simple declaration:
        my $action = $r->[2];
-       my @cats = $self->mkcategories($r->[0],@{$r->[1]});
-       foreach my $pair(@cats) {
-	 push @$newrules, $self->mksimplerule($pair->[0],$pair->[1],$action);
+       my @cats = $self->mkcategories(1,$r->[0],@{$r->[1]});
+       foreach my $triple(@cats) {
+	 push @$newrules, $self->mksimplerule(@$triple,$action);
        }
        #my @lcats = $self->mkcategory([$r->[0]]);
        #my @rcats = $self->mkcategory($r->[1]);
@@ -91,9 +92,9 @@ sub compile_grammar {
      }
      elsif ((ref $r) eq 'HASH') {
        # Structured declaration:
-       my @cats = $self->mkcategories($r->{lhs},@{$r->{rhs}});
-       foreach my $pair(@cats) {
-        push @$newrules, $self->mkcomplexrule($pair->[0],$pair->[1],$r);
+       my @cats = $self->mkcategories(1,$r->{lhs},@{$r->{rhs}});
+       foreach my $triple(@cats) {
+        push @$newrules, $self->mkcomplexrule(@$triple,$r);
        }
        # my @lcats = $self->mkcategory([$r->{lhs}]);
        # my @rcats = $self->mkcategory($r->{rhs});
@@ -169,7 +170,7 @@ sub mkcategory {
 }
 
 sub mkcategories {
- my ($self,@cats) = @_;
+ my ($self,$rank,@cats) = @_;
  my $opts = $self->{opts};
  my $features = $opts->{features};
  my $flatmap = $opts->{flatmap};
@@ -186,28 +187,29 @@ sub mkcategories {
      }
    }
    if ($wild) { # Found wildcard, iteratively expand and substitute once and then recursively collect subresults:
-     my $once_expanded_cats = expand_and_substitute(\@cats,$i,$wild,$flatmap);
+     my $once_expanded_cats = expand_and_substitute($rank,\@cats,$i,$wild,$flatmap);
      return ( map { $self->mkcategories(@$_) } @$once_expanded_cats);
    }
  }
  # No wildcards found, fallback to basic support:
- return ( [$self->mkcategory([$cats[0]]),$self->mkcategory([@cats[1..$catcount]])] );
+ return ( [$rank,$self->mkcategory([$cats[0]]),$self->mkcategory([@cats[1..$catcount]])] );
 }
 
 sub expand_and_substitute {
-  my ($cats,$i,$wild,$flatmap) = @_;
+  my ($in_rank,$cats,$i,$wild,$flatmap) = @_;
   my @vals;
-  my @next = ($wild->[1]);
+  my @next = ([$in_rank,$wild->[1]]);
   while (@next) {
-    my $featname = shift @next;
-    push @vals, $featname;
-    push @next, keys %{$flatmap->{$featname}};
+    my $pair = shift @next;
+    my ($rank,$featname) = ($pair->[0],$pair->[1]);
+    push @vals, $pair;
+    push @next, map {[$rank+1,$_]} keys %{$flatmap->{$featname}};
   }
-  [ map {substitute($cats,$i,$wild->[0],$_)} @vals ]; # One-level expansion of $cats
+  [ map {substitute($cats,$i,$wild->[0],$_->[0],$_->[1])} @vals ]; # One-level expansion of $cats
 }
 
 sub substitute {
-  my ($given_cats,$i,$feat,$val) = @_;
+  my ($given_cats,$i,$feat,$rank,$val) = @_;
   # We should clone $cats here, as we're making a new rule
   my $cats = clone($given_cats);
   my $cat=$cats->[$i];
@@ -223,6 +225,7 @@ sub substitute {
       }
     }
   }
+  unshift @$cats, $rank;
   $cats;
 }
 
@@ -306,18 +309,22 @@ sub mkfeatrules {
 }
 
 sub mksimplerule {
- my ($self,$lhs,$rhs,$action) = @_;
+ my ($self,$rank,$lhs,$rhs,$action) = @_;
  my $actions = $self->{opts}->{actions};
  $action = $actions."::".$action if (defined $action && $action !~/::/);
- [@{$lhs}, $rhs, $action ? ($self->mkaction($lhs,$rhs,$action)) : ()];
+ $action = $self->mkaction($lhs,$rhs,$action) if $action;
+ {lhs=>$lhs->[0], rhs=>$rhs,
+    action=>$action,
+      rank=>$rank};
 }
 
 sub mkcomplexrule {
- my ($self,$lhs,$rhs,$r) = @_;
+ my ($self,$rank,$lhs,$rhs,$r) = @_;
  my $actions = $self->{opts}->{actions};
  my %fields = %$r;
  delete $fields{lhs};
  delete $fields{rhs};
+ $fields{rank}=$rank;
  $fields{action} = $actions."::".$fields{action} if (defined $fields{action} && $fields{action} !~/::/);
  
  $fields{action} = $self->mkaction($lhs,$rhs,$fields{action}) if defined $fields{action};

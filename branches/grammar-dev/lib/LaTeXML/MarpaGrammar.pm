@@ -42,7 +42,7 @@ our $FEATURES = {
 		      #'unary_separator', #ee???
                      ],
                  eee=>['binary_operator',# ttt
-		       'binary_separator',# eee???
+		       'binary_separator',# eee??? seems about right...
                        'binary_modifier',# tft ftt
                        'binary_relation',# ttf ftf,
                        'binary_metarelation',# fff,
@@ -57,7 +57,7 @@ our $FEATURES = {
 				   argument=>[qw(atom fenced)],
 				   unfenced=>undef
 				  },
-		      sequence => [ 'element' ]
+		      sequence => [ 'list', 'element' ]
 		     }
 	      }
 };
@@ -68,12 +68,12 @@ our $FEATURES = {
 # Any grammar rule contains a lhs and rhs, just as in Marpa:
 our $RULES = [ #        LHS                          RHS
               # 1.0 Concatenation - Generic Arguments
-              ['Concarg', [{type=>"factor",struct=>"unfenced"}]],
-              ['Concarg', [{type=>"term",struct=>"argument"}]],
+              ['Concat_argument', [{type=>"factor",struct=>"unfenced"}],'first_arg'],
+              ['Concat_argument', [{type=>"term",struct=>"argument"}],'first_arg'],
               [{type=>"factor",struct=>"unfenced"},
-	                                           ['Concarg',
+	                                           ['Concat_argument',
 						    'CONCAT',
-						    'Concarg',
+						    'Concat_argument',
 						   ],  # 2xy (left-to-right)
                                                        # f g(x) (right-to-left)
                                                        # 2af(x) (mixed)
@@ -98,7 +98,7 @@ our $RULES = [ #        LHS                          RHS
                                                    'CONCAT',
                                                    {type=>'binary_operator',struct=>'atom'},
                                                    'CONCAT',
-                                                   'Concarg'
+                                                   'Concat_argument'
                                                   ],               'infix_apply'], #ACTION
 
               # Infix Relation - Generic
@@ -126,23 +126,22 @@ our $RULES = [ #        LHS                          RHS
               [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
                                                  {type=>"[1]",struct=>'expression'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
+	      # Fences - cast lists to expressions, preserve type
+              [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {type=>"[1]",struct=>'list'}, 'CONCAT', 'CLOSE'],
+               'fenced'], #ACTION
 	      # Fences - empty
               [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT', 'CLOSE'],
                'fenced_empty'], #ACTION
 
-	      # Fences - cast sequences to expressions, preserve type
-	      [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {type=>"[e]",struct=>'sequence'}, 'CONCAT', 'CLOSE'],
-               'fenced'], #ACTION
-	      
-	      # Elementhood - cast expressions into sequences, preserve type:
+	      # Elementhood - cast expressions into elements, preserve type:
 	      [{type=>"[e]",struct=>"element"}, [{type=>"[1]",struct=>'expression'}]],
 
 	      # TODO: Groups (*,S)
 	      # TODO: Prevent this from overgenerating (what is happening ?!?!)
 	      # e.g. 1,2,,,,;,;,,;3 definitely shouldn't parse
-	      # Sequences - composition:
-	      [{type=>"[e]",struct=>"sequence"}, [{type=>"[1]",struct=>"sequence"},
+	      # Lists - composition:
+	      [{type=>"[e]",struct=>"list"}, [{type=>"[1]",struct=>"sequence"},
 	      					     'CONCAT',
 	      					     {type=>"binary_separator",struct=>"atom"},
 	      					     'CONCAT',
@@ -152,20 +151,24 @@ our $RULES = [ #        LHS                          RHS
               # Lexicon:
               # TODO: New feature intuitions, consider rewriting here!!!
               [{type=>"factor", struct=>"atom"},['NUMBER']],
-              [{type=>"factor", struct=>"atom"},['UNKNOWN']], #TODO: Hm...
-              [{type=>"formula", struct=>"atom"},['UNKNOWN']], #TODO: Hm...
+              [{type=>"factor", struct=>"atom"},['UNKNOWN']],
+#              [{type=>"formula", struct=>"atom"},['UNKNOWN']], # TODO: Do we really need formulas here????
               [{type=>"binary_operator", struct=>"atom"},['ADDOP']],
               [{type=>"binary_relation", struct=>"atom"},['RELOP']],
               [{type=>"binary_metarelation", struct=>"atom"},['METARELOP']],
 	      [{type=>"binary_separator", struct=>"atom"},['PUNCT']],
 	      [ 'SuchThat', [qw/Bar/]],
 	      [ 'SuchThat', [qw/Colon/]],
+
+	      # Start category:
+	      ['StartCat',[{type=>"e", struct=>"expression"}]],
+	      ['StartCat',[{type=>"e", struct=>"list"}]],
 	     ];
 
 sub new {
   my($class,%options)=@_;
   my $grammar = Marpa::Attributed->new(
-  {   start   => {type=>"e", struct=>"any"},
+  {   start   => 'StartCat',
       actions => 'LaTeXML::MathSemantics',
       features=>$FEATURES,rules=>$RULES,
       default_action=>'first_arg',

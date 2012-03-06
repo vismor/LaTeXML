@@ -6,6 +6,9 @@ use Data::Dumper;
 }}
 
 sub first_arg {
+  #if ((defined $_[2]) && (defined $_[3])) {
+  #  print STDERR "FirstArg: ",Dumper($_[2])," <--- ",Dumper($_[3]),"\n\n";
+  #}
   return $_[1] if ref $_[1];
   my ($lex,$id) = split(/:/,$_[1]);
   Lookup($id);
@@ -13,11 +16,13 @@ sub first_arg {
 
 sub infix_apply {
   my ( undef, $t1, $c, $op, $c2, $t2 , $lhs , $rhs) = @_;
+  #print STDERR "InfixApply: ",Dumper($lhs)," <--- ",Dumper($rhs),"\n\n";
   ApplyNary($op,$t1,$t2);
 }
 
 sub concat_apply {
  my ( undef, $t1, $c, $t2 , $lhs , $rhs) = @_;
+ #print STDERR "ConcApply: ",Dumper($lhs)," <--- ",Dumper($rhs),"\n\n";
   ApplyNary(New('Concatenation'),$t1,$t2);
 }
 
