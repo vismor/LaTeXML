@@ -18,38 +18,65 @@ sub record_step {
 #  print STDERR Dumper "Step ".scalar(@{$self->{steps}}).": \n".Dumper($self->{steps})."\n";
 }
 
+sub lhs {
+  my $steps = $_[0]->{steps};
+  $steps ? $steps->[-1]->[0] : {};
+}
+sub rhs {
+  my $steps = $_[0]->{steps};
+  $steps ? $steps->[-1]->[1] : {};
+}
 
+sub annotate_features {
+  my ($state,$struct) = @_;
+  if ($state) {
+    my $lhs = $state->lhs();
+    if ((ref $lhs) eq 'HASH') { #Feature vector case, set attributes
+      if ($struct =~ /XML::/) { # LibXML object
+	$struct->setAttribute($_,$lhs->{$_}) foreach (keys %$lhs);
+      } else { #LaTeXML object
+	my $attr = $struct->[1];
+	$attr->{$_} = $lhs->{$_} foreach (keys %$lhs);
+      }
+    }
+  }
+  $struct;
+}
 
+###########################################
+###########################################
 ### Actual semantic routines:
 
 sub first_arg {
-  return $_[1] if ref $_[1];
+  my ($state,$parse) = @_;
+  return $parse if ref $parse;
   my ($lex,$id) = split(/:/,$_[1]);
-  Lookup($id);
+  my $xml = Lookup($id);
+  annotate_features($state,$xml);
 }
 
 sub infix_apply {
   my ( $state, $t1, $c, $op, $c2, $t2) = @_;
   $op = first_arg(undef,$op);
-  ApplyNary($op,$t1,$t2);
+  annotate_features($state,ApplyNary($op,$t1,$t2));
 }
 
 sub concat_apply {
  my ( $state, $t1, $c, $t2) = @_;
  #print STDERR "ConcApply: ",Dumper($lhs)," <--- ",Dumper($rhs),"\n\n";
-  ApplyNary(New('Concatenation'),$t1,$t2);
+ annotate_features($state, ApplyNary(New('Concatenation'),$t1,$t2) );
 }
 
 sub set {
   my ( $state, undef, undef, $t, undef, undef, undef, $f ) = @_;
-  Apply(New('Set'),$t,$f);
+  annotate_features($state,   Apply(New('Set'),$t,$f) );
 }
 
 sub fenced {
   my ($state, $open, undef, $t, undef, $close) = @_;
   $open=~/^([^:]+)\:/; $open=$1;
   $close=~/^([^:]+)\:/; $close=$1;
-  Fence($open,$t,$close);
+  annotate_features($state,   Fence($open,$t,$close) );
 }
 
 sub fenced_empty {
@@ -58,24 +85,24 @@ sub fenced_empty {
  my ($state, $open, $c, $close) = @_;
  $open=~/^([^:]+)\:/; $open=$1;
  $close=~/^([^:]+)\:/; $close=$1;
- Fence($open,New('Empty'),$close);
+  annotate_features($state,  Fence($open,New('Empty'),$close) );
 }
 
 sub parse_complete {
   my ($self,$parse) = @_;
-  local $Data::Dumper::Indent = 1;
-  my @steps = @{$self->{steps}};
-  my $count = scalar(@steps);
-  print STDERR "Parse completed in ".$count." steps!\n";
+  # local $Data::Dumper::Indent = 1;
+  # my @steps = @{$self->{steps}};
+  # my $count = scalar(@steps);
+  # print STDERR "Parse completed in ".$count." steps!\n";
 
-  while ($count>0) {
-    print STDERR "-----------------------\n";
-    print STDERR "Step $count:\n";
-    $count--;
-    print STDERR "LHS: ".Dumper($steps[$count]->[0]);
-    print STDERR "RHS: ".Dumper($steps[$count]->[1]);
-    print STDERR "\n\n";
-  }
+  # while ($count>0) {
+  #   print STDERR "-----------------------\n";
+  #   print STDERR "Step $count:\n";
+  #   $count--;
+  #   print STDERR "LHS: \n".Dumper($steps[$count]->[0]);
+  #   print STDERR "\nRHS: \n".Dumper($steps[$count]->[1]);
+  #   print STDERR "\n\n";
+  # }
   return $parse;
 }
 
