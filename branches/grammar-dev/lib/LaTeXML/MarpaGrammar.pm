@@ -68,12 +68,13 @@ our $FEATURES = {
 # Any grammar rule contains a lhs and rhs, just as in Marpa:
 our $RULES = [ #        LHS                          RHS
               # 1.0 Concatenation - Generic Arguments
-              ['Concat_argument', [{type=>"factor",struct=>"unfenced"}],'first_arg'],
-              ['Concat_argument', [{type=>"term",struct=>"argument"}],'first_arg'],
+              ['concat_argument', [{type=>"factor",struct=>"unfenced"}],'first_arg'], #ab+cd
+              ['concat_argument', [{type=>"additive",struct=>"argument"}],'first_arg'], #a,f,c, (...)
+
               [{type=>"factor",struct=>"unfenced"},
-	                                           ['Concat_argument',
+	                                           ['concat_argument',
 						    'CONCAT',
-						    'Concat_argument',
+						    'concat_argument',
 						   ],  # 2xy (left-to-right)
                                                        # f g(x) (right-to-left)
                                                        # 2af(x) (mixed)
@@ -94,11 +95,11 @@ our $RULES = [ #        LHS                          RHS
                                                    {type=>"term",struct=>"argument"},
                                                   ],               'infix_apply'], #ACTION
 	      # 2.2 Infix Operator - Additives
-              [{type=>"additive",struct=>"unfenced"}, [{type=>"term",struct=>"expression"},
+              [{type=>"additive",struct=>"unfenced"}, [{type=>"additive",struct=>"expression"},
                                                    'CONCAT',
-                                                   {type=>'binary_operator',struct=>'atom'},
+                                                   'ADDOP',
                                                    'CONCAT',
-                                                   'Concat_argument'
+                                                   'concat_argument'
                                                   ],               'infix_apply'], #ACTION
 
               # Infix Relation - Generic
@@ -117,10 +118,11 @@ our $RULES = [ #        LHS                          RHS
 
 
               # Set constructor
-              [{type=>"term",struct=>"fenced"}, ['OpenBrace', 'CONCAT',
-                                                 {type=>"term",struct=>'expression'}, 'CONCAT', 'SuchThat', 'CONCAT',
-                                                 {type=>'formula',struct=>'expression'}, 'CONCAT', 'CloseBrace'],
+              [{type=>"term",struct=>"fenced"}, ['OPENBRACE', 'CONCAT',
+                                                 {type=>"term",struct=>'expression'}, 'CONCAT', 'such_that', 'CONCAT',
+                                                 {type=>'formula',struct=>'expression'}, 'CONCAT', 'CLOSEBRACE'],
                'set'], #ACTION
+
 
               # Fences - type preserving
               [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
@@ -133,6 +135,9 @@ our $RULES = [ #        LHS                          RHS
 	      # Fences - empty
               [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT', 'CLOSE'],
                'fenced_empty'], #ACTION
+
+
+
 
 	      # Elementhood - cast expressions into elements, preserve type:
 	      [{type=>"[e]",struct=>"element"}, [{type=>"[1]",struct=>'expression'}]],
@@ -152,28 +157,30 @@ our $RULES = [ #        LHS                          RHS
               # TODO: New feature intuitions, consider rewriting here!!!
               [{type=>"factor", struct=>"atom"},['NUMBER']],
               [{type=>"factor", struct=>"atom"},['UNKNOWN']],
-              [{type=>"formula", struct=>"atom"},['UNKNOWN']], # TODO: Do we really need formulas here????
+	      [{type=>"formula", struct=>"atom"},['UNKNOWN']], # TODO: Do we really need formulas here????
 	      # It seems we do e.g. (x \wedge y), but then things like '(a)' have two parses that are the same tree
 	      # where one parse means 'term' , the other 'formula'... But then, that's ok,
 	      # the CDLF processing can weed out equivalent parses in any case! So leaving formulas in.
 
               [{type=>"binary_operator", struct=>"atom"},['ADDOP']],
+              [{type=>"binary_operator", struct=>"atom"},['MULOP']],
               [{type=>"binary_relation", struct=>"atom"},['RELOP']],
               [{type=>"binary_metarelation", struct=>"atom"},['METARELOP']],
 	      [{type=>"binary_separator", struct=>"atom"},['PUNCT']],
-	      [ 'SuchThat', [qw/Bar/]],
-	      [ 'SuchThat', [qw/Colon/]],
+	      [ 'such_that', [qw/BAR/]],
+	      [ 'such_that', [qw/COLON/]],
 
 	      # Start category:
-	      ['StartCat',[{type=>"e", struct=>"expression"}]], # If expression - real math only
-	      ['StartCat',[{type=>"tp", struct=>"list"}]], # If list, anything goes
+	      ['start',[{type=>"e", struct=>"expression"}],'parse_complete'], # If expression - real math only
+	      ['start',[{type=>"tp", struct=>"list"}],'parse_complete'], # If list, anything goes
 	     ];
 
 sub new {
   my($class,%options)=@_;
   my $grammar = Marpa::Attributed->new(
-  {   start   => 'StartCat',
+  {   start   => 'start',
       actions => 'LaTeXML::MathSemantics',
+      action_object => 'LaTeXML::MathSemantics',
       features=>$FEATURES,rules=>$RULES,
       default_action=>'first_arg',
       default_null_value=>'no nullables in this grammar'});
@@ -194,7 +201,7 @@ sub parse {
   foreach (@$unparsed) {
     my ($category,$lexeme,$id) = split(':',$_);
     # Issues: 
-    # 1. More specific categories for fences
+    # 1. More specific lexical roles for fences, =, :, others...?
     print STDERR "$category:$lexeme\n";
 
     last unless $rec->read($category,$lexeme.':'.$id);
@@ -204,10 +211,6 @@ sub parse {
   while ( defined( my $value_ref = $rec->value() ) ) {
     push @values, ${$value_ref};
   }
-
-#  my $pcount=0;
-#  print STDERR "\n############################################\n\nParse ",++$pcount,":\n\n",
-#    Dumper($_) foreach @values;
 
   # TODO: Support multiple parses!
   (@values>1) ? (['ltx:XMApp',{},New('Set'),@values]) : (shift @values);

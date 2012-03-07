@@ -39,8 +39,8 @@ use Data::Dumper;
 sub new {
  my ($class,$opts) = @_;
  my $startcat = $opts->{start};
- $opts->{start} = 'InternalStartCategory';
- push @{$opts->{rules}}, ['InternalStartCategory', [$startcat]];
+ $opts->{start} = 'start_internal_marpa_attr';
+ push @{$opts->{rules}}, ['start_internal_marpa_attr', [$startcat]];
  bless {opts => $opts}, $class;
 }
 
@@ -73,8 +73,6 @@ sub compile_grammar {
   print STDERR "\n Flattened features into ".scalar(@$featrules)." rules...\n";
 
   # Convert given grammar rules to Marpa syntax:
-  # TODO: Keep in mind the [e] expansion generates redundant rules, that might make conflicts.
-  # Make sure "most specific" rules are either evaluated first or ranked highest, whatever makes sense
    foreach my $r(@$rules) {
      if ((ref $r) eq 'ARRAY') {
        # Simple declaration:
@@ -83,12 +81,6 @@ sub compile_grammar {
        foreach my $triple(@cats) {
 	 push @$newrules, $self->mksimplerule(@$triple,$action);
        }
-       #my @lcats = $self->mkcategory([$r->[0]]);
-       #my @rcats = $self->mkcategory($r->[1]);
-       #foreach my $lcat(@lcats) {
-	 # foreach my $rcat(@rcats) {
-	 #   push @$newrules,  $self->mksimplerule($lcat,$rcat,$action);
-	 # }}
      }
      elsif ((ref $r) eq 'HASH') {
        # Structured declaration:
@@ -96,12 +88,6 @@ sub compile_grammar {
        foreach my $triple(@cats) {
         push @$newrules, $self->mkcomplexrule(@$triple,$r);
        }
-       # my @lcats = $self->mkcategory([$r->{lhs}]);
-       # my @rcats = $self->mkcategory($r->{rhs});
-       # foreach my $lcat(@lcats) {
-       # 	 foreach my $rcat(@rcats) {
-       # 	   push @$newrules, $self->mkcomplexrule($lcat,$rcat,$r);
-       # 	 }}
      }
    }
 
@@ -232,7 +218,7 @@ sub substitute {
 # Convert array reference entries into Camel case fragments
 sub ccase {
   my ($word) = @_;
-  $word =~ s/^(\w)(.+)$/uc($1).lc($2)/e;
+  $word =~ s/^(\w)(.*)$/uc($1).lc($2)/e;
   $word;
 }
 
@@ -242,13 +228,14 @@ sub deccase {
  my $lstructs = [];
  foreach my $label(@$labels) {
    my $lstruct;
+   if (($label=~/^([A-Z][a-z_]*)+$/) && ($label!~/^[A-Z]+$/)) { # First, check if it is a feature category:
    while ($label=~/([A-Z]([a-z_]*))/g) {
      my $feat = lc ($1);
      if ($featmap->{$feat}) { #Feature:
        $lstruct->{$featmap->{$feat}} = $feat;
-     } else { #Standard:
-       $lstruct = $feat;
-     }
+     } else { print STDERR " Semantics warning: $feat is not a feature name in $label!\n"; }
+   }} else {
+     $lstruct = $label; # non-feature vector case (i.e. 'classic' category)
    }
    push @$lstructs,$lstruct;
  }
@@ -305,12 +292,24 @@ sub mkfeatrules {
    }
    push @$final_rules, map {my $r = {lhs=>$_->[0],rhs=>[$_->[1]],rank=>$keysetid+1}; $r} @$base_rules;
  }
+
+ # Finally, add smart actions for each upcasting (record upcasting of LHS and RHS)"
+ my $actions = $opts->{actions};
+ my $action = $opts->{default_action};
+ if (defined $action && $action !~/::/) {
+   $action = $actions."::".$action;
+   foreach my $r(@$final_rules) {
+     $r->{action} = $self->mkaction([$r->{lhs}],$r->{rhs},$action);
+   }
+ }
+
  $final_rules;
 }
 
 sub mksimplerule {
  my ($self,$rank,$lhs,$rhs,$action) = @_;
  my $actions = $self->{opts}->{actions};
+ $action = $self->{opts}->{default_action} unless defined $action;
  $action = $actions."::".$action if (defined $action && $action !~/::/);
  $action = $self->mkaction($lhs,$rhs,$action) if $action;
  {lhs=>$lhs->[0], rhs=>$rhs,
@@ -325,19 +324,20 @@ sub mkcomplexrule {
  delete $fields{lhs};
  delete $fields{rhs};
  $fields{rank}=$rank;
+ $fields{action} = $self->{opts}->{default_action} unless defined $fields{action};
  $fields{action} = $actions."::".$fields{action} if (defined $fields{action} && $fields{action} !~/::/);
- 
  $fields{action} = $self->mkaction($lhs,$rhs,$fields{action}) if defined $fields{action};
  {lhs=>$lhs, rhs=>$rhs, %fields};
 }
 
 sub mkaction {
   my ($self,$litem,$ritem,$action) = @_;
-  my $subname = "Marpa::Attributed::".$$litem[0]."_".join("_",@$ritem);
+  my $subname = "Marpa::Attributed::".$$litem[0]."__".join("__",@$ritem);
   my $lobj = $self->deccase($litem);
   my $robj = $self->deccase($ritem);
   *$subname = sub {
-    &$action(@_,$lobj,$robj);
+    $_[0]->record_step($lobj->[0],$robj);
+    &$action(@_);
   };
   $subname;
 }
