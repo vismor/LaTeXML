@@ -102,7 +102,7 @@ our $RULES = [ #        LHS                          RHS
                                                    'concat_argument'
                                                   ],               'infix_apply'], #ACTION
 
-              # Infix Relation - Generic
+              # 3. Infix Relation - Generic
               [{type=>"formula",struct=>"unfenced"}, [{type=>"term",struct=>"expression"},
                                                       'CONCAT',
                                                       {type=>'binary_relation',struct=>'atom'},
@@ -116,12 +116,28 @@ our $RULES = [ #        LHS                          RHS
                                                       {type=>"term",struct=>"expression"}
                                                      ],               'infix_apply'], #ACTION
 
+              # 4. Infix MetaRelation - Generic
+              [{type=>"formula",struct=>"unfenced"}, [{type=>"formula",struct=>"expression"},
+                                                      'CONCAT',
+                                                      {type=>'binary_metarelation',struct=>'atom'},
+                                                      'CONCAT',
+                                                      {type=>"formula",struct=>"argument"}
+                                                     ],               'infix_apply'], #ACTION
+	      # 5. Infix Modifier - Generic
+              [{type=>"[term]",struct=>"unfenced"}, [{type=>"[1]",struct=>"atom"},
+                                                      'CONCAT',
+                                                      {type=>'binary_modifier',struct=>'atom'},
+                                                      'CONCAT',
+                                                      {type=>"formula",struct=>"argument"}
+                                                     ],               'infix_apply'], #ACTION
 
-              # Set constructor
-              [{type=>"term",struct=>"fenced"}, ['OPENBRACE', 'CONCAT',
-                                                 {type=>"term",struct=>'expression'}, 'CONCAT', 'such_that', 'CONCAT',
-                                                 {type=>'formula',struct=>'expression'}, 'CONCAT', 'CLOSEBRACE'],
-               'set'], #ACTION
+
+
+              # # 4. Set constructor
+              # [{type=>"term",struct=>"fenced"}, ['OPENBRACE', 'CONCAT',
+              #                                    {type=>"term",struct=>'expression'}, 'CONCAT', 'such_that', 'CONCAT',
+              #                                    {type=>'formula',struct=>'expression'}, 'CONCAT', 'CLOSEBRACE'],
+              #  'set'], #ACTION
 
 
               # Fences - type preserving
@@ -166,6 +182,7 @@ our $RULES = [ #        LHS                          RHS
               [{type=>"binary_operator", struct=>"atom"},['MULOP']],
               [{type=>"binary_relation", struct=>"atom"},['RELOP']],
               [{type=>"binary_metarelation", struct=>"atom"},['METARELOP']],
+              [{type=>"binary_modifier", struct=>"atom"},['MODIFIER']],
 	      [{type=>"binary_separator", struct=>"atom"},['PUNCT']],
 	      [ 'such_that', [qw/BAR/]],
 	      [ 'such_that', [qw/COLON/]],

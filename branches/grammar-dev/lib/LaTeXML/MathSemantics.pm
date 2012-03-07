@@ -63,6 +63,7 @@ sub fenced_empty {
 
 sub parse_complete {
   my ($self,$parse) = @_;
+  local $Data::Dumper::Indent = 1;
   my @steps = @{$self->{steps}};
   my $count = scalar(@steps);
   print STDERR "Parse completed in ".$count." steps!\n";
