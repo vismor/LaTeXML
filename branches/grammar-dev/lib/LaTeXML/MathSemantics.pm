@@ -1,5 +1,6 @@
 package LaTeXML::MathSemantics;
 use Data::Dumper;
+
 # Startup actions: import the constructors
 { BEGIN{ use LaTeXML::MathParser qw(:constructors); 
 #### $::RD_TRACE=1;
@@ -9,7 +10,6 @@ use Data::Dumper;
 
 sub new {
   my ($class,@args) = @_;
-  print STDERR "\n\n\nConstructing: ".Dumper(@args),"\n\n\n\n";
   bless {steps=>[]}, $class;
 }
 sub record_step {
@@ -46,12 +46,11 @@ sub annotate_features {
 ###########################################
 ###########################################
 ### Actual semantic routines:
-
 sub first_arg {
   my ($state,$parse) = @_;
   return $parse if ref $parse;
   my ($lex,$id) = split(/:/,$_[1]);
-  my $xml = Lookup($id);
+  my $xml = Lookup($id)->cloneNode(1);
   annotate_features($state,$xml);
 }
 

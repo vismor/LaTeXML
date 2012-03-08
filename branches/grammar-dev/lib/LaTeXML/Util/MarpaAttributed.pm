@@ -290,7 +290,7 @@ sub mkfeatrules {
      @$base_rules = @$expanded_rules;
      @$expanded_rules = ();
    }
-   push @$final_rules, map {my $r = {lhs=>$_->[0],rhs=>[$_->[1]],rank=>$keysetid+1}; $r} @$base_rules;
+   push @$final_rules, map {my $r = {lhs=>$_->[0],rhs=>[$_->[1]],rank=>$keysetid+20}; $r} @$base_rules;
  }
 
  # Finally, add smart actions for each upcasting (record upcasting of LHS and RHS)"

@@ -30,7 +30,7 @@ use base (qw(Exporter));
 
 ### A Grammar for Mathematical Expressions:
 our $FEATURES = {
-   type => {
+   role => {
             default=>'tp',
             tp=>{
                  e=>{term=>{additive=>{factor=>undef}},
@@ -41,13 +41,13 @@ our $FEATURES = {
                       'unary_metarelation', #ff
 		      #'unary_separator', #ee???
                      ],
-                 eee=>['binary_operator',# ttt
-		       'binary_separator',# eee??? seems about right...
-                       'binary_modifier',# tft ftt
-                       'binary_relation',# ttf ftf,
-                       'binary_metarelation',# fff,
-                       'binary_other',# fft
-                      ]
+                 eee=>{'binary_operator'=>[qw(binary_addop binary_mulop binary_typeop)],# ttt
+		       'binary_separator'=>undef,# eee??? seems about right...
+                       'binary_modifier'=>undef,# tft ftt
+                       'binary_relation'=>undef,# ttf ftf,
+                       'binary_metarelation'=>undef,# fff,
+                       'binary_other'=>undef,# fft
+                      }
                 }
            },
    struct => {
@@ -57,7 +57,8 @@ our $FEATURES = {
 				   argument=>[qw(atom fenced)],
 				   unfenced=>undef
 				  },
-		      sequence => [ 'list', 'element' ]
+		      sequence => [ 'list', 'element' ],
+                      function_type => undef
 		     }
 	      }
 };
@@ -68,10 +69,10 @@ our $FEATURES = {
 # Any grammar rule contains a lhs and rhs, just as in Marpa:
 our $RULES = [ #        LHS                          RHS
               # 1.0 Concatenation - Generic Arguments
-              ['concat_argument', [{type=>"factor",struct=>"unfenced"}],'first_arg'], #ab+cd
-              ['concat_argument', [{type=>"additive",struct=>"argument"}],'first_arg'], #a,f,c, (...)
+              ['concat_argument', [{role=>"factor",struct=>"unfenced"}],'first_arg'], #ab+cd
+              ['concat_argument', [{role=>"additive",struct=>"argument"}],'first_arg'], #a,f,c, (...)
 
-              [{type=>"factor",struct=>"unfenced"},
+              [{role=>"factor",struct=>"unfenced"},
 	                                           ['concat_argument',
 						    'CONCAT',
 						    'concat_argument',
@@ -81,115 +82,144 @@ our $RULES = [ #        LHS                          RHS
                'concat_apply'],
 
               # 2.1 Infix Operator - Factors
-              [{type=>"factor",struct=>"unfenced"}, [{type=>"factor",struct=>"unfenced"},
+              [{role=>"factor",struct=>"unfenced"}, [{role=>"factor",struct=>"unfenced"},
                                                    'CONCAT',
                                                    'MULOP',
                                                    'CONCAT',
-                                                   {type=>"term",struct=>"argument"}
+                                                   {role=>"term",struct=>"argument"}
                                                   ],               'infix_apply'], #ACTION
 
-              [{type=>"factor",struct=>"unfenced"}, [{type=>"term",struct=>"argument"},
+              [{role=>"factor",struct=>"unfenced"}, [{role=>"term",struct=>"argument"},
                                                    'CONCAT',
                                                    'MULOP',
                                                    'CONCAT',
-                                                   {type=>"term",struct=>"argument"},
+                                                   {role=>"term",struct=>"argument"},
                                                   ],               'infix_apply'], #ACTION
 	      # 2.2 Infix Operator - Additives
-              [{type=>"additive",struct=>"unfenced"}, [{type=>"additive",struct=>"expression"},
+              [{role=>"additive",struct=>"unfenced"}, [{role=>"additive",struct=>"expression"},
                                                    'CONCAT',
-                                                   'ADDOP',
+                                                   {role=>"binary_addop",struct=>"atom"},
                                                    'CONCAT',
                                                    'concat_argument'
                                                   ],               'infix_apply'], #ACTION
+              # 2.3. Infix Operator - Type Constructors
+              [{role=>"factor",struct=>"function_type"}, [{role=>"factor",struct=>"argument"},
+                                                   'CONCAT',
+                                                   {role=>"binary_typeop",struct=>"atom"},
+                                                   'CONCAT',
+                                                   {role=>"factor",struct=>"argument"}
+                                                  ],               'infix_apply'], #ACTION
+              [{role=>"factor",struct=>"function_type"}, [{role=>"factor",struct=>"function_type"},
+                                                   'CONCAT',
+                                                   {role=>"binary_typeop",struct=>"atom"},
+                                                   'CONCAT',
+                                                   {role=>"factor",struct=>"argument"}
+                                                  ],               'infix_apply'], #ACTION
 
               # 3. Infix Relation - Generic
-              [{type=>"formula",struct=>"unfenced"}, [{type=>"term",struct=>"expression"},
+              ['relation_argument', [{role=>"term",struct=>"expression"}]],
+              ['relation_argument', [{role=>"term",struct=>"list"}]],
+              [{role=>"formula",struct=>"unfenced"}, ['relation_argument',
                                                       'CONCAT',
-                                                      {type=>'binary_relation',struct=>'atom'},
+                                                      {role=>'binary_relation',struct=>'atom'},
                                                       'CONCAT',
-                                                      {type=>"term",struct=>"expression"}
+                                                      'relation_argument'
                                                      ],               'infix_apply'], #ACTION
-              [{type=>"formula",struct=>"unfenced"}, [{type=>"formula",struct=>"expression"},
+              [{role=>"formula",struct=>"unfenced"}, [{role=>"formula",struct=>"unfenced"}, # chain unfenced relations
                                                       'CONCAT',
-                                                      {type=>'binary_relation',struct=>'atom'},
+                                                      {role=>'binary_relation',struct=>'atom'},
                                                       'CONCAT',
-                                                      {type=>"term",struct=>"expression"}
+                                                      'relation_argument'
                                                      ],               'infix_apply'], #ACTION
 
               # 4. Infix MetaRelation - Generic
-              [{type=>"formula",struct=>"unfenced"}, [{type=>"formula",struct=>"expression"},
+              [{role=>"formula",struct=>"unfenced"}, [{role=>"formula",struct=>"expression"},
                                                       'CONCAT',
-                                                      {type=>'binary_metarelation',struct=>'atom'},
+                                                      {role=>'binary_metarelation',struct=>'atom'},
                                                       'CONCAT',
-                                                      {type=>"formula",struct=>"argument"}
+                                                      {role=>"formula",struct=>"argument"}
                                                      ],               'infix_apply'], #ACTION
 	      # 5. Infix Modifier - Generic
-              [{type=>"[term]",struct=>"unfenced"}, [{type=>"[1]",struct=>"atom"},
+              [{role=>"[term]",struct=>"unfenced"}, [{role=>"[1]",struct=>"atom"},
                                                       'CONCAT',
-                                                      {type=>'binary_modifier',struct=>'atom'},
+                                                      {role=>'binary_modifier',struct=>'atom'},
                                                       'CONCAT',
-                                                      {type=>"formula",struct=>"argument"}
+                                                      {role=>"formula",struct=>"fenced"} # TODO: Think this through
+                                                     ],               'infix_apply'], #ACTION
+	      # 5.2 Infix Modifier - Typing
+              [{role=>"[term]",struct=>"unfenced"}, [{role=>"[1]",struct=>"atom"},
+                                                      'CONCAT',
+                                                      {role=>'binary_modifier',struct=>'atom'},
+                                                      'CONCAT',
+                                                      {role=>"factor",struct=>"function_type"}
                                                      ],               'infix_apply'], #ACTION
 
 
 
               # # 4. Set constructor
-              # [{type=>"term",struct=>"fenced"}, ['OPENBRACE', 'CONCAT',
-              #                                    {type=>"term",struct=>'expression'}, 'CONCAT', 'such_that', 'CONCAT',
-              #                                    {type=>'formula',struct=>'expression'}, 'CONCAT', 'CLOSEBRACE'],
+              # [{role=>"term",struct=>"fenced"}, ['OPENBRACE', 'CONCAT',
+              #                                    {role=>"term",struct=>'expression'}, 'CONCAT', 'such_that', 'CONCAT',
+              #                                    {role=>'formula',struct=>'expression'}, 'CONCAT', 'CLOSEBRACE'],
               #  'set'], #ACTION
 
 
-              # Fences - type preserving
-              [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {type=>"[1]",struct=>'expression'}, 'CONCAT', 'CLOSE'],
+              # Fences - role preserving
+              [{role=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {role=>"[1]",struct=>'expression'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
-	      # Fences - cast lists to expressions, preserve type
-              [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {type=>"[1]",struct=>'list'}, 'CONCAT', 'CLOSE'],
+	      # Fences - cast lists to expressions, preserve role
+              [{role=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {role=>"[1]",struct=>'list'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
 	      # Fences - empty
-              [{type=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT', 'CLOSE'],
+              [{role=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT', 'CLOSE'],
                'fenced_empty'], #ACTION
 
 
 
 
-	      # Elementhood - cast expressions into elements, preserve type:
-	      [{type=>"[e]",struct=>"element"}, [{type=>"[1]",struct=>'expression'}]],
+	      # Elementhood - cast expressions into elements, preserve role:
+	      [{role=>"[e]",struct=>"element"}, [{role=>"[1]",struct=>'expression'}]],
 
 	      # TODO: Groups (*,S)
 	      # TODO: Prevent this from overgenerating (what is happening ?!?!)
 	      # e.g. 1,2,,,,;,;,,;3 definitely shouldn't parse
 	      # Lists - composition:
-	      [{type=>"[tp]",struct=>"list"}, [{type=>"[1]",struct=>"sequence"},
+	      [{role=>"[tp]",struct=>"list"}, [{role=>"[1]",struct=>"sequence"},
 	      					     'CONCAT',
-	      					     {type=>"binary_separator",struct=>"atom"},
+	      					     {role=>"binary_separator",struct=>"atom"},
 	      					     'CONCAT',
-	      					     {type=>"[1]",struct=>'element'}],
+	      					     {role=>"[1]",struct=>'element'}],
                'infix_apply'], #ACTION,
 
               # Lexicon:
               # TODO: New feature intuitions, consider rewriting here!!!
-              [{type=>"factor", struct=>"atom"},['NUMBER']],
-              [{type=>"factor", struct=>"atom"},['UNKNOWN']],
-	      [{type=>"formula", struct=>"atom"},['UNKNOWN']], # TODO: Do we really need formulas here????
+              [{role=>"factor", struct=>"atom"},['NUMBER']],
+              [{role=>"factor", struct=>"atom"},['UNKNOWN']],
+	      [{role=>"formula", struct=>"atom"},['UNKNOWN']], # TODO: Do we really need formulas here????
 	      # It seems we do e.g. (x \wedge y), but then things like '(a)' have two parses that are the same tree
 	      # where one parse means 'term' , the other 'formula'... But then, that's ok,
 	      # the CDLF processing can weed out equivalent parses in any case! So leaving formulas in.
 
-              [{type=>"binary_operator", struct=>"atom"},['ADDOP']],
-              [{type=>"binary_operator", struct=>"atom"},['MULOP']],
-              [{type=>"binary_relation", struct=>"atom"},['RELOP']],
-              [{type=>"binary_metarelation", struct=>"atom"},['METARELOP']],
-              [{type=>"binary_modifier", struct=>"atom"},['MODIFIER']],
-	      [{type=>"binary_separator", struct=>"atom"},['PUNCT']],
+              [{role=>"binary_addop", struct=>"atom"},['ADDOP']],
+              [{role=>"binary_mulop", struct=>"atom"},['MULOP']],
+	      [{role=>'binary_typeop', struct=>'atom'}, ['ARROW']],
+              [{role=>"binary_relation", struct=>"atom"},['RELOP']],
+              [{role=>"binary_metarelation", struct=>"atom"},['METARELOP']],
+              [{role=>"binary_modifier", struct=>"atom"},['MODIFIER']],
+	      [{role=>"binary_separator", struct=>"atom"},['PUNCT']],
 	      [ 'such_that', [qw/BAR/]],
 	      [ 'such_that', [qw/COLON/]],
-
+	      [ {role=>'binary_modifier', struct=>'atom'}, [qw/COLON/]],
+	      [ {role=>'binary_mulop', struct=>'atom'}, [qw/COLON/]], #division, ratios
+	      [ {role=>'binary_modifier', struct=>'atom'}, [qw/EQUALS/]],
+	      [ {role=>'binary_relation', struct=>'atom'}, [qw/EQUALS/]],
+	      [ {role=>'binary_metarelation', struct=>'atom'}, [qw/EQUALS/]],
+              # Recursive input (ATOM??)
+              [ {role=>'[e]',struct=>'atom'}, ['ATOM']],
 	      # Start category:
-	      ['start',[{type=>"e", struct=>"expression"}],'parse_complete'], # If expression - real math only
-	      ['start',[{type=>"tp", struct=>"list"}],'parse_complete'], # If list, anything goes
+	      ['start',[{role=>"e", struct=>"expression"}],'parse_complete'], # If expression - real math only
+	      ['start',[{role=>"tp", struct=>"list"}],'parse_complete'], # If list, anything goes
 	     ];
 
 sub new {
@@ -219,6 +249,11 @@ sub parse {
     my ($category,$lexeme,$id) = split(':',$_);
     # Issues: 
     # 1. More specific lexical roles for fences, =, :, others...?
+    if ($category eq 'METARELOP') {
+      $category = 'COLON' if ($lexeme eq 'colon');
+    } elsif ($category eq 'RELOP') {
+      $category = 'EQUALS' if ($lexeme eq 'equals');
+    }
     print STDERR "$category:$lexeme\n";
 
     last unless $rec->read($category,$lexeme.':'.$id);
