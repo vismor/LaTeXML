@@ -133,18 +133,21 @@ our $RULES = [ #        LHS                          RHS
                                                      ],               'infix_apply'], #ACTION
 
               # 4. Infix MetaRelation - Generic
+              ['metarelation_argument', [{role=>"relative",struct=>"unfenced"}]],
+              ['metarelation_argument', [{role=>"relative",struct=>"list"}]],
+              ['metarelation_argument', [{role=>"formula",struct=>"argument"}]],
               [{role=>"formula",struct=>"unfenced"}, [{role=>"formula",struct=>"expression"},
                                                       'CONCAT',
                                                       {role=>'binary_metarelation',struct=>'atom'},
                                                       'CONCAT',
-                                                      {role=>"formula",struct=>"argument"}
+                                                      'metarelation_argument'
                                                      ],               'infix_apply'], #ACTION
               # 4.1. Infix MetaRelation - Equality
               [{role=>"formula",struct=>"unfenced"}, [{role=>"formula",struct=>"expression"},
                                                       'CONCAT',
                                                       'EQUALS',
                                                       'CONCAT',
-                                                      {role=>"formula",struct=>"expression"}
+                                                      {role=>"formula",struct=>"unfenced"}
                                                      ],               'infix_apply'], #ACTION
 
 	      # 5. Infix Modifier - Generic
@@ -216,13 +219,13 @@ our $RULES = [ #        LHS                          RHS
               [{role=>"binary_metarelation", struct=>"atom"},['METARELOP']],
               [{role=>"binary_modifier", struct=>"atom"},['MODIFIER']],
 	      [{role=>"binary_separator", struct=>"atom"},['PUNCT']],
-	      [ 'such_that', [qw/BAR/]],
-	      [ 'such_that', [qw/COLON/]],
-	      [ {role=>'binary_modifier', struct=>'atom'}, [qw/COLON/]],
-	      [ {role=>'binary_mulop', struct=>'atom'}, [qw/COLON/]], #division, ratios
-	      [ {role=>'binary_modifier', struct=>'atom'}, [qw/EQUALS/]],
-	      [ {role=>'binary_relation', struct=>'atom'}, [qw/EQUALS/]],
-	      [ {role=>'binary_metarelation', struct=>'atom'}, [qw/EQUALS/]],
+	      [ 'such_that', ['BAR']],
+	      [ 'such_that', ['COLON']],
+	      [ {role=>'binary_modifier', struct=>'atom'}, ['COLON']],
+	      [ {role=>'binary_mulop', struct=>'atom'}, ['COLON']], #division, ratios
+	      [ {role=>'binary_modifier', struct=>'atom'}, ['EQUALS']],
+	      [ {role=>'binary_relation', struct=>'atom'}, ['EQUALS']],
+	      [ {role=>'binary_metarelation', struct=>'atom'}, ['EQUALS']],
               # Recursive input (ATOM??)
               [ {role=>'[e]',struct=>'atom'}, ['ATOM']],
 	      # Start category:
