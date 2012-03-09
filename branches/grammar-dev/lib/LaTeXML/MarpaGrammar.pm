@@ -61,6 +61,7 @@ our $FEATURES = {
                       function_type => undef
 		     }
 	      }
+#   domain => [qw(classic liealgebra qph)]
 };
 
 #Gramar categories can now be n-dimensional feature vectors,
@@ -280,3 +281,11 @@ sub parse {
 }
 
 1;
+
+# DLMF:
+# (-)^n for (-1)^n
+# f^n (x) = [ f (x) ] ^ n usually
+# also f ( f ( ... f x ) ) 
+# f^-1 (x) = [inv(f)] (x)
+# (d/dx) ^ n, (-)^n is compositional
+# (z \frac{d}{dx})^n  and also (\frac{d}{dz} z)^n
