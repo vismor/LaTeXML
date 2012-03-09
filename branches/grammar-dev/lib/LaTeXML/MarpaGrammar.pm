@@ -34,7 +34,7 @@ our $FEATURES = {
             default=>'tp',
             tp=>{
                  e=>{term=>{additive=>{factor=>undef}},
-                     formula=>undef},
+                     formula=>['relative']},
                  ee=>['unary_operator',# tt
                       'unary_relation',# tf
                       'unary_modifier',# ft
@@ -119,13 +119,13 @@ our $RULES = [ #        LHS                          RHS
               # 3. Infix Relation - Generic
               ['relation_argument', [{role=>"term",struct=>"expression"}]],
               ['relation_argument', [{role=>"term",struct=>"list"}]],
-              [{role=>"formula",struct=>"unfenced"}, ['relation_argument',
+              [{role=>"relative",struct=>"unfenced"}, ['relation_argument',
                                                       'CONCAT',
                                                       {role=>'binary_relation',struct=>'atom'},
                                                       'CONCAT',
                                                       'relation_argument'
                                                      ],               'infix_apply'], #ACTION
-              [{role=>"formula",struct=>"unfenced"}, [{role=>"formula",struct=>"unfenced"}, # chain unfenced relations
+              [{role=>"relative",struct=>"unfenced"}, [{role=>"relative",struct=>"unfenced"}, # chain unfenced relations
                                                       'CONCAT',
                                                       {role=>'binary_relation',struct=>'atom'},
                                                       'CONCAT',
@@ -139,12 +139,20 @@ our $RULES = [ #        LHS                          RHS
                                                       'CONCAT',
                                                       {role=>"formula",struct=>"argument"}
                                                      ],               'infix_apply'], #ACTION
+              # 4.1. Infix MetaRelation - Equality
+              [{role=>"formula",struct=>"unfenced"}, [{role=>"formula",struct=>"expression"},
+                                                      'CONCAT',
+                                                      'EQUALS',
+                                                      'CONCAT',
+                                                      {role=>"formula",struct=>"expression"}
+                                                     ],               'infix_apply'], #ACTION
+
 	      # 5. Infix Modifier - Generic
               [{role=>"[term]",struct=>"unfenced"}, [{role=>"[1]",struct=>"atom"},
                                                       'CONCAT',
                                                       {role=>'binary_modifier',struct=>'atom'},
                                                       'CONCAT',
-                                                      {role=>"formula",struct=>"fenced"} # TODO: Think this through
+                                                      {role=>"relative",struct=>"fenced"} # TODO: Think this through
                                                      ],               'infix_apply'], #ACTION
 	      # 5.2 Infix Modifier - Typing
               [{role=>"[term]",struct=>"unfenced"}, [{role=>"[1]",struct=>"atom"},
