@@ -28,6 +28,20 @@ use LaTeXML::MathSemantics;
 use LaTeXML::Global;
 use base (qw(Exporter));
 
+### Mini grammar for testing:
+our $mini_feats = {
+   role => { e => { additive => ['factor'] , formula=>undef} },
+   struct => { expression => ['atom']}
+};
+
+our $mini_rules = [
+	      [{role=>"[e]",struct=>'expression'}, ['OPEN', 'CONCAT', {role=>'[1]',struct=>'expression'},
+						    'CONCAT', 'CLOSE'],'fenced'],
+              [{role=>"factor", struct=>"atom"},['UNKNOWN']],
+	      [{role=>"formula", struct=>"atom"},['UNKNOWN']], # TODO: Do we really need formulas here????
+	      ['start',[{role=>"e", struct=>"expression"}],'parse_complete']
+];
+
 ### A Grammar for Mathematical Expressions:
 our $FEATURES = {
    role => {
@@ -183,6 +197,11 @@ our $RULES = [ #        LHS                          RHS
               [{role=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
                                                  {role=>"[1]",struct=>'list'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
+	      # Groups and such:
+              [{role=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {role=>"tp",struct=>'list'}, 'CONCAT', 'CLOSE'],
+               'fenced'], #ACTION
+
 	      # Fences - empty
               [{role=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT', 'CLOSE'],
                'fenced_empty'], #ACTION
@@ -191,11 +210,9 @@ our $RULES = [ #        LHS                          RHS
 
 
 	      # Elementhood - cast expressions into elements, preserve role:
-	      [{role=>"[e]",struct=>"element"}, [{role=>"[1]",struct=>'expression'}]],
+	      [{role=>"[tp]",struct=>"element"}, [{role=>"[1]",struct=>'expression'}]],
 
 	      # TODO: Groups (*,S)
-	      # TODO: Prevent this from overgenerating (what is happening ?!?!)
-	      # e.g. 1,2,,,,;,;,,;3 definitely shouldn't parse
 	      # Lists - composition:
 	      [{role=>"[tp]",struct=>"list"}, [{role=>"[1]",struct=>"sequence"},
 	      					     'CONCAT',
@@ -236,13 +253,22 @@ our $RULES = [ #        LHS                          RHS
 
 sub new {
   my($class,%options)=@_;
+  # my $grammar = Marpa::Attributed->new(
+  # {   start   => 'start',
+  #     actions => 'LaTeXML::MathSemantics',
+  #     action_object => 'LaTeXML::MathSemantics',
+  #     features=>$FEATURES,rules=>$RULES,
+  #     default_action=>'first_arg',
+  #     default_null_value=>'no nullables in this grammar'});
+
   my $grammar = Marpa::Attributed->new(
   {   start   => 'start',
       actions => 'LaTeXML::MathSemantics',
       action_object => 'LaTeXML::MathSemantics',
-      features=>$FEATURES,rules=>$RULES,
+      features=>$mini_feats,rules=>$mini_rules,
       default_action=>'first_arg',
       default_null_value=>'no nullables in this grammar'});
+
 
   $grammar->precompute();
 
@@ -251,7 +277,7 @@ sub new {
 
 sub parse {
   my ($self,$rule,$unparsed) = @_;
-  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar}, ranking_method => 'high_rule_only', max_parses=>50} );
+  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar}, ranking_method => 'high_rule_only', max_parses=>500} );
 
   # Insert concatenation
   @$unparsed = map (($_, 'CONCAT::'), @$unparsed);

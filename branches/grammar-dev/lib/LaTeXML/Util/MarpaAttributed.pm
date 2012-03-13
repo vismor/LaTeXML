@@ -27,8 +27,8 @@ sub new {
  delete $grammar->{featsets};
  delete $grammar->{flatmap};
  delete $grammar->{featmap};
- delete $grammar->{mode};
-# print STDERR "Final grammar rules: ", Dumper($grammar),"\n\n\n";
+ delete $grammar->{height};
+ print STDERR "Final grammar rules: ", Dumper($grammar),"\n\n\n";
  Marpa::XS::Grammar->new($grammar);
 }
 
@@ -51,7 +51,7 @@ sub compile_grammar {
   my $opts = $self->{opts};
 
   my ($features,$rules,$actions) = ($opts->{features},$opts->{rules},$opts->{actions});
-  my @featsets = sort keys %$features;
+  my @featsets = reverse sort keys %$features;
   $opts->{featsets} = \@featsets;
   $self->{opts}->{featsets}=\@featsets;
   my ($flatmap,$featmap) = ({},{});
@@ -77,14 +77,14 @@ sub compile_grammar {
      if ((ref $r) eq 'ARRAY') {
        # Simple declaration:
        my $action = $r->[2];
-       my @cats = $self->mkcategories(1,$r->[0],@{$r->[1]});
+       my @cats = $self->mkcategories(0,$r->[0],@{$r->[1]});
        foreach my $triple(@cats) {
 	 push @$newrules, $self->mksimplerule(@$triple,$action);
        }
      }
      elsif ((ref $r) eq 'HASH') {
        # Structured declaration:
-       my @cats = $self->mkcategories(1,$r->{lhs},@{$r->{rhs}});
+       my @cats = $self->mkcategories(0,$r->{lhs},@{$r->{rhs}});
        foreach my $triple(@cats) {
         push @$newrules, $self->mkcomplexrule(@$triple,$r);
        }
@@ -93,6 +93,7 @@ sub compile_grammar {
 
   print STDERR " Created ".scalar(@$newrules)." flat rules from ".scalar(@$rules)." attributed rules!\n";
   push @$newrules, @$featrules;
+  $self->mkrankings($newrules);
   print STDERR " Final grammar has ".scalar(@$newrules)." rules!\n";
   $opts->{rules}=$newrules;
 }
@@ -178,7 +179,7 @@ sub mkcategories {
    }
  }
  # No wildcards found, fallback to basic support:
- return ( [$rank,$self->mkcategory([$cats[0]]),$self->mkcategory([@cats[1..$catcount]])] );
+ return ( [$rank+1,$self->mkcategory([$cats[0]]),$self->mkcategory([@cats[1..$catcount]])] );
 }
 
 sub expand_and_substitute {
@@ -189,7 +190,7 @@ sub expand_and_substitute {
     my $pair = shift @next;
     my ($rank,$featname) = ($pair->[0],$pair->[1]);
     push @vals, $pair;
-    push @next, map {[$rank+1,$_]} keys %{$flatmap->{$featname}};
+    push @next, map {[$rank,$_]} keys %{$flatmap->{$featname}};
   }
   [ map {substitute($cats,$i,$wild->[0],$_->[0],$_->[1])} @vals ]; # One-level expansion of $cats
 }
@@ -290,7 +291,7 @@ sub mkfeatrules {
      @$base_rules = @$expanded_rules;
      @$expanded_rules = ();
    }
-   push @$final_rules, map {my $r = {lhs=>$_->[0],rhs=>[$_->[1]],rank=>$keysetid+20}; $r} @$base_rules;
+   push @$final_rules, map {my $r = {lhs=>$_->[0],rhs=>[$_->[1]],rank=>$keysetid}; $r} @$base_rules;
  }
 
  # Finally, add smart actions for each upcasting (record upcasting of LHS and RHS)"
@@ -340,6 +341,58 @@ sub mkaction {
     &$action(@_);
   };
   $subname;
+}
+
+sub mkrankings {
+ my ($self,$rules) = @_;
+ foreach my $r(@$rules) {
+   my $vector = $self->deccase([$r->{lhs}]);
+   $r->{rank} = $self->mkfeatrank($vector->[0]) - $r->{rank};
+ }
+}
+
+# TODO: Generalize this later, using a fixed amount for the moment
+our $depth_rank=10;
+sub mkfeatrank {
+ my ($self,$vector) = @_;
+ return 0 unless (ref $vector eq 'HASH');
+ # Use the depth_rank for the rank offset of any leaf feature
+ # Decrease rank with 1 as we traverse upwards towards the tree
+ # Also, do so in a manner that uses depth_rank as a multiplier, where different features get a different value
+
+ my $rank=0;
+ my $multiplier=1;
+
+ foreach my $set(@{$self->{opts}->{featsets}}) {
+#   $multiplier++;
+   my $val = $vector->{$set};
+   # locate the $val in the feature $set and record the depth beneath it
+   my $height = $self->get_height($val);
+   $rank+= $multiplier * ($depth_rank - $height);
+ }
+ return $rank;
+}
+
+sub get_height {
+  my ($self,$val) = @_;
+  return $self->{opts}->{height}->{$val} if defined $self->{opts}->{height}->{$val}; # Memoize
+  my $flatmap = $self->{opts}->{flatmap};
+  my @subfeats = keys %{$flatmap->{$val}};
+  my $h;
+  if (@subfeats) {
+    $h = 1+_max( map { $self->get_height($_) } @subfeats );
+  } else {
+    $h=0;
+  }
+  $self->{opts}->{height}->{$val} = $h;
+  return $h;
+}
+
+# Huh, perl doesn't have max???
+sub _max {
+  my $m=$_[0];
+  foreach (@_) { $m = $_ if ($_ > $m) }
+  $m;
 }
 
 1;
