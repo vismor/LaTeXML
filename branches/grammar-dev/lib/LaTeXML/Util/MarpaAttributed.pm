@@ -28,7 +28,7 @@ sub new {
  delete $grammar->{flatmap};
  delete $grammar->{featmap};
  delete $grammar->{height};
- print STDERR "Final grammar rules: ", Dumper($grammar),"\n\n\n";
+# print STDERR "Final grammar rules: ", Dumper($grammar),"\n\n\n";
  Marpa::XS::Grammar->new($grammar);
 }
 
@@ -51,7 +51,7 @@ sub compile_grammar {
   my $opts = $self->{opts};
 
   my ($features,$rules,$actions) = ($opts->{features},$opts->{rules},$opts->{actions});
-  my @featsets = reverse sort keys %$features;
+  my @featsets = sort keys %$features;
   $opts->{featsets} = \@featsets;
   $self->{opts}->{featsets}=\@featsets;
   my ($flatmap,$featmap) = ({},{});
@@ -93,7 +93,7 @@ sub compile_grammar {
 
   print STDERR " Created ".scalar(@$newrules)." flat rules from ".scalar(@$rules)." attributed rules!\n";
   push @$newrules, @$featrules;
-  $self->mkrankings($newrules);
+  #$self->mkrankings($newrules);
   print STDERR " Final grammar has ".scalar(@$newrules)." rules!\n";
   $opts->{rules}=$newrules;
 }
@@ -291,7 +291,7 @@ sub mkfeatrules {
      @$base_rules = @$expanded_rules;
      @$expanded_rules = ();
    }
-   push @$final_rules, map {my $r = {lhs=>$_->[0],rhs=>[$_->[1]],rank=>$keysetid}; $r} @$base_rules;
+   push @$final_rules, map {my $r = {lhs=>$_->[0],rhs=>[$_->[1]],rank=>$keysetid+20}; $r} @$base_rules;
  }
 
  # Finally, add smart actions for each upcasting (record upcasting of LHS and RHS)"
@@ -300,7 +300,7 @@ sub mkfeatrules {
  if (defined $action && $action !~/::/) {
    $action = $actions."::".$action;
    foreach my $r(@$final_rules) {
-     $r->{action} = $self->mkaction([$r->{lhs}],$r->{rhs},$action);
+     $r->{action} = $self->mkaction([$r->{lhs}],$r->{rhs},$r->{rank},$action);
    }
  }
 
@@ -312,7 +312,7 @@ sub mksimplerule {
  my $actions = $self->{opts}->{actions};
  $action = $self->{opts}->{default_action} unless defined $action;
  $action = $actions."::".$action if (defined $action && $action !~/::/);
- $action = $self->mkaction($lhs,$rhs,$action) if $action;
+ $action = $self->mkaction($lhs,$rhs,$rank||0,$action) if $action;
  {lhs=>$lhs->[0], rhs=>$rhs,
     action=>$action,
       rank=>$rank};
@@ -327,17 +327,17 @@ sub mkcomplexrule {
  $fields{rank}=$rank;
  $fields{action} = $self->{opts}->{default_action} unless defined $fields{action};
  $fields{action} = $actions."::".$fields{action} if (defined $fields{action} && $fields{action} !~/::/);
- $fields{action} = $self->mkaction($lhs,$rhs,$fields{action}) if defined $fields{action};
+ $fields{action} = $self->mkaction($lhs,$rhs,$rank||0,$fields{action}) if defined $fields{action};
  {lhs=>$lhs, rhs=>$rhs, %fields};
 }
 
 sub mkaction {
-  my ($self,$litem,$ritem,$action) = @_;
+  my ($self,$litem,$ritem,$rank,$action) = @_;
   my $subname = "Marpa::Attributed::".$$litem[0]."__".join("__",@$ritem);
   my $lobj = $self->deccase($litem);
   my $robj = $self->deccase($ritem);
   *$subname = sub {
-    $_[0]->record_step($lobj->[0],$robj);
+    $_[0]->record_step($lobj->[0],$robj,$rank||0);
     &$action(@_);
   };
   $subname;

@@ -13,8 +13,8 @@ sub new {
   bless {steps=>[]}, $class;
 }
 sub record_step {
-  my ($self,$lhs,$rhs) = @_;
-  push @{$self->{steps}}, [$lhs,$rhs];
+  my ($self,$lhs,$rhs,$rank) = @_;
+  push @{$self->{steps}}, [$lhs,$rhs,$rank];
 #  print STDERR Dumper "Step ".scalar(@{$self->{steps}}).": \n".Dumper($self->{steps})."\n";
 }
 
@@ -100,6 +100,7 @@ sub parse_complete {
     $count--;
     print STDERR "LHS: \n".Dumper($steps[$count]->[0]);
     print STDERR "\nRHS: \n".Dumper($steps[$count]->[1]);
+    print STDERR "Rank: ".$steps[$count]->[2],"\n";
     print STDERR "\n\n";
   }
   return $parse;

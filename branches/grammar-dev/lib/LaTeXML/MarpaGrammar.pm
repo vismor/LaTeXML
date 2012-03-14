@@ -166,14 +166,14 @@ our $RULES = [ #        LHS                          RHS
                                                      ],               'infix_apply'], #ACTION
 
 	      # 5. Infix Modifier - Generic
-              [{role=>"[term]",struct=>"unfenced"}, [{role=>"[1]",struct=>"atom"},
-                                                      'CONCAT',
-                                                      {role=>'binary_modifier',struct=>'atom'},
-                                                      'CONCAT',
-                                                      {role=>"relative",struct=>"fenced"} # TODO: Think this through
-                                                     ],               'infix_apply'], #ACTION
+              # [{role=>"[term]",struct=>"unfenced"}, [{role=>"[1]",struct=>"atom"},
+              #                                         'CONCAT',
+              #                                         {role=>'binary_modifier',struct=>'atom'},
+              #                                         'CONCAT',
+              #                                         {role=>"relative",struct=>"fenced"} # TODO: Think this through
+              #                                        ],               'infix_apply'], #ACTION
 	      # 5.2 Infix Modifier - Typing
-              [{role=>"[term]",struct=>"unfenced"}, [{role=>"[1]",struct=>"atom"},
+              [{role=>"factor",struct=>"unfenced"}, [{role=>"factor",struct=>"atom"},
                                                       'CONCAT',
                                                       {role=>'binary_modifier',struct=>'atom'},
                                                       'CONCAT',
@@ -190,12 +190,16 @@ our $RULES = [ #        LHS                          RHS
 
 
               # Fences - role preserving
-              [{role=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {role=>"[1]",struct=>'expression'}, 'CONCAT', 'CLOSE'],
+              [{role=>"factor",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {role=>"term",struct=>'expression'}, 'CONCAT', 'CLOSE'],
+               'fenced'], #ACTION
+              [{role=>"formula",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {role=>"formula",struct=>'expression'}, 'CONCAT', 'CLOSE'],
+
                'fenced'], #ACTION
 	      # Fences - cast lists to expressions, preserve role
-              [{role=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT',
-                                                 {role=>"[1]",struct=>'list'}, 'CONCAT', 'CLOSE'],
+              [{role=>"factor",struct=>"fenced"}, ['OPEN', 'CONCAT',
+                                                 {role=>"e",struct=>'list'}, 'CONCAT', 'CLOSE'],
                'fenced'], #ACTION
 	      # Groups and such:
               [{role=>"term",struct=>"fenced"}, ['OPEN', 'CONCAT',
@@ -205,8 +209,6 @@ our $RULES = [ #        LHS                          RHS
 	      # Fences - empty
               [{role=>"[e]",struct=>"fenced"}, ['OPEN', 'CONCAT', 'CLOSE'],
                'fenced_empty'], #ACTION
-
-
 
 
 	      # Elementhood - cast expressions into elements, preserve role:
@@ -245,7 +247,7 @@ our $RULES = [ #        LHS                          RHS
 	      [ {role=>'binary_relation', struct=>'atom'}, ['EQUALS']],
 	      [ {role=>'binary_metarelation', struct=>'atom'}, ['EQUALS']],
               # Recursive input (ATOM??)
-              [ {role=>'[e]',struct=>'atom'}, ['ATOM']],
+	      # [ {role=>'[e]',struct=>'atom'}, ['ATOM']],
 	      # Start category:
 	      ['start',[{role=>"e", struct=>"expression"}],'parse_complete'], # If expression - real math only
 	      ['start',[{role=>"tp", struct=>"list"}],'parse_complete'], # If list, anything goes
@@ -265,7 +267,7 @@ sub new {
   {   start   => 'start',
       actions => 'LaTeXML::MathSemantics',
       action_object => 'LaTeXML::MathSemantics',
-      features=>$mini_feats,rules=>$mini_rules,
+      features=>$FEATURES,rules=>$RULES,
       default_action=>'first_arg',
       default_null_value=>'no nullables in this grammar'});
 
