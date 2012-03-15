@@ -48,10 +48,10 @@ our $DEFAULT_FONT = LaTeXML::MathFont->new(family=>'serif', series=>'medium',
 sub new {
   my($class,%options)=@_;
   require LaTeXML::MathGrammar;
-  require LaTeXML::MarpaGrammar;
+  require LaTeXML::PureMarpaGrammar;
 
   #my $internalparser = LaTeXML::MathGrammar->new();
-  my $internalparser = LaTeXML::MarpaGrammar->new();
+  my $internalparser = LaTeXML::PureMarpaGrammar->new();
   die("Math Parser grammar failed") unless $internalparser;
 
   my $self = bless {internalparser => $internalparser},$class;
