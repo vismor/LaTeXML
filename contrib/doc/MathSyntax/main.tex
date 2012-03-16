@@ -1,0 +1,60 @@
+\documentclass[a4paper,12pt]{memoir}
+\usepackage{graphicx}
+\usepackage[usenames,svgnames]{xcolor}
+\chapterstyle{bianchi}
+\usepackage{a4wide,amsfonts,appendix}
+\usepackage[show]{ed}
+\usepackage{url}
+
+% Less detailed TOC
+\setcounter{tocdepth}{1}
+
+
+\begin{document}
+\input{title}
+\pagestyle{plain}
+% Remove parskip for toc
+\setlength{\parskip}{0ex plus 0.5ex minus 0.2ex}
+\tableofcontents
+
+\chapter{Introduction}
+In this study, we survey the notational diversity of present-day mathematical expressions, in order to uncover its linguistic phenomena.
+\section{Motivation}
+We want to enable machine-reading of formulas, in order to provide a variety of user-assistance services, such as semantic search, text-to-speech synthesis, semantic interactions (definition lookup), as well as computer algebra support (``evaluate subexpressions on demand'') and ultimately computer verification (``does that proof step really hold?'').\ednote{expand}
+\section{Related Resources}
+Notation census, beginnings of study are in Deyan's thesis, Naproche and FMathL have examples, but no real systematic study.\ednote{expand}
+
+\section{Experimental Setup}
+The primary corpus on which we base this investigation is the Cornel pre-print archive ``arXiv''\ednote{cite here}, consisting of over 700,000 articles in 37 scientific subfields.
+
+As a secondary resource, we we will also consult entry-level literature on highschool mathematics, in order to exhibit basic phenomena, as well as to demonstrate phenomena apriori known to the authors
+
+\chapter{A Study of Mathematical Syntax}
+
+\section{Basics}
+\input{basics}
+\section{Discrete math}
+\input{sets}
+\input{logic}
+\input{combinatorics}
+\input{numbertheory}
+\input{graphs}
+\input{algebra}
+\input{functions}
+
+\section{Continuous math}
+\input{calculus}
+\input{probability}
+\input{intervals}
+\input{topology}
+
+\section{Other fields}
+\input{quantum}
+\ednote{computer science, biology, chemistry...}
+$\vdots$
+
+\chapter{Discussion}
+
+\chapter{Conclusion}
+
+\end{document}

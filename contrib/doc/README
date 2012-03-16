@@ -1,6 +1,6 @@
-This is the area for XSLT transformation of LTXML documents.
+This is the area for supporting documentation relating to TeX, XML, Perl and the relevant properties of mathematical texts, which LaTeXML binding developers could find useful.
 
 Manifest
 --------
 README:  this file
-
+MathSyntax: a case study into math expressions
