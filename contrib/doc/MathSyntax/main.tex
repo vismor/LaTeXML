@@ -5,10 +5,12 @@
 \usepackage{a4wide,amsfonts,appendix}
 \usepackage[show]{ed}
 \usepackage{url}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+\usepackage{xspace}
 
 % Less detailed TOC
 \setcounter{tocdepth}{1}
-
+\def\arxiv{\textsc{arXiv}\xspace}
 
 \begin{document}
 \input{title}
@@ -18,16 +20,15 @@
 \tableofcontents
 
 \chapter{Introduction}
-In this study, we survey the notational diversity of present-day mathematical expressions, in order to uncover its linguistic phenomena.
+In this study, we survey the notational diversity of present-day mathematical expressions, in order to uncover their linguistic phenomena. A practical motivation for this study is to provide a foundation for determining the boundary between syntactic and semantic phenomena in said expressions, from the perspective of language modeling. The ultimate goal of this project is to construct a grammar of mathematical expressions, which captures all relevant syntactic properties established in this study, and allows for the semantic analysis necessary to model and observe the semantic relationships.
+
 \section{Motivation}
 We want to enable machine-reading of formulas, in order to provide a variety of user-assistance services, such as semantic search, text-to-speech synthesis, semantic interactions (definition lookup), as well as computer algebra support (``evaluate subexpressions on demand'') and ultimately computer verification (``does that proof step really hold?'').\ednote{expand}
 \section{Related Resources}
 Notation census, beginnings of study are in Deyan's thesis, Naproche and FMathL have examples, but no real systematic study.\ednote{expand}
 
-\section{Experimental Setup}
-The primary corpus on which we base this investigation is the Cornel pre-print archive ``arXiv''\ednote{cite here}, consisting of over 700,000 articles in 37 scientific subfields.
+\input{setup}
 
-As a secondary resource, we we will also consult entry-level literature on highschool mathematics, in order to exhibit basic phenomena, as well as to demonstrate phenomena apriori known to the authors
 
 \chapter{A Study of Mathematical Syntax}
 
