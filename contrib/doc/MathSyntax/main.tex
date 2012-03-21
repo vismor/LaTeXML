@@ -18,11 +18,11 @@
 
 %%% ENTRIES for expression case study:
 \newenvironment{entries}[2]%
-{\begin{table}\def\capentries{#1}\def\labelentries{#2}%
-\setcounter{entryi}{1}\begin{tabular}{|llll|}\hline  & Expression & Meaning & Syntax \\ \hline}%
+{\begin{table}[hp]\def\capentries{#1}\def\labelentries{#2}%
+\setcounter{entryi}{1}\begin{tabular}{|llll|}\hline  & Expression & Meaning & Syntax \\}%
 {\hline\end{tabular}\caption{\capentries}\label{\labelentries}\end{table}}%
 
-\newcommand\entry[4]{{\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & #3 \\[1mm] & \textbf{Discussion:}& \multicolumn{2}{l|}{#4} \\[3mm]}
+\newcommand\entry[4]{\hline\\[-4mm] {\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & #3 \\[1mm] & {\footnotesize\textbf{Discussion:}}&\multicolumn{2}{l|}{{\footnotesize #4}}\\[1mm]}
 
 %DECLARATION SECTION
 \theoremstyle{plain}
@@ -125,17 +125,6 @@
 \newcommand{\bm}{\mathbf{m}}
 \newcommand{\bM}{\mathbf{M}}
 \newcommand{\bA}{\mathbf{A}}
-
-%Commands specific for file "torus" 
-\newcommand{\CLh}{\hat{\mathcal L}}
-\newcommand{\CLP}{\mathcal{L}_{\mathcal{P}}}
-\newcommand{\CHP}{\mathcal{H}_{\mathcal{P}}}
-\newcommand{\deph}{ {\left| \text{Det} \,{\mathcal P} \right|}^{\frac{1}{2}} }
-\newcommand{\dephs}{ {\left| \text{Det} \,{\mathcal P}^{*} \right|}^{\frac{1}{2}} }
-\newcommand{\lag}{Lag (\mathcal V)}
-\newcommand{\tlag}{\widetilde{Lag}(\mathcal V)}
-\newcommand{\flag}{Lag_4 (\mathcal V)}
-
 
 \begin{document}
 \input{title}
