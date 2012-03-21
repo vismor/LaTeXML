@@ -2,7 +2,7 @@
 \usepackage{graphicx}
 \usepackage[usenames,svgnames]{xcolor}
 \chapterstyle{bianchi}
-\usepackage{a4wide,amsfonts,appendix}
+\usepackage{a4wide,amsfonts,amsthm,amsmath,appendix}
 \usepackage[show]{ed}
 \usepackage{url}
 \usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
@@ -11,6 +11,128 @@
 % Less detailed TOC
 \setcounter{tocdepth}{1}
 \def\arxiv{\textsc{arXiv}\xspace}
+
+\newcommand{\labelentry}{.}
+\newcounter{entryi}
+
+\newcommand\entry[3]{{\theentryi\labelentry}\stepcounter{entryi} & #1 & #2  \\ & \textbf{Discussion:}& #3 \\[2mm]}
+\newenvironment{entries}[2]%
+{\begin{table}\def\capentries{#1}\def\labelentries{#2}%
+\setcounter{entryi}{1}\begin{tabular}{|lll|}\hline}%
+{\hline\end{tabular}\caption{\capentries}\label{\labelentries}\end{table}}%
+
+%DECLARATION SECTION
+\theoremstyle{plain}
+\newtheorem{thm}[equation]{Theorem}
+\newtheorem{lem}[equation]{Lemma}
+\newtheorem{cor}[equation]{Corollary}
+\newtheorem{prop}[equation]{Proposition}
+
+\theoremstyle{definition}
+\newtheorem{defi}[equation]{Definition}
+\newtheorem{rmk}[equation]{Remark}
+\newtheorem{example}[equation]{Example}
+
+\theoremstyle{remark}
+\newtheorem{notation}{Notation}
+
+%COMMAND SECTION
+%\overfullrule=5pt
+\renewcommand{\textwidth}{390pt}
+\renewcommand{\baselinestretch}{1.5}
+\numberwithin{equation}{section}
+
+\newcommand{\bib}{\bibitem}
+\newcommand{\ra}{\rightarrow}
+\newcommand{\lra}{\longrightarrow}
+\newcommand{\nin}{\noindent}
+\newcommand{\bsk}{\bigskip}
+\newcommand{\msk}{\medskip}
+\newcommand{\ssk}{\smallskip}
+
+\newcommand{\contrac}{\mathop{\raise.45ex\hbox{$\underline{\hskip7pt}$}\raise.5ex\hbox{$\mkern-2mu\scriptstyle|$}}\nolimits}
+
+%Greek letters
+\newcommand{\al}{\alpha}
+\newcommand{\be}{\beta}
+\newcommand{\ga}{\gamma}
+\newcommand{\Ga}{\Gamma}
+\newcommand{\de}{\delta}
+\newcommand{\De}{\Delta}
+\newcommand{\la}{\lambda}
+\newcommand{\La}{\Lambda}
+\newcommand{\Th}{\Theta}
+\newcommand{\si}{\sigma}
+\newcommand{\Si}{\Sigma}
+\newcommand{\om}{\omega}
+\newcommand{\Om}{\Omega}
+\newcommand{\ka}{\kappa}
+\newcommand{\ep}{\epsilon}
+\newcommand{\vep}{\varepsilon}
+\newcommand{\vphi}{\varphi}
+\newcommand{\na}{\nabla}
+
+
+%Caligraphic
+\newcommand{\CA}{\mathcal A}
+\newcommand{\CB}{\mathcal B}
+\newcommand{\CC}{\mathcal C}
+\newcommand{\CCD}{\mathcal D}
+\newcommand{\CE}{\mathcal E}
+\newcommand{\CF}{\mathcal F}
+\newcommand{\CG}{\mathcal G}
+\newcommand{\CH}{\mathcal H}
+\newcommand{\CI}{\mathcal I}
+\newcommand{\CJ}{\mathcal J}
+\newcommand{\CK}{\mathcal K}
+\newcommand{\CL}{\mathcal L}
+\newcommand{\CM}{\mathcal M}
+\newcommand{\CN}{\mathcal N}
+\newcommand{\CO}{\mathcal O}
+\newcommand{\CP}{\mathcal P}
+\newcommand{\CQ}{\mathcal Q}
+\newcommand{\CR}{\mathcal R}
+\newcommand{\CS}{\mathcal S}
+\newcommand{\CT}{\mathcal T}
+\newcommand{\CU}{\mathcal U}
+\newcommand{\CV}{\mathcal V}
+\newcommand{\CW}{\mathcal W}
+\newcommand{\CX}{\mathcal X}
+\newcommand{\CY}{\mathcal Y}
+\newcommand{\CZ}{\mathcal Z}
+
+%Blackboard bold
+\newcommand{\BP}{\mathbb P}
+\newcommand{\BT}{\mathbb T}
+\newcommand{\BR}{\mathbb R}
+\newcommand{\BZ}{\mathbb Z}
+\newcommand{\BC}{\mathbb C}
+\newcommand{\BV}{\mathbb V}
+\newcommand{\BQ}{\mathbb Q}
+
+%Text
+\newcommand{\te}{\text{e}}
+\newcommand{\ti}{\text{i}}
+
+%Bold letters
+\newcommand{\bq}{\mathbf{q}}
+\newcommand{\bl}{\mathbf{l}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\bw}{\mathbf{w}}
+\newcommand{\bm}{\mathbf{m}}
+\newcommand{\bM}{\mathbf{M}}
+\newcommand{\bA}{\mathbf{A}}
+
+%Commands specific for file "torus" 
+\newcommand{\CLh}{\hat{\mathcal L}}
+\newcommand{\CLP}{\mathcal{L}_{\mathcal{P}}}
+\newcommand{\CHP}{\mathcal{H}_{\mathcal{P}}}
+\newcommand{\deph}{ {\left| \text{Det} \,{\mathcal P} \right|}^{\frac{1}{2}} }
+\newcommand{\dephs}{ {\left| \text{Det} \,{\mathcal P}^{*} \right|}^{\frac{1}{2}} }
+\newcommand{\lag}{Lag (\mathcal V)}
+\newcommand{\tlag}{\widetilde{Lag}(\mathcal V)}
+\newcommand{\flag}{Lag_4 (\mathcal V)}
+
 
 \begin{document}
 \input{title}
@@ -48,6 +170,7 @@ Notation census, beginnings of study are in Deyan's thesis, Naproche and FMathL 
 \input{probability}
 \input{intervals}
 \input{topology}
+\input{diffgeometry}
 
 \section{Other fields}
 \input{quantum}
