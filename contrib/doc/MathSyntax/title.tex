@@ -4,16 +4,18 @@
 \definecolor{Medium}{gray}{0.6}
 \definecolor{Light}{gray}{0.8}
 \newlength{\drop}% for my convenience
+\newlength{\dropt}% for my convenience
 
 \renewcommand{\maketitle}{\begingroup%
 \drop = 0.1\textheight
+\dropt = 0.05\textheight
 \fboxsep 0.5\baselineskip
 \sffamily
-\vspace*{\drop}
+\vspace*{\dropt}
 \centering
-{\textcolor{NavyBlue}{\HUGE The Structure of Mathematical Expressions}}\par
+{\textcolor{NavyBlue}{\HUGE The Structure of Mathematical\\[3mm] Expressions}}\par
 \vspace{0.5\drop}
-\colorbox{Dark}{\textcolor{white}{\normalfont\itshape\Large
+\fcolorbox{NavyBlue}{Dark}{\textcolor{white}{\normalfont\Large
 An {\textsc{arXiv}} Case Study}}\par
 \vspace{\drop}
 {\Large Deyan Ginev and Bruce R. Miller}\par

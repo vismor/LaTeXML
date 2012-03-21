@@ -1,4 +1,4 @@
-\documentclass[a4paper,12pt]{memoir}
+\documentclass[a4paper,11pt]{memoir}
 \usepackage{graphicx}
 \usepackage[usenames,svgnames]{xcolor}
 \chapterstyle{bianchi}
@@ -17,12 +17,16 @@
 
 
 %%% ENTRIES for expression case study:
-\newenvironment{entries}[2]%
+\newenvironment{nextentries}[2]%
 {\begin{table}[hp]\def\capentries{#1}\def\labelentries{#2}%
-\setcounter{entryi}{1}\begin{tabular}{|llll|}\hline  & Expression & Meaning & Syntax \\}%
+ \begin{tabular}{|llll|}\hline  & Expression & Meaning & Syntax \\}%
 {\hline\end{tabular}\caption{\capentries}\label{\labelentries}\end{table}}%
 
-\newcommand\entry[4]{\hline\\[-4mm] {\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & #3 \\[1mm] & {\footnotesize\textbf{Discussion:}}&\multicolumn{2}{l|}{{\footnotesize #4}}\\[1mm]}
+\newenvironment{entries}[2]%
+{\setcounter{entryi}{1}\begin{nextentries}{#1}{#2}}
+{\end{nextentries}}
+
+\newcommand\entry[4]{\hline\\[-4mm] {\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & #3 \\[1.5mm] & \multicolumn{3}{l|}{{\footnotesize\textbf{Discussion:} #4}}\\[1mm]}
 
 %DECLARATION SECTION
 \theoremstyle{plain}
