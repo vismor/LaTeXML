@@ -15,11 +15,14 @@
 \newcommand{\labelentry}{.}
 \newcounter{entryi}
 
-\newcommand\entry[3]{{\theentryi\labelentry}\stepcounter{entryi} & #1 & #2  \\ & \textbf{Discussion:}& #3 \\[2mm]}
+
+%%% ENTRIES for expression case study:
 \newenvironment{entries}[2]%
 {\begin{table}\def\capentries{#1}\def\labelentries{#2}%
-\setcounter{entryi}{1}\begin{tabular}{|lll|}\hline}%
+\setcounter{entryi}{1}\begin{tabular}{|llll|}\hline  & Expression & Meaning & Syntax \\ \hline}%
 {\hline\end{tabular}\caption{\capentries}\label{\labelentries}\end{table}}%
+
+\newcommand\entry[4]{{\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & #3 \\[1mm] & \textbf{Discussion:}& \multicolumn{2}{l|}{#4} \\[3mm]}
 
 %DECLARATION SECTION
 \theoremstyle{plain}
