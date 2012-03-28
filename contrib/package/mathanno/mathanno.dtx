@@ -17,6 +17,7 @@
 \usepackage{url,array,float}
 \usepackage[show]{ed}
 \usepackage{latexml}
+\usepackage{mathanno}
 \usepackage{hyperref}
 \makeindex
 \begin{document}\DocInput{mathanno.dtx}\end{document}
@@ -50,6 +51,16 @@
 %
 % \section{User Interface}\label{sec:user}%
 %  \ednote{talk about keywords, trees, tikz}
+% \begin{figure}[ht]\centering
+% \begin{verbatim}
+% \documentclass{article}
+% 
+% An annotation for $1+2=3$:
+% @=(@+(1,2)) ???
+% 
+% \end{verbatim}
+% \caption{Example use of \texttt{\textbackslash{mobile}}}\label{fig:example-doc}
+% \end{figure}
 %
 % \section{Exhaustive Feature List}\label{sec:features} 
 %
@@ -65,14 +76,14 @@
 %%% ENTRIES for expression case study:
 \newenvironment{nextentries}[2]%
 {\begin{table}[hp]\def\capentries{#1}\def\labelentries{#2}%
- \begin{tabular}{|llll|}\hline  & Expression & Meaning & Syntax \\}%
+ \begin{tabular}{|llll|}\hline  & Expression & Denotation & Annotation \\}%
 {\hline\end{tabular}\caption{\capentries}\label{\labelentries}\end{table}}%
 
 \newenvironment{entries}[2]%
 {\setcounter{entryi}{1}\begin{nextentries}{#1}{#2}}
 {\end{nextentries}}
 
-\newcommand\entry[4]{\hline\\[-4mm] {\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & #3 \\[1.5mm] & \multicolumn{3}{l|}{{\footnotesize\textbf{Discussion:} #4}}\\[1mm]}
+\newcommand\entry[4]{\hline\\[-4mm] {\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & {\scriptsize#3} \\[1.5mm] & \multicolumn{3}{l|}{{\footnotesize\textbf{Discussion:} #4}}\\[1mm]}
 %</package>
 %    \end{macrocode}
 %
