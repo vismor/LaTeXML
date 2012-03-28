@@ -12,21 +12,7 @@
 \setcounter{tocdepth}{1}
 \def\arxiv{\textsc{arXiv}\xspace}
 
-\newcommand{\labelentry}{.}
-\newcounter{entryi}
-
-
-%%% ENTRIES for expression case study:
-\newenvironment{nextentries}[2]%
-{\begin{table}[hp]\def\capentries{#1}\def\labelentries{#2}%
- \begin{tabular}{|llll|}\hline  & Expression & Meaning & Syntax \\}%
-{\hline\end{tabular}\caption{\capentries}\label{\labelentries}\end{table}}%
-
-\newenvironment{entries}[2]%
-{\setcounter{entryi}{1}\begin{nextentries}{#1}{#2}}
-{\end{nextentries}}
-
-\newcommand\entry[4]{\hline\\[-4mm] {\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & #3 \\[1.5mm] & \multicolumn{3}{l|}{{\footnotesize\textbf{Discussion:} #4}}\\[1mm]}
+\usepackage{mathanno}
 
 %DECLARATION SECTION
 \theoremstyle{plain}
@@ -147,9 +133,7 @@ Notation census, beginnings of study are in Deyan's thesis, Naproche and FMathL 
 
 \input{setup}
 
-
 \chapter{A Study of Mathematical Syntax}
-
 \section{Basics}
 \input{basics}
 \section{Discrete math}
