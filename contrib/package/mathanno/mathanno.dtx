@@ -1,0 +1,81 @@
+% \iffalse meta-comment
+% A LaTeX Package for Annotation Macros for Math Expressions
+% Copyright (c) 2012 Deyan Ginev, all rights reserved
+%               this file is released under the
+%               LaTeX Project Public License (LPPL)
+%
+% The development version of this file can be found at
+% $HeadURL: https://svn.mathweb.org/repos/LaTeXML/contrib/package/mathanno/mathanno.dtx $
+% \fi
+%   
+% \iffalse
+%<package>\NeedsTeXFormat{LaTeX2e}[1999/12/01]
+%<package>\ProvidesPackage{mathanno}[2012/03/28 v0.1 Annotation Macros for Math Expressions]
+%
+%<*driver>
+\documentclass{ltxdoc}
+\usepackage{url,array,float}
+\usepackage[show]{ed}
+\usepackage{latexml}
+\usepackage{hyperref}
+\makeindex
+\begin{document}\DocInput{mathanno.dtx}\end{document}
+%</driver>
+% \fi
+% 
+%\iffalse\CheckSum{275}\fi
+% 
+% \changes{v0.1}{2012/03/28}{First Version}
+%
+% 
+% \GetFileInfo{mathanno.sty}
+% 
+% \MakeShortVerb{\|}
+%
+% \title{{\texttt{mathanno.sty}}: Annotation Macros for Math Expressions}
+%    \author{Deyan Ginev\\
+%            Jacobs University, Bremen\\
+%            \url{http://kwarc.info/dginev}}
+% \maketitle
+%
+% \begin{abstract}
+%   This package provides macros for annotating {\LaTeX}-authored mathematical
+%   expressions, with a focus on structural and syntactic properties.
+% \end{abstract}
+%
+% \tableofcontents\newpage
+% 
+% \section{Introduction}\label{sec:intro}
+% \ednote{we need this for the {arXiv} case study.}
+%
+% \section{User Interface}\label{sec:user}%
+%  \ednote{talk about keywords, trees, tikz}
+%
+% \section{Exhaustive Feature List}\label{sec:features} 
+%
+% \section{Implementation}\label{sec:impl}
+% 
+% We proceed to doing the actual work on the {\LaTeX} side of affairs.
+%
+% To start things off, we provide Tikz-based tree building macros.
+%    \begin{macrocode}
+%<*package>
+\newcommand{\labelentry}{.}
+\newcounter{entryi}
+%%% ENTRIES for expression case study:
+\newenvironment{nextentries}[2]%
+{\begin{table}[hp]\def\capentries{#1}\def\labelentries{#2}%
+ \begin{tabular}{|llll|}\hline  & Expression & Meaning & Syntax \\}%
+{\hline\end{tabular}\caption{\capentries}\label{\labelentries}\end{table}}%
+
+\newenvironment{entries}[2]%
+{\setcounter{entryi}{1}\begin{nextentries}{#1}{#2}}
+{\end{nextentries}}
+
+\newcommand\entry[4]{\hline\\[-4mm] {\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & #3 \\[1.5mm] & \multicolumn{3}{l|}{{\footnotesize\textbf{Discussion:} #4}}\\[1mm]}
+%</package>
+%    \end{macrocode}
+%
+% 
+% \Finale
+% \endinput
