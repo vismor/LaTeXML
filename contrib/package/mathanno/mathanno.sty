@@ -8,6 +8,39 @@
 %% 
 \NeedsTeXFormat{LaTeX2e}[1999/12/01]
 \ProvidesPackage{mathanno}[2012/03/28 v0.1 Annotation Macros for Math Expressions]
+\usepackage{color}
+\usepackage{qtree}
+
+\def\tooltiptarget{\phantom{\rule{1mm}{1mm}}}
+\newbox\tempboxa
+\setbox\tempboxa=\hbox{}
+\immediate\pdfxform\tempboxa
+\edef\emptyicon{\the\pdflastxform}
+
+\begingroup
+\lccode`\~=`\,%
+\lowercase{\endgroup%
+ \def~{\string\r}%
+}%
+
+\def\activatecomma{\begingroup\catcode`,=\active}
+\def\deactivatecomma{\endgroup}
+\def\MathTree{\Tree}
+
+\def\is{\activatecomma\annoi}
+\newcommand\annoi[2]{%
+\pdfstartlink user{%
+  /Subtype /Text
+  /Contents  (#1)
+  /AP <<
+    /N \emptyicon\space 0 R
+  >>
+}%
+{\color{red}#2}%
+\pdfendlink%
+\deactivatecomma
+}
+
 \newcommand{\labelentry}{.}
 \newcounter{entryi}
 %%% ENTRIES for expression case study:

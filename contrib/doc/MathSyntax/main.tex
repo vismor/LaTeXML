@@ -1,39 +1,39 @@
 \documentclass[a4paper,11pt]{memoir}
+\usepackage{etex}
+\usepackage{mathanno}
 \usepackage{graphicx}
 \usepackage[usenames,svgnames]{xcolor}
 \chapterstyle{bianchi}
-\usepackage{a4wide,amsfonts,amsthm,amsmath,appendix}
+%\usepackage{a4wide,amsfonts,amsthm,amsmath,appendix}
 \usepackage[show]{ed}
 \usepackage{url}
-\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+%\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
 \usepackage{xspace}
 
 % Less detailed TOC
 \setcounter{tocdepth}{1}
 \def\arxiv{\textsc{arXiv}\xspace}
 
-\usepackage{mathanno}
-
 %DECLARATION SECTION
-\theoremstyle{plain}
-\newtheorem{thm}[equation]{Theorem}
-\newtheorem{lem}[equation]{Lemma}
-\newtheorem{cor}[equation]{Corollary}
-\newtheorem{prop}[equation]{Proposition}
+% \theoremstyle{plain}
+% \newtheorem{thm}[equation]{Theorem}
+% \newtheorem{lem}[equation]{Lemma}
+% \newtheorem{cor}[equation]{Corollary}
+% \newtheorem{prop}[equation]{Proposition}
 
-\theoremstyle{definition}
-\newtheorem{defi}[equation]{Definition}
-\newtheorem{rmk}[equation]{Remark}
-\newtheorem{example}[equation]{Example}
+% \theoremstyle{definition}
+% \newtheorem{defi}[equation]{Definition}
+% \newtheorem{rmk}[equation]{Remark}
+% \newtheorem{example}[equation]{Example}
 
-\theoremstyle{remark}
-\newtheorem{notation}{Notation}
+% \theoremstyle{remark}
+% \newtheorem{notation}{Notation}
 
 %COMMAND SECTION
 %\overfullrule=5pt
-\renewcommand{\textwidth}{390pt}
-\renewcommand{\baselinestretch}{1.5}
-\numberwithin{equation}{section}
+% \renewcommand{\textwidth}{390pt}
+% \renewcommand{\baselinestretch}{1.5}
+% \numberwithin{equation}{section}
 
 \newcommand{\bib}{\bibitem}
 \newcommand{\ra}{\rightarrow}
@@ -150,7 +150,7 @@ Notation census, beginnings of study are in Deyan's thesis, Naproche and FMathL 
 \input{probability}
 \input{intervals}
 \input{topology}
-\input{diffgeometry}
+%\input{diffgeometry}
 
 \section{Other fields}
 \input{quantum}

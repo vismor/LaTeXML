@@ -57,10 +57,15 @@
 % 
 % An annotation for $1+2=3$:
 % @=(@+(1,2)) ???
+% ==================
+% First try: $1+2\is{infix,relation,expression}{=}3$
 % 
 % \end{verbatim}
-% \caption{Example use of \texttt{\textbackslash{mobile}}}\label{fig:example-doc}
+% \caption{Example of a Basic Annotation}\label{fig:example-doc}
 % \end{figure}
+%
+% Linear: $1+2\is{infix,relation,expression}{=}3$ \\
+% Tree: \MathTree [.$=$ [.\is{infix,operator}{+} [ 1 2 ] ] 3 ]
 %
 % \section{Exhaustive Feature List}\label{sec:features} 
 %
@@ -71,6 +76,42 @@
 % To start things off, we provide Tikz-based tree building macros.
 %    \begin{macrocode}
 %<*package>
+\usepackage{color}
+\usepackage{qtree}
+
+% PDF annotation internals:
+\def\tooltiptarget{\phantom{\rule{1mm}{1mm}}}
+\newbox\tempboxa
+\setbox\tempboxa=\hbox{} 
+\immediate\pdfxform\tempboxa 
+\edef\emptyicon{\the\pdflastxform}
+
+% Magic for ,
+\begingroup
+\lccode`\~=`\,%
+\lowercase{\endgroup%
+ \def~{\string\r}%
+}%
+
+\def\activatecomma{\begingroup\catcode`,=\active}
+\def\deactivatecomma{\endgroup}
+\def\MathTree{\Tree}
+
+% Annotation macro:
+\def\is{\activatecomma\annoi}
+\newcommand\annoi[2]{%
+\pdfstartlink user{%
+  /Subtype /Text
+  /Contents  (#1)
+  /AP <<
+    /N \emptyicon\space 0 R
+  >>
+}%
+{\color{red}#2}%
+\pdfendlink%
+\deactivatecomma
+}
+
 \newcommand{\labelentry}{.}
 \newcounter{entryi}
 %%% ENTRIES for expression case study:
