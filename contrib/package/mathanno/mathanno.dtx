@@ -97,8 +97,19 @@
 \def\deactivatecomma{\endgroup}
 \def\MathTree{\Tree}
 
+\def\TreeOp#1#2{%
+\begingroup
+\edef\boxname{\csname #1box\endcsname}%
+\global\expandafter\newsavebox\boxname%
+\global\expandafter\setbox\boxname=\hbox{\frame{\scriptsize #2}}%
+
+\expandafter\xdef\csname #1\endcsname{\expandafter\usebox\csname #1box\endcsname}%
+\endgroup
+}
+
 % Annotation macro:
 \def\is{\activatecomma\annoi}
+\def\isa{\is}
 \newcommand\annoi[2]{%
 \pdfstartlink user{%
   /Subtype /Text
