@@ -87,6 +87,8 @@ our $RULES = [
               ['Sequence',[qw/Sequence _ PUNCT _ Element/],'infix_apply'],
 
               # 8. Lexicon
+              ['FactorArgument',['ATOM']],
+              ['FormulaArgument',['ATOM']],
               ['FactorArgument',['UNKNOWN']],
               ['FormulaArgument',['UNKNOWN']],
               ['FactorArgument',['NUMBER']],
@@ -123,7 +125,7 @@ sub parse {
   # Insert concatenation
   @$unparsed = map (($_, '_::'), @$unparsed);
   pop @$unparsed;
-  print STDERR "\n\n";
+  #  print STDERR "\n\n";
   foreach (@$unparsed) {
     my ($category,$lexeme,$id) = split(':',$_);
     # Issues: 
@@ -133,7 +135,7 @@ sub parse {
     } elsif ($category eq 'RELOP') {
       $category = 'EQUALS' if ($lexeme eq 'equals');
     }
-    print STDERR "$category:$lexeme\n";
+    #print STDERR "$category:$lexeme\n";
 
     last unless $rec->read($category,$lexeme.':'.$id);
   }
