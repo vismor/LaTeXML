@@ -16,8 +16,8 @@ use warnings;
 use FindBin;
 use lib "$FindBin::RealBin/../lib";
 use Pod::Usage;
-use Data::Dumper;
 use LaTeXML;
+use LaTeXML::Global;
 use LaTeXML::Util::Pathname;
 use LaTeXML::Util::WWW;
 use LaTeXML::Util::Extras;
@@ -28,14 +28,17 @@ use LaTeXML::Util::Extras;
 use Carp;
 
 #**********************************************************************
-our @IGNORABLE = qw(identity profile port preamble_loaded port destination log removed_math_formats whatsin whatsout math_formats input_limit input_counter);
+our @IGNORABLE = qw(identity timeout profile port preamble postamble port destination log removed_math_formats whatsin whatsout math_formats input_limit input_counter dographics mathimages mathimagemag );
+# TODO: Should I change from exclusive to inclusive? What is really important to compare?
+# paths, preload, preamble, ... all the LaTeXML->new() params?
+# If we're not daemonizing postprocessing we can safely ignore all its options and reuse the conversion objects.
 
 sub new {
   my ($class,$opts) = @_;
   binmode(STDERR,":utf8");
   prepare_options(undef,$opts);
   bless {defaults=>$opts,opts=>undef,ready=>0,
-         latexml=>undef, digested_preamble=>undef, digested_postamble=>undef}, $class;
+         latexml=>undef}, $class;
 }
 
 sub prepare_session {
@@ -62,7 +65,6 @@ sub prepare_session {
   }
   #2.2. Compare old and new $opts hash
   my $something_to_do=1 unless LaTeXML::Util::ObjectDB::compare($opts, $self->{opts});
-
   #2.3. Reinstate ignorables, set new options to daemon:
   $opts->{$_} = $opts_tmp->{$_} foreach (@IGNORABLE);
   $self->{opts} = $opts;
@@ -73,52 +75,163 @@ sub prepare_session {
   return;
 }
 
+# TODO: Best way to throw errors when options don't work out? 
+#       How about in the case of Extras::ReadOptions?
+#       Error() and Warn() would be neat, but we have to make sure STDERR is caught beforehand.
+#       Also, there is no eval() here, so we might need a softer handling of Error()s.
 sub prepare_options {
   my ($self,$opts) = @_;
   undef $self unless ref $self; # Only care about daemon objects, ignore when invoked as static sub
+  #======================================================================
+  # I. Sanity check and Completion of Core options.
+  #======================================================================
   $opts->{timeout} = 600 unless defined $opts->{timeout}; # 10 minute timeout default
-  $opts->{format} = 'xml' unless defined $opts->{format};
+  $opts->{dographics} = 1 unless defined $opts->{dographics}; #TODO: Careful, POST overlap!
   $opts->{verbosity} = 10 unless defined $opts->{verbosity};
   $opts->{preload} = [] unless defined $opts->{preload};
   $opts->{paths} = ['.'] unless defined $opts->{paths};
-  $opts->{dographics} = 1 unless defined $opts->{dographics};
   @{$opts->{paths}} = map {pathname_canonical($_)} @{$opts->{paths}};
-  if ($opts->{post}) {
-    # Fall back to default post processors if no preferences:
-    @{$opts->{math_formats}}=@{$self->{defaults}->{math_formats}} if (defined $self && (! @{$opts->{math_formats}}));
-  }
-  if ($opts->{format}=~/html/i) { #HTML-like? trigger post and default to pmml
-    $opts->{post}=1;
-    if (@{$opts->{math_formats}} == 0) {
-      push @{$opts->{math_formats}}, 'pmml';
-    }
-  }
-  # use parallel markup if there are multiple formats requested.
-  $opts->{parallelmath} = 1 if @{$opts->{math_formats}}>1;
-
-  # Any post switch implies post:
-  $opts->{post}=1 if (scalar(@{$opts->{math_formats}}) || ($opts->{stylesheet}));
-  $opts->{parallelmath}=0 unless (@{$opts->{math_formats}} > 1);
-  # Default: scan and crossref on, other advanced off
-  $opts->{prescan}=undef unless defined $opts->{prescan};
-  $opts->{dbfile}=undef unless defined $opts->{dbfile};
-  $opts->{scan}=1 unless defined $opts->{scan};
-  $opts->{index}=1 unless defined $opts->{index};
-  $opts->{split}=undef unless defined $opts->{split};
-  $opts->{splitat}='section' unless defined $opts->{splitat};
-  $opts->{splitpath}=undef unless defined $opts->{splitpath};
-  $opts->{splitnaming}='id' unless defined $opts->{splitnaming};
-  $opts->{crossref}=1 unless defined $opts->{crossref};
-  $opts->{sitedir}=undef unless defined $opts->{sitedir};
-  $opts->{numbersections}=1 unless defined $opts->{numbersections};
-  $opts->{navtoc}=undef unless defined $opts->{numbersections};
-  $opts->{urlstyle}='server' unless defined $opts->{urlstyle};
-  $opts->{type} = 'auto' unless defined $opts->{type};
 
   $opts->{whatsin} = 'document' unless defined $opts->{whatsin};
   $opts->{whatsout} = 'document' unless defined $opts->{whatsout};
+  $opts->{type} = 'auto' unless defined $opts->{type};
 
+  # Destination extension might indicate the format:
+  if ((!defined $opts->{format}) && (defined $opts->{destination})){
+    if ($opts->{destination}=~/\.xhtml$/) {
+      $opts->{format}='xhtml';
+    } elsif ($opts->{destination}=~/\.html$/) {
+      $opts->{format}='html';
+    } elsif ($opts->{destination}=~/\.html5$/) {
+      $opts->{format}='html5';
+    } elsif ($opts->{destination}=~/\.xml$/) {
+      $opts->{format}='xml';
+    }}
+
+  # Unset destinations unless local conversion has been requested:
+  if (!$opts->{local} && ($opts->{destination} || $opts->{log} || $opts->{postdest} || $opts->{postlog})) 
+    {carp "I/O from filesystem not allowed without --local!\n".
+       " Will revert to sockets!\n";
+     undef $opts->{destination}; undef $opts->{log};
+     undef $opts->{postdest}; undef $opts->{postlog};}
+  #======================================================================
+  # II. Sanity check and Completion of Post options.
+  #======================================================================
+  # Any post switch implies post (TODO: whew, lots of those, add them all!):
+  $opts->{post}=1 if ( (! defined $opts->{post}) && ($opts->{math_formats} && scalar(@{$opts->{math_formats}}) ) ||
+    ($opts->{stylesheet}) || ($opts->{format} && ($opts->{format}=~/html/i)));
+                       # || ... || ... || ...
+  if ($opts->{post}) { # No need to bother if we're not post-processing
+
+    # Default: scan and crossref on, other advanced off
+    $opts->{prescan}=undef unless defined $opts->{prescan};
+    $opts->{dbfile}=undef unless defined $opts->{dbfile};
+    $opts->{scan}=1 unless defined $opts->{scan};
+    $opts->{index}=1 unless defined $opts->{index};
+    $opts->{crossref}=1 unless defined $opts->{crossref};
+    $opts->{sitedir}=undef unless defined $opts->{sitedir};
+    $opts->{numbersections}=1 unless defined $opts->{numbersections};
+    $opts->{navtoc}=undef unless defined $opts->{numbersections};
+    $opts->{navtocstyles}={context=>1,normal=>1,none=>1} unless defined $opts->{navtocstyles};
+    $opts->{navtoc} = lc($opts->{navtoc}) if defined $opts->{navtoc};
+    delete $opts->{navtoc} if ($opts->{navtoc} && ($opts->{navtoc} eq 'none'));
+    if($opts->{navtoc}){
+      if(!$opts->{navtocstyles}->{$opts->{navtoc}}){
+	croak($opts->{navtoc}." is not a recognized style of navigation TOC"); }
+      if(!$opts->{crossref}){
+	croak("Cannot use option \"navigationtoc\" (".$opts->{navtoc}.") without \"crossref\""); }}
+    $opts->{urlstyle}='server' unless defined $opts->{urlstyle};
+    $opts->{bibliographies} = [] unless defined $opts->{bibliographies};
+
+    # Validation:
+    $opts->{validate} = 1 unless defined $opts->{validate};
+    # Graphics:
+    $opts->{dographics} = 1 unless defined $opts->{dographics};
+    $opts->{mathimages} = undef unless defined $opts->{mathimages};
+    $opts->{mathimagemag} = 1.75 unless defined $opts->{mathimagemag};
+    $opts->{picimages} = 1 unless defined $opts->{picimages};
+    # Split:
+    $opts->{split}=undef unless defined $opts->{split};
+    $opts->{splitat}='section' unless defined $opts->{splitat};
+    $opts->{splitpath}=undef unless defined $opts->{splitpath};
+    $opts->{splitnaming}='id' unless defined $opts->{splitnaming};
+    $opts->{splitback} = "//ltx:bibliography | //ltx:appendix | //ltx:index" unless defined $opts->{splitback};
+    $opts->{splitpaths} =
+      {chapter=>"//ltx:chapter | ".$opts->{splitback},
+       section=>"//ltx:chapter | //ltx:section | ".$opts->{splitback},
+       subsection=>"//ltx:chapter | //ltx:section | //ltx:subsection | ".$opts->{splitback},
+       subsubsection=>"//ltx:chapter | //ltx:section | //ltx:subsection | //ltx:subsubsection | ".$opts->{splitback}}
+	unless defined $opts->{splitpaths};
+    # Format:
+    #Default is XHTML, XML otherwise (TODO: Expand)
+    $opts->{format}="xml" if ($opts->{stylesheet}) && (!defined $opts->{format});
+    $opts->{format}="xhtml" unless defined $opts->{format};
+    if (!$opts->{stylesheet}) {
+      if ($opts->{format} eq "xhtml") {$opts->{stylesheet} = "LaTeXML-xhtml.xsl";}
+      elsif ($opts->{format} eq "html") {$opts->{stylesheet} = "LaTeXML-html.xsl";}
+      elsif ($opts->{format} eq "html5") {$opts->{stylesheet} = "LaTeXML-html5.xsl";}
+      elsif ($opts->{format} eq "xml") {delete $opts->{stylesheet};}
+      else {croak("Unrecognized target format: ".$opts->{format});}
+    }
+    # Check format and complete math and image options
+    if ($opts->{format} eq 'html') {
+      $opts->{svg}=0 unless defined $opts->{svg}; # No SVG by default.
+      croak("Default html stylesheet only supports math images, not ".join(', ',@{$opts->{math_formats}}))
+	if scalar(@{$opts->{math_formats}});
+      croak("Default html stylesheet does not support svg") if $opts->{svg};
+      $opts->{mathimages} = 1;
+      $opts->{math_formats} = [];
+    }
+    $opts->{dographics} = 1 unless defined $opts->{dographics};
+    $opts->{picimages}  = 1 unless defined $opts->{picimages};
+    $opts->{svg} = 1 unless defined $opts->{svg};
+    # Math Format fallbacks:
+    $opts->{math_formats}=[@{$self->{defaults}->{math_formats}}] if (defined $self && (! 
+                                                                       ( (defined $opts->{math_formats}) &&
+                                                                         scalar(@{$opts->{math_formats}})
+                                                                       )));
+    # PMML default if all else fails and no mathimages:
+    if  (((! defined $opts->{math_formats}) || (!scalar(@{$opts->{math_formats}}))) &&
+      (!$opts->{mathimages}))
+    {
+      push @{$opts->{math_formats}}, 'pmml';
+    }
+    # use parallel markup if there are multiple formats requested.
+    $opts->{parallelmath} = 1 if @{$opts->{math_formats}}>1;
+  }
+  # If really nothing hints to define format, then default it to XML
+  $opts->{format} = 'xml' unless defined $opts->{format};
 }
+# TODO: $sourcedir   = $sourcedir   && pathname_canonical($sourcedir);
+# TODO: $sitedir     = $sitedir     && pathname_canonical($sitedir);
+# TODO: All of the below
+# Check for appropriate combination of split, scan, prescan, dbfile, crossref
+# if($split && !defined $destination){
+#   Error("Must supply --destination when using --split"); }
+# if($split){
+#   $splitnaming = checkOptionValue('--splitnaming',$splitnaming,
+# 				  qw(id idrelative label labelrelative)); 
+#   $splitat = checkOptionValue('--splitat',$splitat,keys %splitpaths);
+#   $splitpath = $splitpaths{$splitat} unless defined $splitpath;
+# }
+# if($prescan && !$scan){
+#   Error("Makes no sense to --prescan with scanning disabled (--noscan)"); }
+# if($prescan && (!defined $dbfile)){
+#   Error("Cannot prescan documents (--prescan) without specifying --dbfile"); }
+# if(!$prescan && $crossref && ! ($scan || (defined $dbfile))){
+#   Error("Cannot cross-reference (--crossref) without --scan or --dbfile "); }
+# if($crossref){
+#   $urlstyle = checkOptionValue('--urlstyle',$urlstyle,qw(server negotiated file)); }
+# if(($permutedindex || $splitindex) && (! defined $index)){
+#   $index=1; }
+# if(!$prescan && $index && ! ($scan || defined $crossref)){
+#   Error("Cannot generate index (--index) without --scan or --dbfile"); }
+# if(!$prescan && @bibliographies && ! ($scan || defined $crossref)){
+#   Error("Cannot generate bibliography (--bibliography) without --scan or --dbfile"); }
+#if((!defined $destination) && ($mathimages || $dographics || $picimages)){
+#  Error("Must supply --destination unless all auxilliary file writing is disabled"
+#	."(--nomathimages --nographicimages --nopictureimages --nodefaultcss)"); }
+#}
 
 sub initialize_session {
   my ($self) = @_;
@@ -127,35 +240,8 @@ sub initialize_session {
   # Demand errorless initialization
   my $init_status = $latexml->getStatusMessage;
   croak $init_status unless ($init_status !~ /error/i);
-  # Load preamble:
-  my $digested_preamble;
-  my $digested_postamble;
-  eval {
-    local $SIG{'ALRM'} = sub { die "alarm\n" };
-    alarm($self->{opts}->{timeout});
-    $digested_preamble = load_aux('preamble',$self->{opts},$latexml,$self->{digested_preamble});
-    $digested_postamble = load_aux('postamble',$self->{opts},$latexml,$self->{digested_postamble});
-    alarm(0);
-    1;
-  };
-  if ($@) { #Fatal error
-    if ($@ =~ "Fatal:perl:die alarm") { #Alarm handler: (treat timeouts as fatals)
-      print STDERR "$@\n";
-      print STDERR "Fatal error: pre/postamble conversion timeout after ".$self->{opts}->{timeout}." seconds!\n";
-      print STDERR "\npre/postamble conversion incomplete (timeout): ".$latexml->getStatusMessage.".\n";
-    } else {
-      print STDERR "$@\n";
-      print STDERR "\npre/postamble conversion complete: ".$latexml->getStatusMessage.".\n";
-    }
-    undef $self->{latexml};
-    undef $self->{digested_preamble};
-    undef $self->{digested_postamble};
-    $self->{ready}=0; return;
-  }
-  # Save in object:
+  # Save latexml in object:
   $self->{latexml} = $latexml;
-  $self->{digested_preamble} = $digested_preamble;
-  $self->{digested_postamble} = $digested_postamble;
   $self->{ready}=1;
 }
 
@@ -178,17 +264,12 @@ sub convert {
 
   # Inform of identity, increase conversion counter
   my $opts = $self->{opts};
-  print STDERR $opts->{identity}."\n" if $opts->{verbosity} >= 0;
+  print STDERR "\n",$opts->{identity},"\n" if $opts->{verbosity} >= 0;
 
   # Handle What's IN?
   # 1. Math profile should get a mathdoc() wrapper
   if ($opts->{whatsin} eq "math") {
     $source = MathDoc($source);
-  }
-  # 2. Prepare fragment pre/postambles if needed:
-  elsif ($opts->{whatsin} eq 'fragment') {
-    $opts->{'fragment_preamble'} = 'standard_preamble.tex';
-    $opts->{'fragment_postamble'} = 'standard_postamble.tex';
   }
 
   # Prepare content and determine source type
@@ -198,12 +279,14 @@ sub convert {
   my $latexml = $self->{latexml};
   $latexml->withState(sub {
                         my($state)=@_; # Sandbox state
-                        # Save preamble/postamble information for further use:
-                        $state->assignValue('_preamble_loaded',$opts->{preamble},'global');
-                        $state->assignValue('_postamble_loaded',$opts->{postamble},'global');
                         $state->assignValue('_authlist',$opts->{authlist},'global');
                         $state->pushDaemonFrame; });
 
+  # Check on the wrappers:
+  if ($opts->{whatsin} eq 'fragment') {
+    $opts->{'preamble_wrapper'} = $opts->{preamble}||'standard_preamble.tex';
+    $opts->{'postamble_wrapper'} = $opts->{postamble}||'standard_postamble.tex';
+  }
   # First read and digest whatever we're given.
   my ($digested,$dom,$serialized);
   # Digest source:
@@ -211,42 +294,33 @@ sub convert {
     local $SIG{'ALRM'} = sub { die "alarm\n" };
     alarm($opts->{timeout});
     if ($opts->{source_type} eq 'url') {
-      $digested = $latexml->digestString($content,preamble=>$opts->{'fragment_preamble'},
-                                         postamble=>$opts->{'fragment_postamble'},source=>$source,noinitialize=>1);
+      $digested = $latexml->digestString($content,preamble=>$opts->{'preamble_wrapper'},
+                                         postamble=>$opts->{'postamble_wrapper'},source=>$source,noinitialize=>1);
     } elsif ($opts->{source_type} eq 'file') {
       if ($opts->{type} eq 'bibtex') {
         # TODO: Do we want URL support here?
-        $digested = $latexml->digestBibTeXFile($content,preamble=>$opts->{'fragment_preamble'},
-                                               postamble=>$opts->{'fragment_postamble'},noinitialize=>1);
+        $digested = $latexml->digestBibTeXFile($content);
       } else {
-        $digested = $latexml->digestFile($content,preamble=>$opts->{'fragment_preamble'},
-                                         postamble=>$opts->{'fragment_postamble'},noinitialize=>1);
+        $digested = $latexml->digestFile($content,preamble=>$opts->{'preamble_wrapper'},
+                                         postamble=>$opts->{'postamble_wrapper'},noinitialize=>1);
       }}
     elsif ($opts->{source_type} eq 'string') {
-      $digested = $latexml->digestString($content,preamble=>$opts->{'fragment_preamble'},
-                                         postamble=>$opts->{'fragment_postamble'},noinitialize=>1);
+      $digested = $latexml->digestString($content,preamble=>$opts->{'preamble_wrapper'},
+                                         postamble=>$opts->{'postamble_wrapper'},noinitialize=>1);
     }
 
     # Clean up:
     delete $opts->{source_type};
-    if ($opts->{whatsin} eq 'fragment') {
-      delete $opts->{fragment_preamble};
-      delete $opts->{fragment_postamble};
-    }
-
-
+    delete $opts->{'preamble_wrapper'};
+    delete $opts->{'postamble_wrapper'};
     # Now, convert to DOM and output, if desired.
     if ($digested) {
-      $digested = LaTeXML::List->new($self->{digested_preamble},$digested)
-        if defined $self->{digested_preamble};
-      $digested = LaTeXML::List->new($digested,$self->{digested_postamble})
-        if defined $self->{digested_postamble};
       local $LaTeXML::Global::STATE = $$latexml{state};
       if ($opts->{format} eq 'tex') {
         $serialized = LaTeXML::Global::UnTeX($digested);
       } elsif ($opts->{format} eq 'box') {
         $serialized = $digested->toString;
-      } else {
+      } else { # Default is XML
         $dom = $latexml->convertDocument($digested);
         $serialized = $dom->toString(1) unless $opts->{post};
       }}
@@ -295,6 +369,16 @@ sub convert {
   # Close and restore STDERR to original condition.
   close LOG;
   *STDERR=*ERRORIG;
+
+  # Serialize result for direct use:
+  if (defined $result) {
+    if ($opts->{format} =~ 'x(ht)?ml') {
+      $result = $result->toString(1);
+    } elsif ($opts->{format} =~ /^html/) {
+      $result = $result->getDocument->toStringHTML;
+    }
+  }
+
   my $return = {result=>$result,log=>$log,status=>$status};
 }
 
@@ -308,16 +392,6 @@ sub convert_post {
   $verbosity = $verbosity||0;
   our %PostOPS = (verbosity=>$verbosity,siteDirectory=>".",nocache=>1,destination=>'.');
   #Postprocess
-  #Default is XHTML, XML otherwise (TODO: Expand)
-  $format="xml" if ($style);
-  $format="xhtml" unless (defined $format);
-  if (!$style) {
-    if ($format eq "xhtml") {$style = "LaTeXML-xhtml.xsl";}
-    elsif ($format eq "html") {$style = "LaTeXML-html.xsl";}
-    elsif ($format eq "html5") {$style = "LaTeXML-html5.xsl";}
-    elsif ($format eq "xml") {undef $style;}
-    else {Error("Unrecognized target format: $format");}
-  }
   my @css=();
   unshift (@css,"core.css") if ($defaultcss);
   $parallel = $parallel||0;
@@ -352,7 +426,6 @@ sub convert_post {
     }
   }
   my $DB = LaTeXML::Util::ObjectDB->new(dbfile=>$dbfile,%PostOPS);
-  my @bibliographies = undef;
   ### Advanced Processors:
   if ($opts->{split}) {
     require 'LaTeXML/Post/Split.pm';
@@ -366,9 +439,9 @@ sub convert_post {
       push(@procs,LaTeXML::Post::MakeIndex->new(db=>$DB, permuted=>$opts->{permutedindex},
                                                 split=>$opts->{splitindex}, scanner=>$scanner,
                                                 %PostOPS)); }
-    if (@bibliographies) {
+    if (@{$opts->{bibliographies}}) {
       require 'LaTeXML/Post/MakeBibliography.pm';
-      push(@procs,LaTeXML::Post::MakeBibliography->new(db=>$DB, bibliographies=>[@bibliographies],
+      push(@procs,LaTeXML::Post::MakeBibliography->new(db=>$DB, bibliographies=>$opts->{bibliographies},
 						       split=>$opts->{splitbibliography}, scanner=>$scanner,
 						       %PostOPS)); }
     if ($opts->{crossref}) {
@@ -377,7 +450,6 @@ sub convert_post {
 					       ($opts->{numbersections} ? (number_sections=>1):()),
 					       ($opts->{navtoc} ? (navigation_toc=>$opts->{navtoc}):()),
 					       %PostOPS)); }
-    
     if ($opts->{mathimages}) {
       require 'LaTeXML/Post/MathImages.pm';
       push(@procs,LaTeXML::Post::MathImages->new(magnification=>$opts->{mathimagemag},%PostOPS));
@@ -390,9 +462,15 @@ sub convert_post {
       # TODO: Rethink full-fledged graphics support
       require 'LaTeXML/Post/Graphics.pm';
       my @g_options=();
+      if($opts->{graphicsmaps} && scalar(@{$opts->{graphicsmaps}})){
+	my @maps = map([split(/\./,$_)], @{$opts->{graphicsmaps}});
+	push(@g_options, (graphicsSourceTypes=>[map($$_[0],@maps)],
+			  typeProperties=>{map( ($$_[0]=>{destination_type=>($$_[1] || $$_[0])}), @maps)})); }
       push(@procs,LaTeXML::Post::Graphics->new(@g_options,%PostOPS));
     }
-
+    if($opts->{svg}){
+      require 'LaTeXML/Post/SVG.pm';
+      push(@procs,LaTeXML::Post::SVG->new(%PostOPS)); }
     my @mprocs=();
     ###    # If XMath is not first, it must be at END!  Or... ???
     foreach my $fmt (@$math_formats) {
@@ -447,7 +525,7 @@ sub convert_post {
 #      pathname_copy($csssource,$csspath)  if $csssource && -f $csssource;
 #      push(@csspaths,$csspath);
 #    }}
-    push(@procs,LaTeXML::Post::XSLT->new(stylesheet=>$style,
+      push(@procs,LaTeXML::Post::XSLT->new(stylesheet=>$style,
 					 parameters=>{
                                                       (@csspaths ? (CSS=>[@csspaths]):()),
                                                       ($opts->{stylesheetparam} ? (%{$opts->{stylesheetparam}}):())},
@@ -495,33 +573,6 @@ sub new_latexml {
   return $latexml;
 }
 
-sub load_aux {
-  my ($type,$opts,$latexml,$original) = @_;
-  my $digested = undef;
-  # Preload the pre/postamble if any (and not loaded)
-  if ($opts->{$type} && ($opts->{$type."_loaded"} ne $opts->{$type})) {
-    my $response=auth_get($opts->{$type},$opts->{authlist});
-    if ($response->is_success) {
-      my $content = $response->content;
-      $digested = $latexml->digestString($content,source=>$opts->{$type},noinitialize=>1);
-      $opts->{$type."_loaded"} = $opts->{$type};
-    } else {
-      if ($opts->{$type}=~/\s|\\/) {#Guess it's a string?
-        $digested = $latexml->digestString($opts->{$type},source=>"Anonymous string",noinitialize=>1);
-      } else {
-        if (!$opts->{local}) { carp "File $type allowed only when 'local' is enabled!"; return; }
-        $digested = $latexml->digestFile($opts->{$type},noinitialize=>1);
-        $opts->{$type."_loaded"} = $opts->{$type};
-      }}
-
-    # Demand errorless conversion:
-    my $init_status = $latexml->getStatusMessage;
-    croak $init_status unless ($init_status !~ /error/i);
-  }
-  $digested = $original unless defined $digested;
-  return $digested;
-}
-
 sub prepare_content {
   my ($self,$source)=@_;
   $source=~s/\n$//g; # Eliminate trailing new lines
@@ -533,7 +584,7 @@ sub prepare_content {
 	my $file = pathname_find($source,types=>['tex',q{}]);
 	$file = pathname_canonical($file) if $file;
 	#Recognize bibtex case
-	$opts->{type} = 'bibtex' if ($opts->{type} eq 'auto') && ($file =~ /\.bib$/);
+	$opts->{type} = 'bibtex' if ($opts->{type} eq 'auto') && $file && ($file =~ /\.bib$/);
 	return $file; }
       else {print STDERR "File input only allowed when 'local' is enabled,"
 	      ."falling back to string input..";
@@ -550,7 +601,7 @@ sub prepare_content {
       my $file = pathname_find($source,types=>['tex',q{}]);
       $file = pathname_canonical($file) if $file;
       #Recognize bibtex case
-      $opts->{type} = 'bibtex' if ($opts->{type} eq 'auto') && ($file =~ /\.bib$/);
+      $opts->{type} = 'bibtex' if ($opts->{type} eq 'auto') && $file && ($file =~ /\.bib$/);
       if ($file) {$opts->{source_type}="file"; return $file; }
     }
     my $response = auth_get($source,$opts->{authlist});
@@ -631,11 +682,6 @@ Supplies detailed information of the conversion log ($log),
 
 Creates a new LaTeXML object and initializes its state.
 
-=item C<< my $digested_pre = load_aux($type,$opts,$latexml,$previous_digested); >>
-
-Loads a daemon preamble/postamble (if needed), adding its definitions to the LaTeXML state and
-      maintaining a list of digested boxes.
-
 =item C<< my $content = $self->prepare_content($source); >>
 
 Determines the source type (URL, file or string) and returns the retrieved content.
@@ -653,13 +699,16 @@ Typically used only internally by C<convert>.
 
 =head2 CUSTOMIZATION OPTIONS
 
+ TODO: OBSOLETE!!! All such documentation belongs in Util::Extras::ReadOptions!
+
  Options: key=>value pairs
  preload => [modules]   optional modules to be loaded
  includestyles          allows latexml to load raw *.sty file;
                         off by default.
- preamble => [files]    loads tex files with document frontmatter.
- postamble => [files]   loads tex files with document backmatter. (TODO)
-
+ preamble => file       loads a tex file with document frontmatter.
+                        MUST! include \begin{document} or equivalent
+ postamble => file      loads a tex file with document backmatter.
+                        MUST! include \end{document} or equivalent
  paths => [dir]         paths searched for files,
                         modules, etc;
  log => file            specifies log file, reuqires 'local'

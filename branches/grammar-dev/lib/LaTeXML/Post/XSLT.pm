@@ -34,7 +34,6 @@ sub new {
     $self->Error(undef,"No stylesheet \"$stylesheet\" found!")
       unless $pathname && -f $pathname;
     $stylesheet = $pathname; }
-
   $stylesheet = LaTeXML::Common::XML::XSLT->new($stylesheet);
   if((!ref $stylesheet) || !($stylesheet->can('transform'))){
     $self->Error(undef,"Stylesheet \"$stylesheet\" is not a usable stylesheet!"); }
@@ -49,13 +48,13 @@ sub process {
   # Set up the Stylesheet parameters; making pathname parameters relative to document
   my %params = %{$$self{parameters}};
   my $dir = $doc->getDestinationDirectory;
-  if(my $css = $params{CSS}){
-    $params{CSS} = '"'.join('|',map(pathname_relative($_,$dir),@$css)) .'"'; }
-  if(my $icon = $params{ICON}){
-    $params{ICON} = '"'. pathname_relative($icon,$dir) . '"'; }
-  $doc->new($$self{stylesheet}->transform($doc->getDocument,  %params));
- }
-
+  if(my $css = $params{CSS})      { $params{CSS} = pathnameParameter($dir,@$css); }
+  if(my $js = $params{JAVASCRIPT}){ $params{JAVASCRIPT} = pathnameParameter($dir,@$js); }
+  if(my $icon = $params{ICON})    { $params{ICON} = pathnameParameter($dir,$icon); }
+  $doc->new($$self{stylesheet}->transform($doc->getDocument,  %params)); }
+sub pathnameParameter {
+  my($dir,@paths)=@_;
+  '"'.join('|',map(pathname_relative($_,$dir),@paths)) .'"'; }
 # ================================================================================
 1;
 

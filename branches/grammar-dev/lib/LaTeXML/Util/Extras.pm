@@ -145,6 +145,7 @@ sub ReadOptions {
 	   "tex"       => sub { $opts->{format} = 'tex'; },
 	   "box"       => sub { $opts->{format} = 'box'; },
 	   "bibtex"    => sub { $opts->{type}='bibtex'; },
+	   "bibliography=s" => \@{$opts->{bibliographies}}, # TODO: Document
 	   "noparse"   => sub { $opts->{noparse} = 1; },
 	   "parse"   => sub { $opts->{noparse} = 0; },
 	   "format=s"   => sub { $opts->{format} = $_[1]; },
@@ -154,19 +155,15 @@ sub ReadOptions {
            "embed"   => sub { $opts->{whatsin} = 'fragment'; },
 	   "whatsin=s" => sub {$opts->{whatsin} = $_[1]; },
 	   "whatsout=s" => sub {$opts->{whatsout} = $_[1]; },
-           "noembed"   => sub { $opts->{embed} = 0; },
-	   "force_ids" => sub { $opts->{force_ids} = 1; },
-	   "noforce_ids" => sub { $opts->{force_ids} = 0; },
+	   "force_ids!" => \$opts->{force_ids},
 	   "autoflush=s" => sub { $opts->{input_limit} = $_[1]; },
            "timeout=s"   => sub { $opts->{timeout} = $_[1]; },
            "port=s"      => sub { $opts->{port} = $_[1]; },
-           "local"       => sub { $opts->{local} = 1; },
-           "nolocal"       => sub { $opts->{local} = 0; },
+           "local!"       => \$opts->{local},
 	   "log=s"       => sub { $opts->{log} = $_[1]; },
 	   "includestyles"=> sub { $opts->{includestyles} = 1; },
 	   "inputencoding=s"=> sub { $opts->{inputencoding} = $_[1]; },
-	   "post"      => sub { $opts->{post} = 1; },
-	   "nopost"      => sub { $opts->{post} = 0; },
+	   "post!"      => \$opts->{post},
 	   "presentationmathml|pmml"     => sub { addMathFormat($opts,'pmml'); },
 	   "contentmathml|cmml"          => sub { addMathFormat($opts,'cmml'); },
 	   "openmath|om"                 => sub { addMathFormat($opts,'om'); },
@@ -180,16 +177,22 @@ sub ReadOptions {
            "stylesheetparam=s" => sub {my ($k,$v) = split(':',$_[1]);
                                   $opts->{stylesheetparam}->{$k}=$v;},
 	   "css=s"       =>  sub {$opts->{css}=$_[1];},
-	   "defaultcss" =>  sub {$opts->{defaultcss} = 1;},
-	   "nodefaultcss" =>  sub {$opts->{defaultcss} = 0;},
-	   "comments" =>  sub { $opts->{comments} = 1; },
-	   "nocomments"=> sub { $opts->{comments} = 0; },
+	   "defaultcss!" =>  \$opts->{defaultcss},
+	   "comments!" =>  \$opts->{comments},
 	   "VERSION"   => sub { $opts->{showversion}=1;},
 	   "debug=s"   => sub { eval "\$LaTeXML::$_[1]::DEBUG=1; "; },
            "documentid=s" => sub { $opts->{documentid} = $_[1];},
+	   "mathimages!"                 => \$opts->{mathimages},
+	   "mathimagemagnification=f"    => \$opts->{mathimagemag},
 	   "plane1!"                     => \$opts->{plane1},
 	   "hackplane1!"                 => \$opts->{hackplane1},
-	   "svg"       => \$opts->{svg},
+	   # For graphics: vaguely similar issues, but more limited.
+	   # includegraphics images (eg. ps) can be converted to webimages (eg.png)
+	   # picture/pstricks images can be converted to png or possibly svg.
+	   "graphicimages!"=>\$opts->{dographics},
+	   "graphicsmap=s" =>\@{$opts->{graphicsmaps}},
+	   "svg!"       => \$opts->{svg},
+	   "pictureimages!"=>\$opts->{picimages},
 	   "help"      => sub { $opts->{help} = 1; } ,
 	  ) or pod2usage(-message => $opts->{identity}, -exitval=>1, -verbose=>99,
 			 -input => pod_where({-inc => 1}, __PACKAGE__),
@@ -198,21 +201,12 @@ sub ReadOptions {
   pod2usage(-message=>$opts->{identity}, -exitval=>1, -verbose=>99,
 	    -input => pod_where({-inc => 1}, __PACKAGE__),
 	    -sections => 'OPTIONS/SYNOPSIS', output=>\*STDOUT) if $opts->{help};
-  if (!$opts->{local} && ($opts->{destination} || $opts->{log} || $opts->{postdest} || $opts->{postlog})) 
-    {carp "I/O from filesystem not allowed without --local!\n".
-       " Will revert to sockets!\n";
-     undef $opts->{destination}; undef $opts->{log};
-     undef $opts->{postdest}; undef $opts->{postlog};}
-  
+
   # Check that destination is valid before wasting any time...
   if($opts->{destination}){
     $opts->{destination} = pathname_canonical($opts->{destination});
     if(my $dir =pathname_directory($opts->{destination})){
       pathname_mkdir($dir) or croak "Couldn't create destination directory $dir: $!"; }}
-  
-  # HOWEVER, any post switch implies post:
-  $opts->{math_formats} = [] if ((defined $opts->{post}) && ($opts->{post} == 0));
-  $opts->{post}=1 if (@{$opts->{math_formats}});
   # Removed math formats are irrelevant for conversion:
   delete $opts->{removed_math_formats};
 
@@ -300,12 +294,12 @@ latexmls/latexmlc [options]
  --output=file      [obsolete synonym for --destination]
  --preload=module   requests loading of an optional module;
                     can be repeated
+ --preamble=file    loads a tex file containing document frontmatter.
+                    MUST! include \begin{document} or equivalent
+ --postamble=file   loads a tex file containing document backmatter.
+                    MUST! include \end{document} or equivalent
  --includestyles    allows latexml to load raw *.sty file;
                     by default it avoids this.
- --preamble=file    loads a tex file containing document frontmatter.
- --postamble=file   loads a tex file containing document backmatter.
-                    WARNING: Parsed separately from document
-                             can't reuse macros
  --base=dir         Specifies the base directory that the server
                     operates in. Useful when converting documents
                     that employ relative paths.
@@ -353,13 +347,14 @@ latexmls/latexmlc [options]
  --css=cssfile           adds a css stylesheet to html/xhtml
                          (can be repeated)
  --nodefaultcss          disables the default css stylesheet
+ --mathimages            converts math to images
+                         (default for html format)
+ --nomathimages          disables the above
+ --mathimagemagnification=mag specifies magnification factor
  --pmml             converts math to Presentation MathML
                     (default for xhtml format)
  --cmml             converts math to Content MathML
- --openmath         converts math to OpenMath 
- --keepTeX          keeps the TeX source of a formula as a MathML
-                    annotation element
-                    TODO: Add support again, currently broken
+ --openmath         converts math to OpenMath
  --keepXMath        keeps the XMath of a formula as a MathML
                     annotation-xml element
  --nocomments       omit comments from the output
@@ -396,6 +391,24 @@ Specifies the destination file; by default the XML is written to STDOUT.
 Requests the loading of an optional module or package.  This may be useful if the TeX code
     does not specificly require the module (eg. through input or usepackage).
     For example, use C<--preload=LaTeX.pool> to force LaTeX mode.
+
+=item C<--preamble>=I<file>
+
+Requests the loading of a tex file with document frontmatter, to be read in before the converted document, 
+    but after all --preload entries.
+
+Note that the given file MUST contain \begin{document} or an equivalent environment start,
+    when processing LaTeX documents.
+
+If the file does not contain content to appear in the final document, but only macro definitions and 
+    setting of internal counters, it is more appropriate to use --preload instead.
+
+=item C<--postamble>=I<file>
+
+Requests the loading of a tex file with document backmatter, to be read in after the converted document.
+
+Note that the given file MUST contain \end{document} or an equivalent environment end,
+    when processing LaTeX documents.
 
 =item C<--includestyles>
 
@@ -512,6 +525,16 @@ Requests an embeddable XHTML div (requires: --post --format=xhtml),
     respectively the top division of the document's body.
     Caveat: This experimental mode is enabled only for fragment profile and post-processed
     documents (to XHTML).
+
+=item C<--mathimages>, C<--nomathimages>
+
+Requests or disables the conversion of math to images.
+Conversion is the default for html format.
+
+=item C<--mathimagemagnification=>I<factor>
+
+Specifies the magnification used for math images, if they are made.
+Default is 1.75.
 
 =item C<--pmml>
 
