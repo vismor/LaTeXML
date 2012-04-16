@@ -58,7 +58,7 @@ our $RULES = [
               ['RelativeFormula',[qw/RelativeFormula _ METARELOP _ Formula/],'chain_apply'],
 
 	      # 5.1. Infix Modifier - Generic
-              ['Term',[qw/FactorArgument _ RELOP _ Term/],'infix_apply'],
+              #['Term',[qw/FactorArgument _ RELOP _ Term/],'infix_apply'],
 	      # 5.2 Infix Modifier - Typing
               ['Term',[qw/FactorArgument _ COLON _ Type/],'infix_apply'],
 
@@ -87,11 +87,11 @@ our $RULES = [
               ['Sequence',[qw/Sequence _ PUNCT _ Element/],'infix_apply'],
 
               # 8. Lexicon
-              ['FactorArgument',['ATOM']],
-              ['FormulaArgument',['ATOM']],
-              ['FactorArgument',['UNKNOWN']],
-              ['FormulaArgument',['UNKNOWN']],
-              ['FactorArgument',['NUMBER']],
+              ['FactorArgument',['ATOM'],'first_arg_term'],
+              ['FormulaArgument',['ATOM'],'first_arg_formula'],
+              ['FactorArgument',['UNKNOWN'],'first_arg_term'],
+              ['FormulaArgument',['UNKNOWN'],'first_arg_formula'],
+              ['FactorArgument',['NUMBER'],'first_arg_term'],
               ['RELOP',['EQUALS']],
               ['METARELOP',['EQUALS']],
               ['ADDOP',['LOGICOP']], # Boolean algebra, lattices

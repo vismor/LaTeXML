@@ -21,6 +21,27 @@ sub first_arg {
   $xml;
 }
 
+# DG: If we don't extend Marpa, we need custom routines to preserve
+# grammar category information
+sub first_arg_role {
+  my ($role,$parse) = @_;
+  return $parse if ref $parse;
+  my ($lex,$id) = split(/:/,$_[1]);
+  my $xml = Lookup($id);
+  $xml = $xml ? ($xml->cloneNode(1)) : undef;
+  $xml->setAttribute('role',$role) if $xml;
+  $xml;
+}
+sub first_arg_term {
+  my ($state,$parse) = @_;
+  first_arg_role('term',$parse);
+}
+sub first_arg_formula {
+  my ($state,$parse) = @_;
+  first_arg_role('formula',$parse);
+}
+
+
 sub chain_apply {
   my ( $state, $t1, $c, $op, $c2, $t2) = @_;
   $op = first_arg(undef,$op);
