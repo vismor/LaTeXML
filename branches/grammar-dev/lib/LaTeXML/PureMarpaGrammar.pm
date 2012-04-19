@@ -98,6 +98,7 @@ our $RULES = [
               # Start:
               ['Start',['Term']],
               ['Start',['Formula']],
+              ['Start',['RelativeFormula']],
               ['Start',['Sequence']]
 ];
 
