@@ -46,8 +46,11 @@ our $RULES = [
               ['Type',[qw/Type _ ARROW _ FactorArgument/],'infix_apply'],
 
               # 3. Infix Relation
-              ['Relative',[qw/Term _ RELOP _ Term/],'infix_apply'],
-              ['Relative',[qw/Relative _ RELOP _ Term/],'chain_apply'],
+              # TODO: How do we deal with term sequences, 1,2,3\in N ?
+              ['Termlike',['Term']],
+              ['Termlike',['TermSequence']],
+              ['Relative',[qw/Termlike _ RELOP _ Termlike/],'infix_apply'],
+              ['Relative',[qw/Relative _ RELOP _ Termlike/],'chain_apply'],
 
               # 4.1. Infix Logical Operators
               ['FormulaArgument',['Relative']], # Needs the distinction to avoid chaining parse for "x>y"
@@ -85,6 +88,10 @@ our $RULES = [
               # 7.2.1 Recursive case: sequences
               ['Sequence',[qw/Element _ PUNCT _ Element/],'infix_apply'],
               ['Sequence',[qw/Sequence _ PUNCT _ Element/],'infix_apply'],
+
+              # 7.3. Term sequences - TODO: what are these really?
+              ['TermSequence',[qw/Term _ PUNCT _ Term/],'infix_apply'],
+              ['TermSequence',[qw/TermSequence _ PUNCT _ Term/],'infix_apply'],
 
               # 8. Lexicon
               ['FactorArgument',['ATOM'],'first_arg_term'],
