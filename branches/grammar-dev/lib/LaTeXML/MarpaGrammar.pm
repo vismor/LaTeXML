@@ -65,20 +65,24 @@ our $RULES = [
 
 	      # 5.1. Infix Modifier - Generic
 	      # Modified terms should only appear in sequences, hence entries
-              ['Entry',[qw/FactorArgument _ RELOP _ Term/],'infix_apply_entry'],
-	      # ... or relations, hence termlike
+	      # Hm, not really, they can appear anywhere with ease, as long as 
+	      #      the relation ops are from different domains, so that there is a unique reading
+              #['Entry',[qw/FactorArgument _ RELOP _ Term/],'infix_apply_entry'],
+	      # So, allow them everywhere and let them explode:
               ['FactorArgument',[qw/FactorArgument _ RELOP _ Term/],'infix_apply_term'],
               ['TermArgument',[qw/TermArgument _ RELOP _ Term/],'infix_apply_term'],
+              ['FormulaArgument',[qw/FormulaArgument _ RELOP _ Term/],'infix_apply_formula'],
 	      # 5.2 Infix Modifier - Typing
-              ['Entry',[qw/FactorArgument _ COLON _ Type/],'infix_apply'],
+              #['Entry',[qw/FactorArgument _ COLON _ Type/],'infix_apply'],
               ['FactorArgument',[qw/FactorArgument _ COLON _ Type/],'infix_apply_term'],
               ['TermArgument',[qw/TermArgument _ COLON _ Type/],'infix_apply_term'],
+              ['FormulaArgument',[qw/FormulaArgument _ COLON _ Type/],'infix_apply_formula'],
 
               # 6. Fences
               ['FactorArgument',[qw/OPEN _ Term _ CLOSE/],'fenced'],
 	      ['FormulaArgument',[qw/OPEN _ Formula _ CLOSE/],'fenced'],
 	      ['RelativeFormulaArgument',[qw/OPEN _ RelativeFormula _ CLOSE/],'fenced'], # Examples???
-              ['ADDOP',[qw/OPEN _ ADDOP _ CLOSE/],'fenced'], # (-) ??
+              ['ADDOP',[qw/OPEN _ ADDOP _ CLOSE/],'fenced'], # (-) ?? TODO: what about the other ops?
               ['FactorArgument',[qw/OPEN _ Vector _ CLOSE/],'fenced'], # vectors are factors
               ['TermArgument',[qw/OPEN _ Sequence _ CLOSE/],'fenced'], # objects are terms
 
@@ -109,27 +113,19 @@ our $RULES = [
               ['TermSequence',[qw/TermSequence _ PUNCT _ Term/],'infix_apply'],
 
 	      # 8. Scripts
-	      [ 'FactorArgument',[qw/FactorArgument _ POSTSUPERSCRIPT/],'postscript_apply'],
-	      [ 'FactorArgument',[qw/FactorArgument _ POSTSUBSCRIPT/],'postscript_apply'],
-	      [ 'TermArgument',[qw/TermArgument _ POSTSUPERSCRIPT/],'postscript_apply'],
-	      [ 'TermArgument',[qw/TermArgument _ POSTSUBSCRIPT/],'postscript_apply'],
-	      [ 'FormulaArgument',[qw/FormulaArgument _ POSTSUPERSCRIPT/],'postscript_apply'],
-	      [ 'FormulaArgument',[qw/FormulaArgument _ POSTSUBSCRIPT/],'postscript_apply'],
-	      [ 'RelativeFormulaArgument',[qw/RelativeFormulaArgument _ POSTSUPERSCRIPT/],'postscript_apply'],
-	      [ 'RelativeFormulaArgument',[qw/RelativeFormulaArgument _ POSTSUBSCRIPT/],'postscript_apply'],
-	      [ 'ADDOP',[qw/ADDOP _ POSTSUPERSCRIPT/],'postscript_apply'],
-	      [ 'ADDOP',[qw/ADDOP _ POSTSUBSCRIPT/],'postscript_apply'],
-	      [ 'LOGICOP',[qw/LOGICOP _ POSTSUPERSCRIPT/],'postscript_apply'],
-	      [ 'LOGICOP',[qw/LOGICOP _ POSTSUBSCRIPT/],'postscript_apply'],
-	      [ 'MULOP',[qw/MULOP _ POSTSUPERSCRIPT/],'postscript_apply'],
-	      [ 'MULOP',[qw/MULOP _ POSTSUBSCRIPT/],'postscript_apply'],
-	      [ 'RELOP',[qw/RELOP _ POSTSUPERSCRIPT/],'postscript_apply'],
-	      [ 'RELOP',[qw/RELOP _ POSTSUBSCRIPT/],'postscript_apply'],
-	      [ 'METARELOP',[qw/METARELOP _ POSTSUPERSCRIPT/],'postscript_apply'],
-	      [ 'METARELOP',[qw/METARELOP _ POSTSUBSCRIPT/],'postscript_apply'],
-	      [ 'ARROW',[qw/ARROW _ POSTSUPERSCRIPT/],'postscript_apply'],
-	      [ 'ARROW',[qw/ARROW _ POSTSUBSCRIPT/],'postscript_apply'],
-	      # TODO: Float scripts
+	      # 8.1. Post scripts
+	      (map { my $script=$_;
+		    map { my $op=$_; {lhs=>$op, rhs=>[$op,'_',$script],action=>'postscript_apply',rank=>2} }
+		      qw/FactorArgument TermArgument FormulaArgument RelativeFormulaArgument
+			 ADDOP LOGICOP MULOP RELOP METARELOP ARROW/;
+		  } qw/POSTSUPERSCRIPT POSTSUBSCRIPT/),
+	      # 8.2. Pre/Float scripts
+	      (map { my $script=$_;
+		    map { my $op=$_; [$op, [$script,'_',$op],'prescript_apply'] }
+		      qw/FactorArgument TermArgument FormulaArgument RelativeFormulaArgument
+			 ADDOP LOGICOP MULOP RELOP METARELOP ARROW/;
+		  } qw/FLOATSUPERSCRIPT FLOATSUBSCRIPT/),
+
 
               # 9. Lexicon
               ['FactorArgument',['ATOM'],'first_arg_term'],
@@ -165,13 +161,13 @@ sub new {
 
 sub parse {
   my ($self,$rule,$unparsed) = @_;
-  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar}});
-                                          #ranking_method => 'high_rule_only', max_parses=>50} );
+  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar},
+                                          ranking_method => 'high_rule_only'} );
 
   # Insert concatenation
   @$unparsed = map (($_, '_::'), @$unparsed);
   pop @$unparsed;
-  #print STDERR "\n\n";
+  print STDERR "\n\n";
   foreach (@$unparsed) {
     my ($category,$lexeme,$id) = split(':',$_);
     # Issues: 
@@ -181,7 +177,7 @@ sub parse {
     } elsif ($category eq 'RELOP') {
       $category = 'EQUALS' if ($lexeme eq 'equals');
     }
-    #print STDERR "$category:$lexeme:$id\n";
+    print STDERR "$category:$lexeme:$id\n";
 
     last unless $rec->read($category,$lexeme.':'.$id);
   }
