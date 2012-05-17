@@ -67,9 +67,9 @@ fragment => {
              stylesheet=>q{},defaultcss=>1,icon=>0, inputencoding=>q{},
              documentid =>q{}, type=>'auto', css => [], debugs=>[],
              paths => ['.'],
-             preload=>["LaTeX.pool", "article.cls", "amsmath.sty", "amsthm.sty", "amstext.sty",
+             preload=>["article.cls", "LaTeX.pool", "amsmath.sty", "amsthm.sty", "amstext.sty",
                        "amssymb.sty", "eucal.sty","[dvipsnames]color.sty",'url.sty','hyperref.sty',
-                       'planetmath-specials.sty'],
+                       'planetmath-specials.sty','pmath.sty'],
              authlist=>{}, force_ids=>1
            },
 'fragment-omdoc' => {
@@ -88,11 +88,12 @@ math => {
              post=>1, parallelmath=>1,
              timeout=>60, format=>'xhtml', base=>q{},
 	     whatsin=>'math', whatsout=>'math',
+	     source_type=>'string', # always works on strings!
              math_formats=>[qw(pmml cmml)],
              help=>0, showversion=>0,
              stylesheet=>q{},defaultcss=>1,icon=>0, inputencoding=>q{}, 
              documentid =>q{}, type=>'auto', css => [], paths => [q{.}],
-             paths => ['/home/dginev/misc','/home/dginev/misc/xcolor','/home/dginev/misc/swon'],
+             paths => ['.'],
              preload=>["LaTeX.pool", "article.cls", "amsmath.sty", "amsthm.sty", "amstext.sty", 
                        "amssymb.sty", "eucal.sty","[dvipsnames]color.sty",'url.sty','hyperref.sty','mws.sty'],
              debugs=>[], authlist=>{}
@@ -172,12 +173,32 @@ sub new {
 sub find_daemon {
   my ($self,$opt) = @_;
   my  $profile = lc($opt->{profile})||'custom';
+
+  # Merge the new options with the profile defaults:
+  my $p_opt = $self->{db}->lookup("profile:$profile");
+  for my $key (keys %$opt) {
+    if ($key =~ /^p(ath|reload)/) { # Paths and preloads get merged in
+      $p_opt->{$key} = [] unless defined $p_opt->{$key};
+      foreach my $entry (@{$opt->{$key}}) {
+        my $new=1;
+        foreach (@{$p_opt->{$key}}) {
+          if ($entry eq $_) { $new=0; last; }
+        }
+        # If new to the array, push:
+        push (@{$p_opt->{$key}}, $entry) if ($new);
+      }
+    } else { # The rest get overwritten
+      $p_opt->{$key} = $opt->{$key};
+    }
+  }
+  %$opt=%$p_opt; # Add profile defaults to user options
+
   # TODO: Make this more flexible via an admin interface later
   my $d = $self->{daemons}->{$profile};
   if (! defined $d) {
     #Boot a daemon of this profile:
     if ($profile ne 'custom') {
-      $d = $self->boot_profile($profile);
+      $d = $self->boot_profile($profile,$opt);
       $self->{daemons}->{$profile}=$d;
     } else {
       $d = $self->boot_custom($opt);
@@ -188,7 +209,7 @@ sub find_daemon {
 }
 
 sub boot_profile {
-  my ($self,$profile) = @_;
+  my ($self,$profile,$opt) = @_;
   #Start with the options set for this profile
   my $p_opt = $self->{db}->lookup("profile:$profile");
   $self->boot_custom($p_opt->as_hashref);
@@ -257,7 +278,7 @@ sub modify_user {
 
 sub delete_user {
   my ($self,$user) = @_;
-  $self->{db}->purge("user:$user");
+  $self->{db}->unregister("user:$user");
   return "Successfully deleted user $user!\n";
 }
 
@@ -403,6 +424,19 @@ sub status {
 }
 
  #TODO: Also provide an interface for examining and changing the options of existing daemons
+
+###########################################
+#### ObjectDB helpers #####
+###########################################
+package LaTeXML::Util::ObjectDB::Entry;
+sub as_hashref {
+  my($self)=@_;
+  my $hashref = {};
+  foreach (keys %$self) {
+    $hashref->{$_} = decodeValue($self->{$_});
+  }
+  return $hashref;
+}
 
 1;
 

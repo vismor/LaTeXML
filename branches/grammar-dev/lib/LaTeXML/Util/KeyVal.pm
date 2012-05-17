@@ -17,7 +17,7 @@ use LaTeXML::Package;
 our @ISA = qw(Exporter);
 our @EXPORT= (qw(&ReadRequiredKeyVals &ReadOptionalKeyVals
 		 &DefKeyVal
-		 &KeyVal &KeyVals &ParseKeyValList));
+		 &KeyVal &KeyVals));
 
 #======================================================================
 # New Readers for required and optional KeyVal sets.
@@ -104,7 +104,14 @@ sub readKeyVals {
 	my $typedef = $LaTeXML::Parameters::PARAMETER_TABLE{$type};
 	StartSemiverbatim if $typedef && $$typedef{semiverbatim};
 
-	($value,$delim)=$gullet->readUntil($T_COMMA,$close);
+	## ($value,$delim)=$gullet->readUntil($T_COMMA,$close);
+	# This is the core of $gullet->readUntil, but preserves braces needed by rare key types
+	my($tok,@toks)=();
+	while((!defined ($delim=$gullet->readMatch($T_COMMA,$close)))
+	     && (defined ($tok=$gullet->readToken()))){ # Copy next token to args
+	  push(@toks,$tok,
+	       ($tok->getCatcode == CC_BEGIN ? ($gullet->readBalanced->unlist,T_END) : ())); }
+	$value = Tokens(@toks);
 	if(($type eq 'Plain') || ($typedef && $$typedef{undigested})){}	# Fine as is.
 	elsif($type eq 'Semiverbatim'){ # Needs neutralization
 	  $value = $value->neutralize; }
@@ -123,21 +130,6 @@ sub readKeyVals {
       unless $delim;
     last if $delim->equals($close); }
   LaTeXML::KeyVals->new($keyset,$open,$close,@kv); }
-
-#**********************************************************************
-#DG: Bruce, we need some treatment for List values for KeyVal.
-# I am putting a helper subroutine for now, but maybe there is a better solution?
-sub ParseKeyValList {
- my ($list) = @_;
- $list = ToString($list);
- $list =~ s/\s//g;#no whitespace
-#Very simple unwrap of { }
- if ($list =~ m/^\{(.+)\}$/) {
-   $list = $1;
- }
- my @values = split(",",$list);
- @values;
-}
 
 #**********************************************************************
 # This defines the KeyVal data object that can appear in the datastream

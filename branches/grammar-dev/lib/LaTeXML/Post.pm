@@ -15,13 +15,13 @@ use strict;
 use Time::HiRes;
 use Encode;
 use LaTeXML::Util::Pathname;
+
 sub new {
   my($class,%options)=@_;
   my $self = bless {%options}, $class; 
   $$self{verbosity} = 0 unless defined $$self{verbosity};
   $$self{resourceDirectory} = $options{resourceDirectory};
   $$self{resourcePrefix}    = $options{resourcePrefix};
-  $$self{siteDirectory}     = $options{siteDirectory};
   $self; }
 
 sub getNamespace            { $_[0]->{namespace} || "http://dlmf.nist.gov/LaTeXML"; }
@@ -73,14 +73,6 @@ sub ProgressDetailed {
   my($self,$doc,$msg)=@_;
   my $dest= $doc && $doc->getDestination;
   print STDERR "".(ref $self).($dest ? "[".$dest."]" : '').": $msg\n" if $$self{verbosity}>1; }
-
-#======================================================================
-# Return a pathname relative to the site base directory
-sub siteRelativePathname {
-  my($self,$pathname)=@_;
-  (defined $pathname ? pathname_relative($pathname, $$self{siteDirectory}) : undef); }
-
-sub getSiteDirectory { $_[0]->{siteDirectory}; }
 
 #======================================================================
 # Some postprocessors will want to create a bunch of "resource"s,
@@ -200,16 +192,14 @@ sub processNode {
       if((ref $secondary eq 'ARRAY') && ($$secondary[0]=~/^(\w*):/) && ($1 ne $nsprefix)){
 	$secondary = $proc->outerWrapper($doc,$math,$secondary); }
       push(@secondaries, [$proc,$secondary]); }
-    @markup = $self->combineParallel($doc,$math, $primary,@secondaries);
-  }
+    @markup = $self->combineParallel($doc,$math, $primary,@secondaries); }
   else {
     @markup = ($self->convertNode($doc,$xmath,$style)); }
   # we now REMOVE the ltx:XMath from the ltx:Math
   # (if there's an XMath PostProcessing module, it will add it back, with appropriate id's
   $doc->removeNodes($xmath);
   # Then, we add all the conversion results to ltx:Math
-  $doc->addNodes($math, $self->outerWrapper($doc,$math, @markup));
-}
+  $doc->addNodes($math, $self->outerWrapper($doc,$math, @markup)); }
 
 # NOTE: Sort out how parallel & outerWrapper should work.
 # It probably ought to be that if the conversion is being embedded in
@@ -289,6 +279,7 @@ our $XPATH = LaTeXML::Common::XML::XPath->new(ltx=>$NSURI);
 # Useful options:
 #   destination = the ultimate destination file for this document to be written.
 #   destinationDirectory = the directory it will be stored in (derived from $destination)
+#   siteDirectory = the root directory of where the entire site will be contained
 #   namespaces = a hash of namespace prefix => namespace uri
 #   namespaceURIs = reverse hash of above.
 #   nocache = a boolean, disables storing of permanent LaTeXML.cache
@@ -304,6 +295,15 @@ sub new {
   if((defined $options{destination}) && (!defined $options{destinationDirectory})){
     my($vol,$dir,$name)=File::Spec->splitpath($data{destination});
     $data{destinationDirectory} = $dir || '.'; }
+  # Check consistency of siteDirectory (providing there's a destinationDirectory)
+  if($data{destinationDirectory}){
+    if($data{siteDirectory}){
+      (bless {},$class)->Error("The destination directory ($data{destinationDirectory})"
+		   ." must be within the siteDirectory ($data{siteDirectory})")
+	unless pathname_is_contained($data{destinationDirectory},$data{siteDirectory}); }
+    else {
+      $data{siteDirectory} = $data{destinationDirectory}; }}
+
   $data{document}=$xmldoc;
   $data{namespaces}={ltx=>$NSURI} unless $data{namespaces};
   $data{namespaceURIs}={$NSURI=>'ltx'} unless $data{namespaceURIs};
@@ -376,6 +376,19 @@ sub getSourceDirectory      { $_[0]->{sourceDirectory} || '.'; }
 sub getSearchPaths          { @{$_[0]->{searchpaths}}; }
 sub getDestination          { $_[0]->{destination}; }
 sub getDestinationDirectory { $_[0]->{destinationDirectory}; }
+sub getSiteDirectory        { $_[0]->{siteDirectory}; }
+
+# Given an absolute pathname in the document destination directory,
+# return the corresponding pathname relative to the site directory (they maybe different!).
+sub siteRelativePathname {
+  my($self,$pathname)=@_;
+  (defined $pathname ? pathname_relative($pathname, $$self{siteDirectory}) : undef); }
+
+sub siteRelativeDestination {
+  my($self)=@_;
+  (defined $$self{destination}
+   ? pathname_relative($$self{destination},$$self{siteDirectory})
+   : undef); }
 
 sub getParentDocument { $_[0]->{parentDocument}; }
 sub getAncestorDocument { 
@@ -622,6 +635,10 @@ sub cloneNode {
     if(my $id = $idmap{$n->getAttribute('idref')}){
       $n->setAttribute(idref=>$id); }} # use id or fragid?
   $copy; }
+
+sub cloneNodes {
+  my($self,@nodes)=@_;
+  map($self->cloneNode($_),@nodes); }
 
 #======================================================================
 

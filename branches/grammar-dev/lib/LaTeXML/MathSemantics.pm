@@ -1,81 +1,82 @@
 package LaTeXML::MathSemantics;
-use Data::Dumper;
 
 # Startup actions: import the constructors
 { BEGIN{ use LaTeXML::MathParser qw(:constructors); 
 #### $::RD_TRACE=1;
 }}
 
-### OO Driver methods
-
 sub new {
   my ($class,@args) = @_;
   bless {steps=>[]}, $class;
 }
-sub record_step {
-  my ($self,$lhs,$rhs,$rank) = @_;
-  push @{$self->{steps}}, [$lhs,$rhs,$rank];
-#  print STDERR Dumper "Step ".scalar(@{$self->{steps}}).": \n".Dumper($self->{steps})."\n";
-}
 
-sub lhs {
-  my $steps = $_[0]->{steps};
-  $steps ? $steps->[-1]->[0] : {};
-}
-sub rhs {
-  my $steps = $_[0]->{steps};
-  $steps ? $steps->[-1]->[1] : {};
-}
-
-sub annotate_features {
-  my ($state,$struct) = @_;
-  if ($state) {
-    my $lhs = $state->lhs();
-    if ((ref $lhs) eq 'HASH') { #Feature vector case, set attributes
-      if ($struct =~ /XML::/) { # LibXML object
-	$struct->setAttribute($_,$lhs->{$_}) foreach (keys %$lhs);
-      } else { #LaTeXML object
-	my $attr = $struct->[1];
-	$attr->{$_} = $lhs->{$_} foreach (keys %$lhs);
-      }
-    }
-  }
-  $struct;
-}
-
-###########################################
-###########################################
-### Actual semantic routines:
 sub first_arg {
-  my ($state,$parse) = @_;
+  my ($state,$arg) = @_;
+  MaybeLookup($arg);
+}
+
+# DG: If we don't extend Marpa, we need custom routines to preserve
+# grammar category information
+sub first_arg_role {
+  my ($role,$parse) = @_;
   return $parse if ref $parse;
   my ($lex,$id) = split(/:/,$_[1]);
-  my $xml = Lookup($id)->cloneNode(1);
-  annotate_features($state,$xml);
+  my $xml = Lookup($id);
+  $xml = $xml ? ($xml->cloneNode(1)) : undef;
+  $xml->setAttribute('role',$role) if $xml;
+  $xml;
 }
+sub first_arg_term {
+  my ($state,$parse) = @_;
+  first_arg_role('term',$parse);
+}
+sub first_arg_formula {
+  my ($state,$parse) = @_;
+  first_arg_role('formula',$parse);
+}
+
+
+sub chain_apply {
+  my ( $state, $t1, $c, $op, $c2, $t2) = @_;
+  ApplyNary(MaybeLookup($op),$t1,$t2);
+}
+
 
 sub infix_apply {
   my ( $state, $t1, $c, $op, $c2, $t2) = @_;
-  $op = first_arg(undef,$op);
-  annotate_features($state,ApplyNary($op,$t1,$t2));
+  ApplyNary(MaybeLookup($op),$t1,$t2);
+}
+
+sub prefix_apply {
+  my ( $state, $op, $c, $t) = @_;
+  ApplyNary(MaybeLookup($op),$t);
+}
+
+sub postscript_apply {
+  my ( $state, $base, $c, $script) = @_;
+  NewScript(MaybeLookup($base),MaybeLookup($script));
+}
+sub prescript_apply {
+  my ( $state, $script, $c, $base) = @_;
+  NewScript(MaybeLookup($base),MaybeLookup($script));
 }
 
 sub concat_apply {
  my ( $state, $t1, $c, $t2) = @_;
  #print STDERR "ConcApply: ",Dumper($lhs)," <--- ",Dumper($rhs),"\n\n";
- annotate_features($state, ApplyNary(New('Concatenation'),$t1,$t2) );
+ Apply(New('Concatenation'),$t1,$t2);
 }
 
 sub set {
   my ( $state, undef, undef, $t, undef, undef, undef, $f ) = @_;
-  annotate_features($state,   Apply(New('Set'),$t,$f) );
+  Apply(New('Set'),$t,$f);
 }
 
 sub fenced {
   my ($state, $open, undef, $t, undef, $close) = @_;
   $open=~/^([^:]+)\:/; $open=$1;
   $close=~/^([^:]+)\:/; $close=$1;
-  annotate_features($state,   Fence($open,$t,$close) );
+  Fence($open,MaybeLookup($t),$close);
 }
 
 sub fenced_empty {
@@ -84,26 +85,62 @@ sub fenced_empty {
  my ($state, $open, $c, $close) = @_;
  $open=~/^([^:]+)\:/; $open=$1;
  $close=~/^([^:]+)\:/; $close=$1;
-  annotate_features($state,  Fence($open,New('Empty'),$close) );
+  Fence($open,New('Empty'),$close);
 }
 
-sub parse_complete {
-  my ($self,$parse) = @_;
-  local $Data::Dumper::Indent = 1;
-  my @steps = @{$self->{steps}};
-  my $count = scalar(@steps);
-  print STDERR "Parse completed in ".$count." steps!\n";
+## 2. Intermediate layer, records categories on resulting XML:
+sub concat_apply_factor {
+  my $app = concat_apply(@_);
+  $app->[1]->{'cat'}='factor';
+  $app;
+}
+sub infix_apply_factor {
+  my $app = infix_apply(@_);
+  $app->[1]->{'cat'}='factor';
+  $app;
+}
+use Data::Dumper;
+sub infix_apply_term {
+  my $app = infix_apply(@_);
+  $app->[1]->{'cat'}='term';
+  $app;
+}
+sub infix_apply_type {
+  my $app = infix_apply(@_);
+  $app->[1]->{'cat'}='type';
+  $app;
+}
+sub infix_apply_relation {
+  my $app = infix_apply(@_);
+  $app->[1]->{'cat'}='relation';
+  $app;
+}
+sub chain_apply_relation {
+  my $app = infix_apply(@_);
+  $app->[1]->{'cat'}='relation';
+  $app;
+}
+sub infix_apply_formula {
+  my $app = infix_apply(@_);
+  $app->[1]->{'cat'}='formula';
+  $app;
+}
+sub infix_apply_entry {
+  my $app = infix_apply(@_);
+  $app->[1]->{'cat'}='entry';
+  $app;
+}
 
-  while ($count>0) {
-    print STDERR "-----------------------\n";
-    print STDERR "Step $count:\n";
-    $count--;
-    print STDERR "LHS: \n".Dumper($steps[$count]->[0]);
-    print STDERR "\nRHS: \n".Dumper($steps[$count]->[1]);
-    print STDERR "Rank: ".$steps[$count]->[2],"\n";
-    print STDERR "\n\n";
-  }
-  return $parse;
+
+### Helpers, ideally should reside in MathParser:
+
+sub MaybeLookup {
+  my ($arg) = @_;
+  return $arg if ref $arg;
+  my ($lex,$id) = split(/:/,$arg);
+  my $xml = Lookup($id);
+  $xml = $xml ? ($xml->cloneNode(1)) : undef;
+  return $xml;
 }
 
 1;

@@ -1,14 +1,14 @@
 #!/usr/bin/perl
-
+use FindBin;
+use lib "../lib"; # LaTeXML lib
 use Mojolicious::Lite;
-use lib "lib";
-use LaTeXML::Util::Startup;
-use LaTeXML::Util::Extras;
-use LaTeXML::Daemon;
 use Archive::Zip;
 use File::Path;
 use Data::Dumper;
-use feature 'switch';
+
+use LaTeXML::Util::Startup;
+use LaTeXML::Util::Extras;
+use LaTeXML::Daemon;
 
 our $version = '0.1';
 our $dbfile  = '.LaTeXML_Mojo.cache';
@@ -24,7 +24,7 @@ my $startup =
   LaTeXML::Util::Startup->new(dbfile => $ENV{MOJO_HOME} . '/' . $dbfile);
 
 # Do a one-time check for admin, add if none:
-print $startup->modify_user('admin', 'admin', 'admin')
+$startup->modify_user('admin', 'admin', 'admin')
   unless $startup->exists_user('admin');
 
 # Adapted From: http://th.atguy.com/mycode/generate_random_string/
@@ -42,6 +42,11 @@ helper rand_str => sub {
 
 helper prepare_options => sub {
   my ($self, $opt) = @_;
+  # Mode and Profile are synonyms
+  if (defined $opt->{mode} && (! defined $opt->{profile})) {
+    $opt->{profile} = $opt->{mode};
+    delete $opt->{mode};
+  }
   if (!defined $opt->{profile}) {
     if (defined $opt->{user}
       && $startup->verify_user($opt->{user}, $opt->{password}))
@@ -92,9 +97,6 @@ post '/convert' => sub {
   }
   # Delete daemon if Fatal occurred
   undef $daemon unless defined $result;
-
-  # Serialize XML for output:
-  $result = $result->toString(1) if defined $result;
 
   $self->render(json => {result => $result, status => $status, log => $log});
 };

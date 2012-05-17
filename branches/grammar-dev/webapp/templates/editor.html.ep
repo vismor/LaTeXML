@@ -4,7 +4,7 @@
 <%= javascript 'js/external/jquery-ui.min.js' %>
 <%= javascript 'js/external/jquery.jeditable.js'  %>
 <%= javascript 'js/editor/examples.js' %>
-<%= javascript '' => begin %>
+%= javascript begin
 function show_log() {
     $('#onthefly').hide();
     $('#log').show();
@@ -31,7 +31,7 @@ var send_called = 0;
 var mouse_pressed = 0;
 var timeout = null;
 var hasFatal = /fatal error/;
-var hasPreamble = /^([\s\S]*)\\begin{document}([\s\S]*)\\end{document}([\s\S]*)$/;
+var hasPreamble = /^([\s\S]*\\begin{document})([\s\S]*)\\end{document}([\s\S]*)$/;
 
 var sendRequest = function(tex, my_counter, onthefly){
 	if (my_counter == ac_counter) {
@@ -135,7 +135,7 @@ $(document).ready(function() {
           $('#result').focus();
         });
 });
-<% end %>
+% end
 
 
 <div class="edit_area" id="result" 

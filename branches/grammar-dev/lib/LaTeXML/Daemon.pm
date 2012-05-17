@@ -37,7 +37,7 @@ sub new {
   my ($class,$opts) = @_;
   binmode(STDERR,":utf8");
   prepare_options(undef,$opts);
-  bless {defaults=>$opts,opts=>undef,ready=>0,
+  bless {defaults=>$opts,opts=>undef,ready=>0,log=>q{},
          latexml=>undef}, $class;
 }
 
@@ -50,7 +50,6 @@ sub prepare_session {
   }
   # 1. Ensure option "sanity"
   $self->prepare_options($opts);
-
   #TODO: Some options like paths and includes are additive, we need special treatment there
   #2. Check if there is some change from the current situation:
   my $opts_tmp={};
@@ -91,6 +90,11 @@ sub prepare_options {
   $opts->{preload} = [] unless defined $opts->{preload};
   $opts->{paths} = ['.'] unless defined $opts->{paths};
   @{$opts->{paths}} = map {pathname_canonical($_)} @{$opts->{paths}};
+  foreach my $pathname(('destination','sourcedirectory','sitedirectory')) {
+    #TODO: Switch away from this rude absolute treatment when we support URLs
+    # (or could we still leverage this by a smart pathname_cwd?)
+    $opts->{$pathname} = pathname_absolute($opts->{$pathname},pathname_cwd()) if defined $opts->{$pathname};
+  }
 
   $opts->{whatsin} = 'document' unless defined $opts->{whatsin};
   $opts->{whatsout} = 'document' unless defined $opts->{whatsout};
@@ -129,7 +133,8 @@ sub prepare_options {
     $opts->{scan}=1 unless defined $opts->{scan};
     $opts->{index}=1 unless defined $opts->{index};
     $opts->{crossref}=1 unless defined $opts->{crossref};
-    $opts->{sitedir}=undef unless defined $opts->{sitedir};
+    $opts->{sitedirectory}=undef unless defined $opts->{sitedirectory};
+    $opts->{sourcedirectory}=undef unless defined $opts->{sourcedirectory};
     $opts->{numbersections}=1 unless defined $opts->{numbersections};
     $opts->{navtoc}=undef unless defined $opts->{numbersections};
     $opts->{navtocstyles}={context=>1,normal=>1,none=>1} unless defined $opts->{navtocstyles};
@@ -235,33 +240,47 @@ sub prepare_options {
 
 sub initialize_session {
   my ($self) = @_;
-  # Prepare LaTeXML object
-  my $latexml= new_latexml($self->{opts});
-  # Demand errorless initialization
-  my $init_status = $latexml->getStatusMessage;
-  croak $init_status unless ($init_status !~ /error/i);
+  $self->bind_loging;
+  my $latexml;
+  eval {
+    # Prepare LaTeXML object
+    $latexml = new_latexml($self->{opts});
+    1;
+  };
+  if ($@) {#Fatal occured!
+    print STDERR "$@\n";
+    print STDERR "\nInitialization complete: ".$latexml->getStatusMessage.". Aborting.\n" if defined $latexml;
+    # Close and restore STDERR to original condition.
+    $self->{log} = $self->flush_loging;
+    $self->{ready}=0; return;
+  } else {
+    # Demand errorless initialization
+    my $init_status = $latexml->getStatusMessage;
+    if ($init_status =~ /error/i) {
+      print STDERR "\nInitialization complete: ".$init_status.". Aborting.\n";
+      $self->{log} = $self->flush_loging; 
+      $self->{ready}=0;
+      return;
+    }
+  }
+
   # Save latexml in object:
+  $self->{log} = $self->flush_loging;
   $self->{latexml} = $latexml;
   $self->{ready}=1;
 }
 
 sub convert {
   my ($self,$source) = @_;
-  # Tie STDERR to log:
-  my $log=q{}; my $status=q{};
-  open(LOG,">",\$log) or croak "Can't redirect STDERR to log! Dying...";
-  *ERRORIG=*STDERR;
-  *STDERR = *LOG;
-
   # Initialize session if needed:
   $self->initialize_session unless $self->{ready};
-  unless ($self->{ready}) {
-    # Close and restore STDERR to original condition.
-    close LOG;
-    *STDERR=*ERRORIG;
+  unless ($self->{ready}) { # We can't initialize, return error:
+    my $log=$self->flush_loging;
     $self->{ready}=0; return {result=>undef,log=>$log};
   }
 
+  $self->bind_loging;
+  my $status=q{};
   # Inform of identity, increase conversion counter
   my $opts = $self->{opts};
   print STDERR "\n",$opts->{identity},"\n" if $opts->{verbosity} >= 0;
@@ -337,9 +356,8 @@ sub convert {
       print STDERR "\nConversion complete: ".$latexml->getStatusMessage.".\n";
     }
     # Close and restore STDERR to original condition.
-    close LOG;
-    *STDERR=*ERRORIG;
-    $self->{ready}=0; return {result=>undef,log=>$log,status=>$latexml->getStatusMessage};
+    my $log=$self->flush_loging;
+    return {result=>undef,log=>$log,status=>$latexml->getStatusMessage};
   }
   print STDERR "\nConversion complete: ".$latexml->getStatusMessage.".\n";
   $status = $latexml->getStatusMessage;
@@ -366,31 +384,31 @@ sub convert {
     $result = GetMath($result);
   } # 3. Nothing to do in document whatsout (it's default)
 
-  # Close and restore STDERR to original condition.
-  close LOG;
-  *STDERR=*ERRORIG;
-
   # Serialize result for direct use:
   if (defined $result) {
     if ($opts->{format} =~ 'x(ht)?ml') {
       $result = $result->toString(1);
     } elsif ($opts->{format} =~ /^html/) {
-      $result = $result->getDocument->toStringHTML;
+      if ($result =~ /LaTeXML/) { # Special for documents
+        $result = $result->getDocument;
+        $result = $result->toStringHTML;
+      } else { # Regular for fragments
+        $result = $result->toString(1);
+      }
     }
   }
-
-  my $return = {result=>$result,log=>$log,status=>$status};
+  my $log = $self->flush_loging;
+  return {result=>$result,log=>$log,status=>$status};
 }
 
 ########## Helper routines: ############
-
 sub convert_post {
   my ($self,$dom) = @_;
   my $opts = $self->{opts};
   my ($style,$parallel,$math_formats,$format,$verbosity,$defaultcss,$embed) = 
     map {$opts->{$_}} qw(stylesheet parallelmath math_formats format verbosity defaultcss embed);
   $verbosity = $verbosity||0;
-  our %PostOPS = (verbosity=>$verbosity,siteDirectory=>".",nocache=>1,destination=>'.');
+  my %PostOPS = (verbosity=>$verbosity,sourceDirectory=>$opts->{sourcedirectory}||'.',siteDirectory=>$opts->{sitedirectory}||".",nocache=>1,destination=>$opts->{destination});
   #Postprocess
   my @css=();
   unshift (@css,"core.css") if ($defaultcss);
@@ -556,7 +574,20 @@ sub convert_post {
 
 sub new_latexml {
   my $opts = shift;
-  my $latexml = LaTeXML->new(preload=>[@{$opts->{preload}}], searchpaths=>[@{$opts->{paths}}],
+
+  # TODO: Do this in a GOOD way to support filepath/URL/string snippets
+  # If we are given string preloads, load them and remove them from the preload list:
+  my $preloads = $opts->{preload};
+  my (@pre,@str_pre);
+  foreach my $pre(@$preloads) {
+    if ($pre=~/\n/) {
+      push @str_pre, $pre;
+    } else {
+      push @pre, $pre;
+    }
+  }
+
+  my $latexml = LaTeXML->new(preload=>[@pre], searchpaths=>[@{$opts->{paths}}],
                           graphicspaths=>['.'],
 			  verbosity=>$opts->{verbosity}, strict=>$opts->{strict},
 			  includeComments=>$opts->{comments},inputencoding=>$opts->{inputencoding},
@@ -570,6 +601,10 @@ sub new_latexml {
                         my($state)=@_;
                         $latexml->initializeState('TeX.pool', @{$$latexml{preload} || []});
                       });
+
+  # TODO: Do again, need to do this in a GOOD way as well:
+  $latexml->digestString($_,source=>"Anonymous string",noinitialize=>1) foreach (@str_pre);
+
   return $latexml;
 }
 
@@ -577,37 +612,70 @@ sub prepare_content {
   my ($self,$source)=@_;
   $source=~s/\n$//g; # Eliminate trailing new lines
   my $opts=$self->{opts};
-  if (defined $opts->{source_type}) {
-    if ($opts->{source_type} eq "string") {return $source;}
-    elsif ($opts->{source_type} eq "file") {
-      if ($opts->{local}) {
-	my $file = pathname_find($source,types=>['tex',q{}]);
-	$file = pathname_canonical($file) if $file;
-	#Recognize bibtex case
-	$opts->{type} = 'bibtex' if ($opts->{type} eq 'auto') && $file && ($file =~ /\.bib$/);
-	return $file; }
-      else {print STDERR "File input only allowed when 'local' is enabled,"
-	      ."falling back to string input..";
-	    $opts->{source_type}="string"; return $source; }}
-    elsif ($opts->{source_type} eq "url") {
-      my $response = auth_get($source,$opts->{authlist});
-      if ($response->is_success) {return $response->content;} else {
-	print STDERR "TODO: Flag a retrieval error and do something smart?"; return undef;}}
+
+  # 0. If we're given junk, give junk back
+  if (! $source) {
+    $opts->{source_type} = 'string';
+    return undef;
   }
-  else { # Guess the input type:
-    my @source_lines = split(/\n/,$source);
-    if (scalar(@source_lines)>1) {$opts->{source_type}="string"; return $source; }
+  # 1. Decide it's a string, if we are told so or it looks like one:
+  if (($opts->{source_type} && ($opts->{source_type} eq "string")) ||
+      ((! defined $opts->{source_type}) && (($source =~ tr/\n//) >1))) {
+    $opts->{source_type} = "string";
+    return $source;
+  }
+  # 2. Try to find a file, unless we are told it's not one:
+  if ((! defined $opts->{source_type}) || ($opts->{source_type} eq 'file')) {
     if ($opts->{local}) {
       my $file = pathname_find($source,types=>['tex',q{}]);
       $file = pathname_canonical($file) if $file;
       #Recognize bibtex case
       $opts->{type} = 'bibtex' if ($opts->{type} eq 'auto') && $file && ($file =~ /\.bib$/);
-      if ($file) {$opts->{source_type}="file"; return $file; }
-    }
+      if ($file) {
+	$opts->{source_type}='file';
+	return $file;
+      }}
+    elsif ($opts->{source_type} && ($opts->{source_type} eq 'file')) { # Fallback when local not allowed:
+      print STDERR "File input only allowed when 'local' is enabled,"
+	           ."falling back to string input..";
+      $opts->{source_type}="string";
+      return $source; }}
+  # 3. Try to find a URL, unless we are told it's not one:
+  if ((! defined $opts->{source_type}) || ($opts->{source_type} eq 'url')) {
     my $response = auth_get($source,$opts->{authlist});
-    if ($response->is_success) {$opts->{source_type}="url"; return $response->content; }
-    $opts->{source_type}="string"; return $source;
+    if ($response->is_success) {
+      $opts->{source_type} = 'url';
+      return $response->content; }
+    elsif ($opts->{source_type} && ($opts->{source_type} eq 'url')) {
+      # When we know it's a URL, retrieval error:
+      print STDERR "TODO: Flag a retrieval error and do something smart?"; return undef; }
   }
+  # 4.1. Last guess, if it really looks like a file but it's not found:
+  if ($source=~/\.(\w{1-3})$/) {
+    $opts->{source_type}="file";
+  } else {
+  # 4.2. When we don't have any good guess, just switch to string mode:
+    $opts->{source_type}="string";
+  }
+  return $source;
+}
+
+sub bind_loging {
+  # TODO: Move away from global file handles, they will inevitably end up causing problems..
+  my ($self) = @_;
+  # Tie STDERR to log:
+  open(LOG,">",\$self->{log}) or croak "Can't redirect STDERR to log! Dying...";
+  *ERRORIG=*STDERR;
+  *STDERR = *LOG;
+}
+sub flush_loging {
+  my ($self) = @_;
+  # Close and restore STDERR to original condition.
+  close LOG;
+  *STDERR=*ERRORIG;
+  my $log = $self->{log};
+  $self->{log}=q{};
+  return $log;
 }
 
 1;

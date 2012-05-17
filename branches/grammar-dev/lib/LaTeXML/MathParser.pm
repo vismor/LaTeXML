@@ -48,10 +48,10 @@ our $DEFAULT_FONT = LaTeXML::MathFont->new(family=>'serif', series=>'medium',
 sub new {
   my($class,%options)=@_;
   require LaTeXML::MathGrammar;
-  require LaTeXML::PureMarpaGrammar;
+  require LaTeXML::MarpaGrammar;
 
   #my $internalparser = LaTeXML::MathGrammar->new();
-  my $internalparser = LaTeXML::PureMarpaGrammar->new();
+  my $internalparser = LaTeXML::MarpaGrammar->new();
   die("Math Parser grammar failed") unless $internalparser;
 
   my $self = bless {internalparser => $internalparser},$class;
@@ -347,7 +347,9 @@ sub parse_kludge {
     elsif($role eq 'CLOSE'){		# Close the current row
       my $row = shift(@stack);		# get the current list of items
       push(@$row,$pair) if $pair;	# Put the close (if any) into it
-      $row = [ ['ltx:XMWrap',{}, $self->parse_kludgeScripts_rec(@$row)], 'FENCED']; # handle scripts
+      my @kludged =  $self->parse_kludgeScripts_rec(@$row);  # handle scripts
+      # wrap, if needed.
+      $row = [ (scalar(@kludged) > 1 ? ['ltx:XMWrap',{}, @kludged] : $kludged[0]), 'FENCED'];
       push(@{$stack[0]}, $row); } # and put this constructed row at end of containing row.
     else {
       push(@{$stack[0]}, $pair); }} # Otherwise, just put this item into current row.
@@ -484,11 +486,7 @@ sub failureReport {
     if(! $LaTeXML::MathParser::WARNED){
       $LaTeXML::MathParser::WARNED=1;
       my $box = $document->getNodeBox($LaTeXML::MathParser::XNODE);
-      #Deyan: @Bruce - in my noparse->tex.xml plugin some boxes are undefined?
-      # Seems fishy to me, I am noting down  the example URI here:
-      # arxmliv.kwarc.info/files/math/papers/0001071/0001071.tex.xml
-      $loc = "In formula \"".ToString($box)." from ".$box->getLocator."\n" if $box; 
-    }
+      $loc = "In formula \"".ToString($box)." from ".$box->getLocator."\n"; }
     $unparsed =~ s/^\s*//;
     my @rest=split(/ /,$unparsed);
     my $pos = scalar(@nodes) - scalar(@rest);

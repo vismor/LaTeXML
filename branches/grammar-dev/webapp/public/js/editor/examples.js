@@ -165,7 +165,10 @@ examples['xii'] = ['Source: \\url{http://ctan.org/pkg/xii}','','',
 'LcYlaDLbJsW,SWXJW ree @rzchLhzsW,;WERcesInW qt.\'oL.Rtrul;e',
 'doTsW,Wk;Rri@stW aHAHHFndZPpqar.tridgeLinZpe.LtYer.W,:jbye'].join('\n');
 
-examples['wik'] = ['\\wikimarkup',
+examples['wik'] = [
+'\\usepackage{wiki}',
+'\\begin{document}',
+'\\wikimarkup',
 '','== Section One ==',
 'An introduction to wiki.sty',
 '=== A subsection ===',
@@ -179,7 +182,9 @@ examples['wik'] = ['\\wikimarkup',
 '* Future work: itemize',
 '','* also enumerate',
 '','* etc.',
-''].join('\n');
+'','Enjoy! % You need trailing text to close the implicit itemize',
+'%No trailing whitespace or you get Fatals errors!!%',
+'\\end{document}'].join('\n');
 
 examples['met'] = ['\\usepackage{planetmath-specials}',
 '\\begin{document}',
@@ -213,7 +218,7 @@ examples['wgr'] = [
 '\\url{http://perl.org}',
 '\\end{document}'].join('\n');
 
-    examples['tik'] = ['\\documentclass{article}\\usepackage{tikz}\\begin{document}',
+examples['tik'] = ['\\documentclass{article}\\usepackage{tikz}\\begin{document}',
 '\\title{A TikZ gallery of basic examples}',
 '\\section{Connecting squares}',
 '\\begin{tikzpicture}',
