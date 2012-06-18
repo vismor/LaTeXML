@@ -64,7 +64,7 @@ XMath.attributes =
   attribute open { text }? &
 
   ## an close delimiter to enclose the object;
-  attribute close { text }?,
+  attribute close { text }? & 
 
   ## an enclose style to enclose the object
   ## with legitimate values being those of MathML's menclose notations;

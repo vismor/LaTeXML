@@ -180,9 +180,9 @@ element verbatim { verbatim_attributes &  verbatim_model }
 
 ## Attributes for \elementref{verbatim}.
 verbatim_attributes =
-  Common.attributes,
-  ID.attributes,
-  Fontable.attributes,
+  Common.attributes &
+  ID.attributes &
+  Fontable.attributes &
   Colorable.attributes
 
 ## Content model for \elementref{verbatim}.

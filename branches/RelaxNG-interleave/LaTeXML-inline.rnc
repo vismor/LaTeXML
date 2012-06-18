@@ -244,7 +244,7 @@ indexmark_attributes =
   attribute style { text }?
 
 ## Content model for \elementref{indexmark}.
-indexmark_model = indexphrase*, indexsee*
+indexmark_model = indexphrase* & indexsee*
 
 #======================================================================
 
