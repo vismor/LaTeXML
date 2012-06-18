@@ -63,7 +63,10 @@ Common.attributes =
   ## [Note that the default XSLT stylesheets for html and xhtml
   ## add the latexml element names to the class of html elements
   ## for more convenience in using CSS.]
-  attribute class { xsd:NMTOKENS }?
+  attribute class { xsd:NMTOKENS }? &
+  
+  # DG: A prefix attribute for RDFa 1.1 namespaces:
+  attribute prefix { text }?
 
 ## Attributes for elements that can be cross-referenced
 ## from inside or outside the document.
@@ -99,6 +102,47 @@ Labelled.attributes =
   ## the object type prepended, such as "Chapter 2"
   attribute frefnum { text }?
 
+## Attributes for elements that contain (indirectly) text whose font can be specified.
+Fontable.attributes =
+
+  ## Indicates the font to use. It consists of a space separated sequence
+  ## of values representing the
+  ## family (\texttt{serif}, \texttt{sansserif}, \texttt{math}, \texttt{typewriter},
+  ##     \texttt{caligraphic}, \texttt{fraktur}, \texttt{script}, \ldots),
+  ## series (\texttt{medium}, \texttt{bold}, \ldots),
+  ## and shape (\texttt{upright}, \texttt{italic}, \texttt{slanted}, \texttt{smallcaps}, \ldots).
+  ## Only the values differing from the current context are given.
+  ## Each component is open-ended, for extensibility; it is thus unclear
+  ## whether unknown values specify family, series or shape.
+  ## In postprocessing, these values are carried to the \attr{class} attribute,
+  ## and can thus be effected by CSS.
+  attribute font { text }? & 
+
+  ## Indicates the text size to use. The values are modeled after the
+  ## more abstract \LaTeX\ font size switches, rather than point-sizes.
+  ## The values are open-ended for extensibility;
+  ## In postprocessing, these values are carried to the \attr{class} attribute,
+  ## and can thus be effected by CSS.
+  attribute fontsize { "Huge" | "huge" | "LARGE" | "Large" | "large" | "normal"
+                      | "small" | "footnote" | "tiny" | text }?
+
+## Attributes for elements that can be colored.
+Colorable.attributes =
+  ## the color to use (for foreground material); any CSS compatible color specification.
+  ## In postprocessing, these values are carried to the \attr{class} attribute,
+  ## and can thus be effected by CSS.
+  attribute color { text }?,
+
+  ## the color to use for the background of the element; any CSS compatible color specification.
+  ## In postprocessing, these values are carried to the \attr{class} attribute,
+  ## and can thus be effected by CSS; the background will presumably
+  ## correspond to a bounding rectangle, but is determined by the CSS rendering engine.
+  attribute backgroundcolor { text }?,
+
+  ## the opacity of foreground material; a number between 0 and 1.
+  attribute opacity { xsd:float }?
+
+
 ## Attributes shared by low-level, generic inline and block elements
 ## that can be sized or shifted.
 Positionable.attributes =
@@ -131,10 +175,16 @@ Positionable.attributes =
   attribute vattach { "top" | "middle" | "bottom" }? &
 
   ## the horizontal floating placement parameter that determines where the object is displayed.
-  attribute float { ( "right" | "left" | text) }?
+  attribute float { ( "right" | "left" | text) }? &
+
+  ## the kind of frame or outline for the box.
+  attribute framed { "rectangle" | "underline" | text }?
+
 
 ## Attributes for elements that may be converted to image form
 ## during postprocessing, such as math, graphics, pictures, etc.
+## Note that these attributes are generally not filled in until postprocessing,
+## but that they could be init
 Imageable.attributes =
 
   ## the file, possibly generated from other data.
@@ -144,7 +194,14 @@ Imageable.attributes =
   attribute imagewidth { xsd:nonNegativeInteger}? &
 
   ## the height in pixels of \attr{imagesrc}.
+  ## Note that, unlike \TeX, this is the total height, including the depth (if any).
   attribute imageheight { xsd:nonNegativeInteger }? &
+
+  ## the depth in pixels of \attr{imagesrc}, being the location of the
+  ## baseline of the content shown in the image.
+  ## When displayed inilne, an image with a positive \attr{depth}
+  ## should be shifted down relative to the baseline of neighboring material.
+  attribute imagedepth { xsd:integer }? &
 
   ## a description of the image
   attribute description { text }?

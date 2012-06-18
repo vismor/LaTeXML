@@ -64,24 +64,38 @@ XMath.attributes =
   attribute open { text }? &
 
   ## an close delimiter to enclose the object;
-  attribute close { text }? &
+  attribute close { text }?,
+
+  ## an enclose style to enclose the object
+  ## with legitimate values being those of MathML's menclose notations;
+  attribute enclose { text }? &
 
   ## an open delimiter to enclose the argument list,
-  ## when this token is applied to arguments with \elementref{XMApp}.
+  ## when this object is applied to arguments with \elementref{XMApp}.
+  ## This attribute would typically be present on an \elementref{XMTok}
+  ## being applied (\elementref{XMApp}) to arguments.
+  ## The \attr{open} and \attr{close} would enclose the token,
+  ## while \attr{argopen} and \attr{argclose} would enclose the arguments.
   attribute argopen { text }? &
 
   ## a close delimiter to enclose the argument list,
-  ## when this token is applied to arguments with \elementref{XMApp}.
+  ## when this object is applied to arguments with \elementref{XMApp}.
   attribute argclose { text }? &
 
   ## characters to separate arguments,
-  ## when this token is applied to arguments with \elementref{XMApp}.
+  ## when this object is applied to arguments with \elementref{XMApp}.
   ## Can be multiple characters for different argument positions;
   ## the last character is repeated if there aren't enough.
   attribute separators { text }? &
 
   ## trailing (presumably non-semantic) punctuation.
   attribute punctuation { text }? &
+
+  ## leading (presumably non-semantic) space.
+  attribute lspace { text }? &
+
+  ## trailing (presumably non-semantic) space.
+  attribute rspace { text }? &
 
   ## an annotation placed by the parser when it suspects this token may be used as a function.
   attribute possibleFunction { text }?
@@ -109,6 +123,8 @@ XMTok_attributes =
   Common.attributes &
   XMath.attributes &
   ID.attributes &
+  Fontable.attributes &
+  Colorable.attributes &
 
   ## The name of the token, typically the control sequence that created it.
   attribute name { text }? & 
@@ -118,19 +134,7 @@ XMTok_attributes =
   attribute meaning { text }? & 
 
   ## The OpenMath CD for which \attr{meaning} is a symbol.
-  attribute omcd { text }? & 
-
-  ## Various random styling information. NOTE This needs to be made consistent.
-  attribute style { text }? & 
-
-  ## The font, size a used for the symbol.
-  attribute font { text }? & 
-
-  ## The size for the symbol, not presumed to be meaningful(?)
-  attribute size { text }? & 
-
-  ## The color (CSS format) for the symbol, not presumed to be meaningful(?)
-  attribute color { text }? & 
+  attribute omcd { text }? &
 
   ## An encoding of the position of this token as a sub/superscript, used
   ## to handle aligned and nested scripts, both pre and post.
@@ -141,8 +145,17 @@ XMTok_attributes =
   ## NOTE: Clarify where this appears: token, base, script operator, apply?
   attribute scriptpos { text }? & 
 
-  ## NOTE: How is this used?
-  attribute thickness { text }?
+  ## A thickness used for drawing any lines which are part of presenting the token,
+  ## such as the fraction line for the fraction operator.
+  attribute thickness { text }? &
+
+  ## The fraction style used for displaying the application of this token
+  ## when it represents some sort of fraction or stack of expressions
+  ## (note that this applies to binomials or other stacks of expressions as well as fractions).
+  ## Values of \texttt{display} or \texttt{text} correspond to \TeX's
+  ## displaystyle or textstyle, while \texttt{inline} indicates the
+  ## stack should be arranged horizontally (the layout may depend on the operator).
+  attribute fracstyle { ( "display" | "text" | "script" | "scriptscript" | "inline" ) }?
 
 ## Content model for \elementref{XMTok}.
 XMTok_model = text*
@@ -199,18 +212,24 @@ XMDual_model = XMath.class, XMath.class
 #======================================================================
 
 XMHint =
-## Various spacing items, generally ignored in parsing.
+## Various layout hints, usually spacing, generally ignored in parsing.
 ## The attributes are a subset of those for \elementref{XMTok}.
 element XMHint { XMHint_attributes &  XMHint_model }
 
 ## Attributes for \elementref{XMHint}.
 XMHint_attributes = 
-  Common.attributes & 
-  XMath.attributes & 
-  ID.attributes & 
+  Common.attributes &
+  XMath.attributes &
+  ID.attributes &
+  
+  ## The name of the kind of hint.
   attribute name { text }? &
-  attribute meaning { text }? &
-  attribute style { text }?
+
+  ## The width of the space, if any.
+  attribute width { text }? &
+
+  ## The height of the space, if any.
+  attribute height { text }?
 
 ## Content model for \elementref{XMHint}.
 XMHint_model = empty
@@ -233,7 +252,7 @@ XMText_attributes =
   attribute scriptpos { text }?
 
 ## Content model for \elementref{XMText}.
-XMText_model = text & Inline.class & Misc.class
+XMText_model = text* & Inline.class & Misc.class
 
 #======================================================================
 
