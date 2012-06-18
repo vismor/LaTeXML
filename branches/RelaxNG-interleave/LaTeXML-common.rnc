@@ -131,13 +131,13 @@ Colorable.attributes =
   ## the color to use (for foreground material); any CSS compatible color specification.
   ## In postprocessing, these values are carried to the \attr{class} attribute,
   ## and can thus be effected by CSS.
-  attribute color { text }?,
+  attribute color { text }? &
 
   ## the color to use for the background of the element; any CSS compatible color specification.
   ## In postprocessing, these values are carried to the \attr{class} attribute,
   ## and can thus be effected by CSS; the background will presumably
   ## correspond to a bounding rectangle, but is determined by the CSS rendering engine.
-  attribute backgroundcolor { text }?,
+  attribute backgroundcolor { text }? &
 
   ## the opacity of foreground material; a number between 0 and 1.
   attribute opacity { xsd:float }?
