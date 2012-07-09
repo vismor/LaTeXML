@@ -52,7 +52,7 @@ sub loadSchema {
     $self->setRelaxNGSchema("LaTeXML");
     $self->registerNamespace(ltx=>$LTX_NAMESPACE);
     $self->registerNamespace(svg=>"http://www.w3.org/2000/svg");
-    $self->registerNamespace(xev=>"http://www.w3.org/2001/xml-events");
+    $self->registerNamespace(m=>"http://www.w3.org/1998/Math/MathML");
     $$self{permissive}=1; }	# Actually, they could have declared all sorts of Tags....
 
   my($type,@data)=@{$$self{schemadata}};
@@ -69,9 +69,13 @@ sub loadSchema {
   if(my $compiled = !$$self{no_compiled}
      && pathname_find($name, paths=>$STATE->lookupValue('SEARCHPATHS'),
 		      types=>['model'], installation_subdir=>'schema')){
-    $self->loadCompiledSchema($compiled); }
+    NoteBegin("Loading compiled schema $compiled");
+    $self->loadCompiledSchema($compiled);
+    NoteEnd("Loading compiled schema $compiled"); }
   else {
-    $$self{schema}->loadSchema; }
+    NoteBegin("Loading schema $name");
+    $$self{schema}->loadSchema; 
+    NoteEnd("Loading schema $name"); }
   $self->computeIndirect;
   $self->describeModel if $LaTeXML::Model::DEBUG;
   $$self{schema_loaded}=1;
@@ -109,6 +113,7 @@ sub loadCompiledSchema {
     else {
       Fatal(":internal:$file Compiled model $file is malformatted at \"$line\""); }
   }}
+
 
 #**********************************************************************
 # Namespaces

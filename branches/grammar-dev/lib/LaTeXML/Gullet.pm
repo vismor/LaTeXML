@@ -161,6 +161,14 @@ sub mouthIsOpen {
   ($$self{mouth} eq $mouth)
     || grep($_ && ($$_[0] eq $mouth), @{$$self{mouthstack}}); }
 
+# This flushes a mouth so that it will be automatically closed, next time it's read
+# Corresponds (I think) to TeX's \endinput
+sub flushMouth {
+  my($self)=@_;
+  $$self{mouth}->finish;;	# but not close!
+  $$self{pushback}=[];	# And don't read anytyhing more from it.
+  $$self{autoclose}=1; }
+
 # Obscure, but the only way I can think of to End!! (see \bye or \end{document})
 # Flush all sources (close all pending mouth's)
 sub flush {
@@ -351,6 +359,7 @@ sub readMatch {
 
 # Match the input against a set of keywords; Similar to readMatch, but the keywords are strings,
 # and Case and catcodes are ignored; additionally, leading spaces are skipped.
+# AND, macros are expanded.
 sub readKeyword {
   my($self,@keywords)=@_;
   $self->skipSpaces;
@@ -359,23 +368,7 @@ sub readKeyword {
     my @tomatch=split('',uc($keyword));
     my @matched=();
     my $tok;
-    while(@tomatch && defined ($tok=$self->readToken) && push(@matched,$tok) 
-	  && (uc($tok->getString) eq $tomatch[0])){ 
-      shift(@tomatch); }
-    return $keyword unless @tomatch;	# All matched!!!
-    $self->unread(@matched);	# Put 'em back and try next!
-  }
-  return undef; }
-
-sub readXKeyword {
-  my($self,@keywords)=@_;
-  $self->skipSpaces;
-  foreach my $keyword (@keywords){
-    $keyword = ToString($keyword) if ref $keyword;
-    my @tomatch=split('',uc($keyword));
-    my @matched=();
-    my $tok;
-    while(@tomatch && defined ($tok=$self->readXToken) && push(@matched,$tok) 
+    while(@tomatch && defined ($tok=$self->readXToken(0)) && push(@matched,$tok) 
 	  && (uc($tok->getString) eq $tomatch[0])){ 
       shift(@tomatch); }
     return $keyword unless @tomatch;	# All matched!!!

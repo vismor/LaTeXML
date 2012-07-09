@@ -60,6 +60,7 @@ our @EXPORT = (qw(&DefExpandable
 	       qw(&LookupValue &AssignValue
 		  &PushValue &PopValue &UnshiftValue &ShiftValue
 		  &LookupCatcode &AssignCatcode
+		  &LookupMathcode &AssignMathcode
 		  &LookupMeaning &LookupDefinition &InstallDefinition),
 
 	       # Random low-level token or string operations.
@@ -140,7 +141,8 @@ sub UnshiftValue { $STATE->unshiftValue(@_);  return; }
 sub ShiftValue   { $STATE->shiftValue(@_); }
 sub LookupCatcode{ $STATE->lookupCatcode(@_); }
 sub AssignCatcode{ $STATE->assignCatcode(@_); return; }
-
+sub LookupMathcode{ $STATE->lookupMathcode(@_); return; }
+sub AssignMathcode{ $STATE->assignMathcode(@_); return; }
 sub LookupMeaning      { $STATE->lookupMeaning(@_); }
 sub LookupDefinition   { $STATE->lookupDefinition(@_); }
 sub InstallDefinition  { $STATE->installDefinition(@_); }
@@ -506,7 +508,7 @@ sub DefExpandable {
 
 # Define a Macro: Essentially an alias for DefExpandable
 # For convenience, the $expansion can be a string which will be tokenized.
-our $macro_options = {scope=>1, locked=>1};
+our $macro_options = {scope=>1, locked=>1, mathactive=>1};
 sub DefMacro {
   my($proto,$expansion,%options)=@_;
   CheckOptions("DefMacro ($proto)",$macro_options,%options);
@@ -515,6 +517,8 @@ sub DefMacro {
 sub DefMacroI {
   my($cs,$paramlist,$expansion,%options)=@_;
   if(!defined $expansion){ $expansion = Tokens(); }
+  if((length($cs) == 1) && $options{mathactive}){
+    $STATE->assignMathcode($cs=>0x8000, $options{scope}); }
   $cs = coerceCS($cs);
   $STATE->installDefinition(LaTeXML::Expandable->new($cs,$paramlist,$expansion,%options),
 			    $options{scope});
@@ -711,7 +715,7 @@ sub DefConstructorI {
 # If the $presentation seems to be TeX (ie. it involves #1... but not ONLY!)
 our $math_options = {name=>1, meaning=>1, omcd=>1, reversion=>1, alias=>1,
 		     role=>1, operator_role=>1, reorder=>1, dual=>1,
-		     fracstyle=>1, font=>1, size=>1,
+		     fracstyle=>1, font=>1,
 		     scriptpos=>1,operator_scriptpos=>1,
 		     beforeDigest=>1, afterDigest=>1, scope=>1, nogroup=>1,locked=>1};
 our $XMID=0;
@@ -759,7 +763,7 @@ sub DefMathI {
   $name = undef if (defined $name)
     && (($name eq $presentation) || ($name eq '')
 	|| ((defined $meaning) && ($meaning eq $name)));
-  my $attr="name='#name' meaning='#meaning' omcd='#omcd' fracstyle='#fracstyle' size='#size'";
+  my $attr="name='#name' meaning='#meaning' omcd='#omcd' fracstyle='#fracstyle'";
   $options{role} = 'UNKNOWN'
     if ($nargs == 0) && !defined $options{role};
   $options{operator_role} = 'UNKNOWN'
@@ -795,13 +799,13 @@ sub DefMathI {
 			      role => $options{role},
 			      operator_role=>$options{operator_role},
 			      fracstyle=>$options{fracstyle},
-			      size=>$options{size},
 			      scriptpos=>$options{scriptpos},
 			      operator_scriptpos=>$options{operator_scriptpos}},
 	       scope=>$options{scope});
   # If single character, Make the character active in math.
   if(length($csname) == 1){
-    AssignCatcode('math:'.$csname=>1, $options{scope}); }
+#    AssignCatcode('math:'.$csname=>1, $options{scope}); }
+    $STATE->assignMathcode($csname=>0x8000, $options{scope}); }
 
   # If the presentation is complex, and involves arguments,
   # we will create an XMDual to separate content & presentation.
@@ -1069,10 +1073,11 @@ sub InputFile {
   my ($dir,$name,$type) = pathname_split($request);
   my $file = $name; $file .= '.'.$type if $type;
   my $altpath;
-  # Firstly, check if we are going to OVERRIDE the requested file with a style file.
+  # Firstly, check if we are going to OVERRIDE the requested raw .tex file
+  # with a latexml binding to a style file.
   if((! $dir) && (!$type || ($type eq 'tex')) # No specific directory, but apparently to a raw tex file.
      && (LookupValue('inPreamble') || !FindFile($file)) # AND, in preamble so it SHOULD be style file, OR also if we can't find the raw file.
-     && ($altpath=FindFile($name,type=>'sty'))){	# AND there IS such a style file
+     && ($altpath=FindFile($name,type=>'sty', notex=>1))){	# AND there IS such a style file
     Info(":override Overriding input of $request with $altpath");
     RequirePackage($name); }	# Then override, and just assume we'll find $name as a package style file!
   elsif(LookupValue('INTERPRETING_DEFINITIONS')){
@@ -1316,6 +1321,8 @@ sub InputDefinitions {
       # Note which packages are pretending to be classes.
       PushValue('@masquerading@as@class',$name) if $options{as_class};
       DefMacroI(T_CS("\\$name.$astype-hook"),undef,$options{after} || '');
+      DefMacroI(T_CS('\opt@'.$name.'.'.$astype),undef,
+		Tokens(Explode(join(',',@{LookupValue('opt@'.$name.".".$astype)}))));
     }
 
 ###    $options{raw}=1;		# since we're taking the decision away from gullet!
@@ -1328,11 +1335,16 @@ sub InputDefinitions {
       loadLTXML($file); }		# Perl module.
     else {
       loadTeXDefinitions($file); }
-
     if($options{handleoptions}){
       Digest(T_CS("\\$name.$astype-hook"));
       DefMacroI('\@currname',undef,Tokens(Explode($prevname))) if $prevname;
       DefMacroI('\@currext',undef,Tokens(Explode($prevext))) if $prevext;
+      # Add an appropriately faked entry into \@filelist
+      my($a,$b,$e)=($fdir,$fname,$ftype); # If ftype is ltxml, reparse to get sty/cls!
+      ($a,$b,$e)=pathname_split(pathname_concat($a,$b)) if $e eq 'ltxml'; # Fake it???
+      my @p = Expand(T_CS('\@filelist'))->unlist;
+      my @n = Explode($e ? $b.'.'.$e : $b);
+      DefMacroI('\@filelist',undef,(@p ? Tokens(@p,T_OTHER(','),@n) : Tokens(@n)));
       resetOptions(); }  # And reset options afterwards, too.
     $file; }}
 
@@ -2289,7 +2301,7 @@ X<GenerateID>
 Generates an ID for nodes during the construction phase, useful
 for cases where the counter based scheme is inappropriate.
 The calling pattern makes it appropriate for use in Tag, as in
-   Tag('ltx:para',sub { GenerateID(@_,'p'); })
+   Tag('ltx:para',afterClose=>sub { GenerateID(@_,'p'); })
 
 If C<$node> doesn't already have an xml:id set, it computes an
 appropriate id by concatenating the xml:id of the closest

@@ -16,16 +16,17 @@ use warnings;
 use FindBin;
 use lib "$FindBin::RealBin/../lib";
 use Pod::Usage;
+use Carp;
+use Encode;
 use LaTeXML;
 use LaTeXML::Global;
 use LaTeXML::Util::Pathname;
 use LaTeXML::Util::WWW;
-use LaTeXML::Util::Extras;
 use LaTeXML::Post;
 use LaTeXML::Post::Scan;
 use LaTeXML::Util::ObjectDB;
 use LaTeXML::Util::Extras;
-use Carp;
+
 
 #**********************************************************************
 our @IGNORABLE = qw(identity timeout profile port preamble postamble port destination log removed_math_formats whatsin whatsout math_formats input_limit input_counter dographics mathimages mathimagemag );
@@ -33,9 +34,10 @@ our @IGNORABLE = qw(identity timeout profile port preamble postamble port destin
 # paths, preload, preamble, ... all the LaTeXML->new() params?
 # If we're not daemonizing postprocessing we can safely ignore all its options and reuse the conversion objects.
 
+our $DAEMON_DB={}; # Class-wide, caches all daemons that got booted
+
 sub new {
   my ($class,$opts) = @_;
-  binmode(STDERR,":utf8");
   prepare_options(undef,$opts);
   bless {defaults=>$opts,opts=>undef,ready=>0,log=>q{},
          latexml=>undef}, $class;
@@ -43,13 +45,15 @@ sub new {
 
 sub prepare_session {
   my ($self,$opts) = @_;
+  # TODO: The defaults feature was never used, do we really want it??
   #0. Ensure all default keys are present:
   # (always, as users can specify partial options that build on the defaults)
-  foreach (keys %{$self->{defaults}}) {
-    $opts->{$_} = $self->{defaults}->{$_} unless exists $opts->{$_};
-  }
+  #foreach (keys %{$self->{defaults}}) {
+  #  $opts->{$_} = $self->{defaults}->{$_} unless exists $opts->{$_};
+  #}
   # 1. Ensure option "sanity"
-  $self->prepare_options($opts);
+  $opts->check;
+  $opts = $opts->options;
   #TODO: Some options like paths and includes are additive, we need special treatment there
   #2. Check if there is some change from the current situation:
   my $opts_tmp={};
@@ -78,6 +82,7 @@ sub prepare_session {
 #       How about in the case of Extras::ReadOptions?
 #       Error() and Warn() would be neat, but we have to make sure STDERR is caught beforehand.
 #       Also, there is no eval() here, so we might need a softer handling of Error()s.
+# TODO: Move entirely into LaTeXML::Util::Config! and continue reworking
 sub prepare_options {
   my ($self,$opts) = @_;
   undef $self unless ref $self; # Only care about daemon objects, ignore when invoked as static sub
@@ -281,6 +286,7 @@ sub convert {
 
   $self->bind_loging;
   my $status=q{};
+  my $status_code;
   # Inform of identity, increase conversion counter
   my $opts = $self->{opts};
   print STDERR "\n",$opts->{identity},"\n" if $opts->{verbosity} >= 0;
@@ -327,22 +333,20 @@ sub convert {
       $digested = $latexml->digestString($content,preamble=>$opts->{'preamble_wrapper'},
                                          postamble=>$opts->{'postamble_wrapper'},noinitialize=>1);
     }
-
     # Clean up:
     delete $opts->{source_type};
     delete $opts->{'preamble_wrapper'};
     delete $opts->{'postamble_wrapper'};
     # Now, convert to DOM and output, if desired.
     if ($digested) {
-      local $LaTeXML::Global::STATE = $$latexml{state};
-      if ($opts->{format} eq 'tex') {
-        $serialized = LaTeXML::Global::UnTeX($digested);
-      } elsif ($opts->{format} eq 'box') {
-        $serialized = $digested->toString;
-      } else { # Default is XML
-        $dom = $latexml->convertDocument($digested);
-        $serialized = $dom->toString(1) unless $opts->{post};
-      }}
+	local $LaTeXML::Global::STATE = $$latexml{state};
+	if ($opts->{format} eq 'tex') {
+	    $serialized = LaTeXML::Global::UnTeX($digested);
+	} elsif ($opts->{format} eq 'box') {
+	    $serialized = $digested->toString;
+	} else { # Default is XML
+	    $dom = $latexml->convertDocument($digested);
+	}}
     alarm(0);
     1;
   };
@@ -357,20 +361,24 @@ sub convert {
     }
     # Close and restore STDERR to original condition.
     my $log=$self->flush_loging;
-    return {result=>undef,log=>$log,status=>$latexml->getStatusMessage};
+    return {result=>undef,log=>$log,status=>$latexml->getStatusMessage,status_code=>$latexml->getStatusCode};
   }
   print STDERR "\nConversion complete: ".$latexml->getStatusMessage.".\n";
   $status = $latexml->getStatusMessage;
+  $status_code = $latexml->getStatusCode;
   # End daemon run, by popping frame:
   $latexml->withState(sub {
                         my($state)=@_; # Remove current state frame
                         $state->popDaemonFrame;
                         $$state{status} = {};
                       });
-
+  if ($serialized) {
+      # If serialized has been set, we are done with the job
+      my $log = $self->flush_loging;
+      return {result=>$serialized,log=>$log,status=>$status,'status_code'=>$status_code};
+  } # Else, continue with the regular XML workflow...
   my $result = $dom;
   $result = $self->convert_post($dom) if ($opts->{post} && $dom && (!$opts->{noparse}));
-
   #Experimental: add id's everywhere if wnated in XHTML
   $result = InsertIDs($result)
       if ($opts->{force_ids} && $opts->{format} eq 'xhtml');
@@ -382,23 +390,29 @@ sub convert {
   } elsif ($opts->{whatsout} eq 'math') {
     # 2. Fetch math in math profile:
     $result = GetMath($result);
-  } # 3. Nothing to do in document whatsout (it's default)
-
+  } else { # 3. No need to do anything for document whatsout (it's default)
+  }
   # Serialize result for direct use:
+  undef $serialized;
   if (defined $result) {
     if ($opts->{format} =~ 'x(ht)?ml') {
-      $result = $result->toString(1);
+      $serialized = $result->toString(1);
     } elsif ($opts->{format} =~ /^html/) {
       if ($result =~ /LaTeXML/) { # Special for documents
-        $result = $result->getDocument;
-        $result = $result->toStringHTML;
+        $serialized = $result->getDocument->toStringHTML;
       } else { # Regular for fragments
-        $result = $result->toString(1);
+	  $serialized = $result->toString(1);
       }
+    }
+
+    if ($opts->{post} && ($result =~ /LibXML/)) { # LibXML nodes need an extra encoding pass?
+	                       # But only for post-processing ?!
+	                       # TODO: Why?!?! Find what is fishy here
+	$serialized = encode('UTF-8',$serialized);
     }
   }
   my $log = $self->flush_loging;
-  return {result=>$result,log=>$log,status=>$status};
+  return {result=>$serialized,log=>$log,status=>$status,'status_code'=>$status_code};
 }
 
 ########## Helper routines: ############
@@ -410,7 +424,7 @@ sub convert_post {
   $verbosity = $verbosity||0;
   my %PostOPS = (verbosity=>$verbosity,sourceDirectory=>$opts->{sourcedirectory}||'.',siteDirectory=>$opts->{sitedirectory}||".",nocache=>1,destination=>$opts->{destination});
   #Postprocess
-  my @css=();
+  my @css=@{$opts->{css}};
   unshift (@css,"core.css") if ($defaultcss);
   $parallel = $parallel||0;
   my $doc;
@@ -527,23 +541,24 @@ sub convert_post {
 
     require LaTeXML::Post::XSLT;
     my @csspaths=();
-#  if (@css) {
-#    foreach my $css (@css) {
-#      $css .= '.css' unless $css =~ /\.css$/;
-#      # Dance, if dest is current dir, we'll find the old css before the new one!
-#      my @csssources = map {pathname_canonical($_)}
-#                            pathname_findall($css,types=>['css'],
-#                                            (),
-#                                            installation_subdir=>'style');
-#      my $csspath = pathname_absolute($css,pathname_directory('.'));
-#      while (@csssources && ($csssources[0] eq $csspath)) {
-#        shift(@csssources);
-#      }
-#      my $csssource = shift(@csssources);
-#      pathname_copy($csssource,$csspath)  if $csssource && -f $csssource;
-#      push(@csspaths,$csspath);
-#    }}
-      push(@procs,LaTeXML::Post::XSLT->new(stylesheet=>$style,
+    if (@css) {
+      foreach my $css (@css) {
+	$css .= '.css' unless $css =~ /\.css$/;
+	# Dance, if dest is current dir, we'll find the old css before the new one!
+	my @csssources = map {pathname_canonical($_)}
+	  pathname_findall($css,types=>['css'],
+			   (),
+			   installation_subdir=>'style');
+	my $csspath = pathname_absolute($css,pathname_directory('.'));
+	while (@csssources && ($csssources[0] eq $csspath)) {
+	  shift(@csssources);
+	}
+	my $csssource = shift(@csssources);
+	pathname_copy($csssource,$csspath)  if $csssource && -f $csssource;
+	push(@csspaths,$csspath);
+      }
+    }
+    push(@procs,LaTeXML::Post::XSLT->new(stylesheet=>$style,
 					 parameters=>{
                                                       (@csspaths ? (CSS=>[@csspaths]):()),
                                                       ($opts->{stylesheetparam} ? (%{$opts->{stylesheetparam}}):())},
@@ -590,7 +605,8 @@ sub new_latexml {
   my $latexml = LaTeXML->new(preload=>[@pre], searchpaths=>[@{$opts->{paths}}],
                           graphicspaths=>['.'],
 			  verbosity=>$opts->{verbosity}, strict=>$opts->{strict},
-			  includeComments=>$opts->{comments},inputencoding=>$opts->{inputencoding},
+			  includeComments=>$opts->{comments},
+			  inputencoding=>$opts->{inputencoding},
 			  includeStyles=>$opts->{includestyles},
 			  documentid=>$opts->{documentid},
 			  nomathparse=>$opts->{noparse});
@@ -678,6 +694,22 @@ sub flush_loging {
   return $log;
 }
 
+###########################################
+#### Daemon Management                #####
+###########################################
+sub get_converter {
+  my ($self,$conf) = @_;
+  $conf->check; # Options are fully expanded
+  # TODO: Make this more flexible via an admin interface later
+  my $profile = $conf->get('profile')||'custom';
+  my $d = $DAEMON_DB->{$profile};
+  if (! defined $d) {
+    $d = LaTeXML::Daemon->new($conf->clone->options);
+    $DAEMON_DB->{$profile}=$d;
+  }
+  return $d;
+}
+
 1;
 
 __END__
@@ -693,7 +725,8 @@ C<LaTeXML::Daemon> - Daemon object and API for LaTeXML and LaTeXMLPost conversio
     use LaTeXML::Daemon;
     my $daemon = LaTeXML::Daemon->new($opts);
     $daemon->prepare_session($opts);
-    my ($result,$status,$log) = $daemon->convert($tex);
+    $hashref = $daemon->convert($tex);
+    my ($result,$log,$status) = map {$hashref->{$_}} qw(result log status);
 
 =head1 DESCRIPTION
 

@@ -5,8 +5,9 @@ $(document).ready(function() {
     } else {
         alert('The File APIs are not fully supported in this browser.');
     }
-    var filesUpload = document.getElementById("files-upload"),
-    dropArea = document.getElementById("drop-area"),
+    var filesUpload = document.getElementById("files-upload");
+    // var convertGo = document.getElementById("convert-button");
+    dropArea = document.getElementById("drop-area");
     fileList = document.getElementById("file-list");
     function uploadFile (file) {
         
@@ -47,15 +48,21 @@ $(document).ready(function() {
 	                }
 	            }, false);
 	            // File uploaded
+	            // xhr.upload.addEventListener("load", function () {
+	            //     progressBarContainer.className += " uploaded";
+	            //     progressBar.innerHTML = "<p>Uploaded!</p>";
+	            // }, false);
 	            xhr.addEventListener("load", function () {
-	                progressBarContainer.className += " uploaded";
-	                progressBar.innerHTML = "Uploaded!";
+                        // Use the URL object to create a temporary URL
+			progressBarContainer.className += " uploaded";
+                        var URL = self.URL || self.webkitURL || self;
+                        var object_url = URL.createObjectURL(xhr.response);
+	                progressBar.innerHTML += "<p>Converted! <a href='"+object_url+"'>Download</a></p>";
 	            }, false);
-
         	    /*
 	              If the file is an image and the web browser supports FileReader,
 	              present a preview in the file list
-
+	            */            		
                     if ((/image/i).test(file.type)) {
 	                img = document.createElement("img");
 	                li.appendChild(img);
@@ -67,13 +74,20 @@ $(document).ready(function() {
 	                }(img));
 	                reader.readAsDataURL(file);  
                     }
-	            */            		
+
+		    var fileSize = 0;
+		    if (file.size > 1024 * 1024)
+			fileSize = (Math.round(file.size * 100 / (1024 * 1024)) / 100).toString() + 'MB';
+		    else
+			fileSize = (Math.round(file.size * 100 / 1024) / 100).toString() + 'KB';
+
 	            xhr.open("post", "/upload", true);
-	            
+                    xhr.responseType = "blob";
 	            // Set appropriate headers
 	            xhr.setRequestHeader("Content-Type", "multipart/form-data");
-	            xhr.setRequestHeader("X-File-Name", file.fileName);
-	            xhr.setRequestHeader("X-File-Size", file.fileSize);
+                    xhr.setRequestHeader("Accept","application/zip;q=0.9,*/*;q=0.8");
+	            xhr.setRequestHeader("X-File-Name", file.name);
+	            xhr.setRequestHeader("X-File-Size", fileSize);
 	            xhr.setRequestHeader("X-File-Type", file.type);
                     
 	            // Send the file (doh)
@@ -81,13 +95,15 @@ $(document).ready(function() {
 	            
 	            // Present file info and append it to the list of files
 	            fileInfo = "<div><strong>Name:</strong> " + file.name + "</div>";
-	            fileInfo += "<div><strong>Size:</strong> " + parseInt(file.size / 1024, 10) + " kb</div>";
+	            fileInfo += "<div><strong>Size:</strong> " + fileSize + "</div>";
 	            fileInfo += "<div><strong>Type:</strong> " + file.type + "</div>";
 	            div.innerHTML = fileInfo;
-	            
+
+		    $('.no-items').hide();	            
 	            fileList.insertBefore(li,fileList.firstChild);
 	        }
                 else {
+		    $('.no-items').hide();
                     $('<p>The MIME type "'+file.type+'" of the file "'+ file.name +'" is not supported, skipping...</p><hr class="separator">').insertBefore(fileList.firstChild);
                 }
             }  
@@ -108,6 +124,9 @@ $(document).ready(function() {
     filesUpload.addEventListener("change", function (evt) {
 	traverseFiles(this.files);
     }, false);
+    // convertGo.addEventListener("change", function (evt) {
+    //     traverseFiles(this.files);
+    // }, false);
     
     dropArea.addEventListener("dragleave", function (evt) {
 	var target = evt.target;

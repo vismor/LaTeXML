@@ -43,9 +43,16 @@ sub process {
       else {
 	$doc->addNodes($index,$self->makeIndexList($doc,$allkeys,$allphrases,$tree));
 	$self->rescan($doc); }}
+
     else { $doc; }}
   else { $doc; }}
 
+
+# ================================================================================
+# Data generated:
+#  $tree : tree representation of the index.
+#  $allphrases : used for inferring the connection from see-also phrases to normal index entries.
+#  $allkeys :
 # ================================================================================
 # Extracting a tree of index entries from the database
 sub build_tree {
@@ -60,16 +67,8 @@ sub build_tree {
     my $tree = {subtrees=>{},referrers=>{}, id=>$id, parent=>undef};
     foreach my $key (@keys){
       my $entry = $$self{db}->lookup($key);
-      # my $phrases = $entry->getValue('phrases');
-      # my $xml = $doc->getDocument->adoptNode($phrases);
-      # my @phrases = $doc->findnodes('ltx:indexphrase',$xml);
-      # if(!scalar(@phrases)){
-      # 	$self->Warn($doc,"Missing phrases in indexmark: $key");
-      # 	next; }
-
       my $phrases = $entry->getValue('phrases');
       my @phrases = @$phrases;
-      map($doc->getDocument->adoptNode($_), @phrases);
       if(!scalar(@phrases)){
 	$self->Warn($doc,"Missing phrases in indexmark: $key");
 	next; }
@@ -110,10 +109,13 @@ sub add_rec {
     if(!$subtree){		# clone the phrase ??
       my $id  = $$tree{id}.'.'.$key;
       my $fullkey = ($$tree{key} ? "$$tree{key}.":'').$key;
-      my $phrasetext = $phrase->textContent; $phrasetext =~ s/^\s*//; $phrasetext =~ s/\.\s*$//;
+      my $phrasetext = $phrase->textContent;
+      $phrasetext =~ s/^\s*//; $phrasetext =~ s/\.\s*$//; $phrasetext =~ s/\s+/ /g;
       $$allphrases{$phrasetext}{$key} = 1;
+      $$allphrases{lc($phrasetext)}{$key} = 1;
       my $fullphrasetext = ($$tree{fullphrasetext} ? $$tree{fullphrasetext}.' ' : '').$phrasetext;
       $$allphrases{$fullphrasetext}{$fullkey} = 1;
+      $$allphrases{lc($fullphrasetext)}{$fullkey} = 1;
       $subtree = $$tree{subtrees}{$key} = {key=>$fullkey, id=>$id,
 					   phrase=>$doc->cloneNode($phrase),
 					   phrasetext=>$phrasetext,
@@ -126,7 +128,6 @@ sub add_rec {
     add_rec($doc,$allkeys,$allphrases,$subtree,$entry,@phrases); }
   else {
     if(my $seealso = $entry->getValue('see_also')){
-      map($doc->getDocument->adoptNode($_), @$seealso) if $seealso;
       $$tree{see_also} = $seealso; }
     if(my $refs = $entry->getValue('referrers')){
       map($$tree{referrers}{$_}=$$refs{$_}, keys %$refs); }}}
@@ -185,30 +186,15 @@ sub makeIndexEntry {
       # within a multi-level index.  We'll try to go up level by level till we hit "global"
       # until we find an actual entry.
       my $key = $see->getAttribute('key');
-      my $phr = $see->textContent; $phr =~ s/^\s*//; $phr =~ s/\.\s*$//;
-      my $t = $tree;
-      my $entry;
-      # See also terms can't use the sort_as@present_as formula, tho they sometimes need to.
-      # If we didn't find the see-as term, look to see if the text matches some other entry we've seen.
-      while($t && !$entry){
-	my $pre = $$t{key} ? $$t{key}."." : '';
-	foreach my $k ($key,keys %{$$allphrases{$phr}}){
-	  last if $entry = $$allkeys{ $pre.$k}; }
-	$t = $$t{parent}; }
-      if(!$entry && ($phr =~ s/(\w+)s\b/$1/g)){ # Try again after stripping "plurals" (!!!!)
-	$t=$tree;
-	while($t && !$entry){
-	  my $pre = $$t{key} ? $$t{key}."." : '';
-	  foreach my $k ($key,keys %{$$allphrases{$phr}}){
-	    last if $entry = $$allkeys{ $pre.$k}; }
-	  $t = $$t{parent}; }}
-      if($entry){
+      my $phrase = $see->textContent;
+      $phrase =~ s/^\s*//; $phrase =~ s/\.\s*$//; $phrase =~ s/\s+/ /g;
+      if(my $entry = $self->seealsoSearch($doc,$allkeys,$allphrases,$tree,$key,$phrase)){
 	push(@links,['ltx:ref',{idref=>$$entry{id}},$see->childNodes]) unless $saw{$$entry{id}};
 	$saw{$$entry{id}} = 1; }
       else {
-	$self->Warn($doc,"Missing index see-also term $key (under $$tree{key})"
-		    ." Possible aliases for $phr: ".join(', ',sort keys %{$$allphrases{$phr}})
-)
+	my @alt = sort keys %{$$allphrases{$phrase}};
+	$self->Warn($doc,"Missing index see-also term $phrase (key=$key; seen under $$tree{key})"
+		    .(@alt ? " Possible aliases: ".join(', ',@alt) : ""))
 	  unless $doc->findnodes("descendant-or-self::ltx:ref",$see);
 	push(@links,['ltx:text',{}, $see->childNodes]); }}}
 
@@ -216,6 +202,33 @@ sub makeIndexEntry {
    ['ltx:indexphrase',{},$doc->trimChildNodes($$tree{phrase})],
    (@links ? (['ltx:indexrefs',{},@links]):()),
    $self->makeIndexList($doc,$allkeys,$allphrases,$tree)]; }
+
+# Fishing expedition: Try to find what a See Also phrase might refer to
+# [They don't necessarily match in obvious ways]
+# See also terms can't use the sort_as@present_as formula, tho they sometimes need to.
+# If we didn't find the see-as term, look to see if the text matches some other entry we've se
+sub seealsoSearch {
+  my($self,$doc,$allkeys,$allphrases,$tree,$key,$phrase)=@_;
+  # concoct various phrases to search for
+  my $pnc = $phrase; $pnc =~ s/,\s*/ /g;
+  my $ps = $phrase; $ps  =~ s/(\w+)s\b/$1/g;
+  my $psnc = $ps; $psnc =~ s/,\s*/ /g;
+  foreach my $trial ($phrase, $pnc,lc($pnc), $ps,lc($ps), $psnc, lc($psnc)
+		    ){
+    my $entry = $self->seealsoSearch_aux($doc,$allkeys,$allphrases,$tree,$key,$pnc);
+    return $entry if $entry; }
+}
+
+sub seealsoSearch_aux {
+  my($self,$doc,$allkeys,$allphrases,$tree,$key,$phr)=@_;
+  my $t = $tree;
+  my $entry;
+  while($t && !$entry){
+    my $pre = $$t{key} ? $$t{key}."." : '';
+    foreach my $k ($key,keys %{$$allphrases{$phr}}){
+      last if $entry = $$allkeys{ $pre.$k}; }
+    $t = $$t{parent}; }
+  $entry; }
 
 # Given that sorted styles gives bold, italic, normal,
 # let's just do the first.

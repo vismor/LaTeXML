@@ -1,18 +1,32 @@
 #!/usr/bin/perl
-use FindBin;
-use lib "../lib"; # LaTeXML lib
+use File::Basename;
+my $FILE_BASE;
+BEGIN {
+    $FILE_BASE = dirname(__FILE__);
+}
+use lib $FILE_BASE."/../blib";
+use lib $FILE_BASE."/lib";
+
 use Mojolicious::Lite;
-use Archive::Zip;
+use Mojo::JSON;
+use Mojo::IOLoop;
+use Mojo::ByteStream qw(b);
+
+use Archive::Zip qw(:CONSTANTS :ERROR_CODES);
+use IO::String;
 use File::Path;
 use Data::Dumper;
+use Encode;
 
-use LaTeXML::Util::Startup;
+use Startup;
 use LaTeXML::Util::Extras;
+use LaTeXML::Util::Config;
 use LaTeXML::Daemon;
 
 our $version = '0.1';
 our $dbfile  = '.LaTeXML_Mojo.cache';
 
+$ENV{MOJO_REVERSE_PROXY} = 1;
 $ENV{MOJO_HOME} = '.' unless defined $ENV{MOJO_HOME};
 $ENV{MOJO_MAX_MESSAGE_SIZE} = 10485760; # 10 MB file upload limit
 
@@ -20,8 +34,7 @@ $ENV{MOJO_MAX_MESSAGE_SIZE} = 10485760; # 10 MB file upload limit
 app->secret('LaTeXML is the way to go!');
 
 #Prep a LaTeXML Startup instance
-my $startup =
-  LaTeXML::Util::Startup->new(dbfile => $ENV{MOJO_HOME} . '/' . $dbfile);
+my $startup = LaTeXML::Util::Startup->new(dbfile => $ENV{MOJO_HOME} . '/' . $dbfile);
 
 # Do a one-time check for admin, add if none:
 $startup->modify_user('admin', 'admin', 'admin')
@@ -66,28 +79,89 @@ helper prepare_options => sub {
   if ($opt->{openmath}) { push @{$opt->{math_formats}}, 'om'; delete $opt->{openmath}; }
   # Ugh, disallow 'null' as a value!!! (TODO: Smarter fix??)
   foreach (keys %$opt) {
-    $opt->{$_} = '' if ($opt->{$_} eq 'null');
+    $opt->{$_} = '' if (($opt->{$_}||'') eq 'null');
   }
   return $opt;
 };
 
-post '/convert' => sub {
-  my $self  = shift;
+helper convert_zip => sub {
+  my ($self) = @_;
+  my $rdir = '/tmp/' . $self->rand_str(6) . '/';
+  mkdir $rdir;
+  #.zip (can't support others for now)
+  my $content_handle = IO::String->new($self->req->body);
+  my $zip = Archive::Zip->new();
+  self->render(text=>"Archive is corrupt!") unless
+    ($zip->readFromFileHandle( $content_handle ) == AZ_OK);
+  $zip->extractTree('',$rdir);
+  #Add $rdir to LaTeXML path, convert with standard profile.
+  my $opt = LaTeXML::Util::Config->new(%{$self->prepare_options({profile=>'standard', format=>'xhtml', post=>1, paths=>[$rdir], local=>1})});
+  my $daemon = LaTeXML::Daemon->get_converter($opt);
+  #Override/extend with session-specific options in $opt:
+  $daemon->prepare_session($opt);
+  my $name = $self->req->headers->header('x-file-name');
+  $name =~ s/\.zip//;
+  #Send a request:
+  my $response = $daemon->convert($rdir.$name.'.tex');
+  if (defined $response) {
+      my ($result, $status, $log) = map { $response->{$_} } qw(result status log);
+      if ($result) {
+        my $destination = $opt->get('destination');
+        if (!$destination) {
+          my $ext = '.'.$opt->get('format')||'xml';
+          $destination = $rdir.$name.$ext;
+        }
+        open(OUT,">",$destination) or $self->render(text=>"Couldn't open output file ".$destination.": $!");
+        print OUT encode('UTF-8',$result);
+        close OUT;
+      } else {
+	# Delete daemon if Fatal occurred
+	undef $daemon;
+      }
+      if ($log) {
+        my $logfile = $opt->get('log');
+        if (!$logfile) {
+          my $ext = '.log';
+          $logfile = $rdir.$name.$ext;
+        }
+        open(OUT,">",$logfile) or $self->render(text=>"Couldn't open log file ".$logfile.": $!");
+        print OUT encode('UTF-8',$log);
+        close OUT;
+      }
+    }
+  # Zip and send back
+  my $returnzip = Archive::Zip->new();
+  my $payload='';
+  $returnzip->addTree($rdir,$name);
+  $content_handle = IO::String->new($payload);
+  $self->render(text=>'final Archive creation failed') unless ($returnzip->writeToFileHandle( $content_handle ) == AZ_OK);
+  # Clean up
+  File::Path::remove_tree($rdir);
+  my $headers = Mojo::Headers->new;
+  $headers->add('Content-Type',"application/zip;name=$name.zip");
+  $headers->add('Content-Disposition',"attachment;filename=$name.zip");
+  $self->res->content->headers($headers);
+  return $self->render(data=>$payload);
+};
+
+helper convert_string => sub {
+  my ($self) = @_;
   my $param = $self->req->body_params;
   #TODO: Make sure lists go to array refs, etc.
   my $opt = {};
   foreach ($param->param) { $opt->{lc($_)} = $param->param($_) || 1; }
+  my $is_jsonp = $opt->{'jsonp'}; delete $opt->{'jsonp'};
 
   $opt = $self->prepare_options($opt);
   # TeX is data, separate
   my $tex = $opt->{tex};
   delete $opt->{tex};
-
+  my $config = LaTeXML::Util::Config->new(%$opt);
   # We now have a LaTeXML options object - $opt.
-  my $daemon = $startup->find_daemon($opt);
+  my $daemon = LaTeXML::Daemon->get_converter($config);
 
   #Override/extend with session-specific options in $opt:
-  $daemon->prepare_session($opt);
+  $daemon->prepare_session($config);
 
   #Send a request:
   my $response = $daemon->convert($tex);
@@ -97,8 +171,63 @@ post '/convert' => sub {
   }
   # Delete daemon if Fatal occurred
   undef $daemon unless defined $result;
+  # TODO: This decode business is fishy... very fishy!
+  if ($is_jsonp) {
+      my $json_result = $self->render(
+	  json => {result => decode('UTF-8',$result), 
+		   status => $status, log => $log, partial=>1});
+      $self->render(data => "$is_jsonp($json_result)", format => 'js');
+  } else {
+      $self->render(json => {result => decode('UTF-8',$result), status => $status, log => $log});
+  }
+};
 
-  $self->render(json => {result => $result, status => $status, log => $log});
+post '/convert' => sub {
+  my $self = shift;
+  my $type = $self->req->headers->header('x-file-type');
+  if ($type && $type =~ 'zip' && ($self->req->headers->header('content-type') eq 'multipart/form-data')) {
+    $self->convert_zip;
+  } else {
+    $self->convert_string;
+  }
+};
+
+websocket '/convert' => sub {
+  my $self  = shift;
+  my $json = Mojo::JSON->new;
+  # Connected
+  $self->app->log->debug('WebSocket connected.');
+  # Increase inactivity timeout for connection a bit
+  Mojo::IOLoop->stream($self->tx->connection)->timeout(300);
+  $self->on('message' => sub {
+	      my ($tx, $bytes) = @_;
+	      my $opt = {};
+	      $opt = $json->decode($bytes);
+	      my $tex = $opt->{tex}; delete $opt->{tex};
+	      $opt = $self->prepare_options($opt);
+	      my $config = LaTeXML::Util::Config->new(%$opt);
+	      # We now have a LaTeXML options object - $opt.
+	      my $daemon = LaTeXML::Daemon->get_converter($config);
+	      #Override/extend with session-specific options in $opt:
+	      $daemon->prepare_session($config);
+	      #Send a request:
+	      my $response = $daemon->convert($tex);
+	      my ($result, $status, $log);
+	      if (defined $response) {
+		if (! defined $response->{result}) {
+		  # Delete daemon if Fatal occurred
+		  undef $daemon;
+		} else {
+		    $response->{result} = decode('UTF-8',$response->{result});
+		}
+	      }
+	      $tx->send({text=>$json->encode($response)});
+	    });
+  # Disconnected
+  $self->on('finish' => sub {
+	      my $self = shift;
+	      $self->app->log->debug('WebSocket disconnected.');
+	    });
 };
 
 get '/login' => sub {
@@ -132,6 +261,15 @@ get '/editor' => sub {
   $self->render();
 } => 'editor';
 
+get '/ws-editor' => sub {
+  my $self    = shift;
+  my $headers = Mojo::Headers->new;
+  $headers->add('Content-Type', 'application/xhtml+xml');
+  $self->res->content->headers($headers);
+  $self->render();
+} => 'ws-editor';
+
+
 get '/' => sub {
   my $self = shift;
   return $self->redirect_to('about');
@@ -164,39 +302,14 @@ get '/upload' => sub {
 
 post '/upload' => sub {
   my $self = shift;
-  # # TODO: Need a session?
-  # my $headers = $self->req->headers;
-  # my $type = $headers->header('x-file-type');
-  # if ($type && $type =~ 'zip' && ($headers->header('content-type') eq 'multipart/form-data')) {
-  #   #.zip (can't support others for now)
-  #   my $zipcontent = $self->req->body;
-  #   my $rname = $self->rand_str(6);
-  #   #TODO: This is a Unix treatment, make it scale under windows! (CPAN module?)
-  #   my $rdir = "/tmp/$rname/";
-  #   mkdir $rdir;
-  #   $rname = $rname.".zip";
-  #   open ZIP, ">", $rdir.$rname;
-  #   print ZIP $zipcontent;
-  #   close ZIP;
-  #   `cd $rdir; unzip -o $rname`;
-  #   #Add $rdir to LaTeXML path, convert with standard profile.    
-  #   my $opt = {profile=>'standard', paths=>[$rdir]};
-  #   $opt = $self->prepare_options($opt);
-  #   my $daemon = $startup->find_daemon($opt);
-  #   #Override/extend with session-specific options in $opt:
-  #   $daemon->prepare_session($opt);
-  #   #Send a request:
-  #   my $response = $daemon->convert($rdir.$rname);
-  #   if (defined $response) {
-  #     my ($result, $status, $log) = map { $response->{$_} } qw(result status log);
-  #     print Dumper($result);
-  #   }
-  #   File::Path::remove_tree($rdir);
-  #   $self->render(text=>"Uploaded!");
-  # } else {
-  #   #.tex , .sty , .jpg and so on - write to filesystem (when are we done?)
-   $self->render(text=>"Uploaded, but ignored!");
-  # }
+  # TODO: Need a session?
+  my $type = $self->req->headers->header('x-file-type');
+  if ($type && $type =~ 'zip' && ($self->req->headers->header('content-type') eq 'multipart/form-data')) {
+    $self->convert_zip;
+  } else {
+    #.tex , .sty , .jpg and so on - write to filesystem (when are we done?)
+    $self->render(text=>"Uploaded, but ignored!");
+  }
 };
 
 any '/ajax' => sub {
@@ -266,7 +379,6 @@ any '/ajax' => sub {
           $lines++ while ($form =~ /<[tb]r/g);
           my $minh = "min-height: " . ($lines * 5) . "px;";
           my $message = "Selected profile: " . $pname;
-          use Mojo::JSON;
           my $json = Mojo::JSON->new;
           open TMP, ">", "/tmp/json.txt";
           print TMP $json->encode(
@@ -293,7 +405,7 @@ any '/ajax' => sub {
 
   }
   else {
-    $self->render(text => "Only AJAX request are accepted at this route!\n");
+    $self->render(text => "Only AJAX request are acceptexd at this route!\n");
   }
 };
 

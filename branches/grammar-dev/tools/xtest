@@ -18,10 +18,12 @@ our @TYPES=("html","xhtml","html5");
 # Parse command line
 
 my $identity = "xtest";
-my($verbosity,$force,$help)=(0,0,0);
+my($verbosity,$force,$help)=(-1,0,0); # start off quieter
+my($timestamp)=(undef);
 GetOptions("force"     => \$force,
 	   "quiet"     => sub { $verbosity--; },
 	   "verbose"   => sub { $verbosity++; },
+	   "timestamp=s" => \$timestamp,
 	   "help"      => \$help,
 	  ) or pod2usage(-message => $identity, -exitval=>1, -verbose=>0, -output=>\*STDERR);
 pod2usage(-message=>$identity, -exitval=>1, -verbose=>2, -output=>\*STDOUT) if $help;
@@ -53,6 +55,7 @@ print STDERR "Looking at directory $testdir/$dir\n" if $verbosity >= 0;
     my $srcdvi = "$testdir/$dir/$test.dvi";
     my $dstdvi = "$htmldest/$dir/$test.dvi";
     my @links = ("<a href='$dir/$test.dvi'>dvi</a>");
+    my $usesdtd = system('grep','--quiet','DOCTYPE',$srcxml)==0;
     if($force || (! -f $dstdvi) || ((-M $srcdvi) < (-M $dstdvi))){
       print STDERR "Copying $dir/$test.dvi to dest\n" if $verbosity >= 0;
       system('cp',$srcdvi,$dstdvi)
@@ -61,10 +64,15 @@ print STDERR "Looking at directory $testdir/$dir\n" if $verbosity >= 0;
       my $dstxml = "$htmldest/$dir/$test.$type";
       push(@links,"<a href='$dir/$test.$type'>$type</a>");
       if($force || (! -f $dstxml) || ((-M $srcxml) < (-M $dstxml))){
-	print STDERR "Converting test case $dir/$test ($type)\n" if $verbosity >= 0;
+	print STDERR "Converting test case $dir/$test ($type)".($usesdtd?" [dtd]":"")."\n"
+	  if $verbosity >= 0;
 	system("$bindir/latexmlpost",
-	       "--novalidate",
+	       ($usesdtd ? ("--novalidate"):()),
 	       "--dest=$dstxml",
+	       (defined $timestamp ? ("--timestamp=$timestamp") :()),
+	       ($verbosity > 0 ? map("--verbose",1..$verbosity)
+		: ($verbosity < 0 ? map("--quiet",1..-$verbosity)
+		   : ())),
 	       $srcxml)
 	  == 0 or die "Couldn't transform test case $testdir/$dir/$test: $!"; }}
     $html .= "<li>$test : ".join(', ',@links).".</li>\n";  }

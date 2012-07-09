@@ -68,10 +68,12 @@ option:hover {
         <p><a id="logo" href="http://dlmf.nist.gov/LaTeXML/"><img src="img/external/latexml-logo.png" alt="LaTeXML" width="70" /></a>
         <span id="slogan">ltxMojo: LaTeXML's Web Server</span></p>
       </div>
-<div id="message" style="width:20%;">
+<div id="messagediv" style="margin=1px; width:20%;">
+<p style="margin-bottom:0;"><br /><b id='message'>
 <% if (my $message = flash 'message' ) { %>
-<p><br /><b><%= $message %></b><br /></p>
+<%= $message %>
 <% } %>
+</b><br /></p>
 </div>
     <div id="metanav" class="nav">
       <ul>
@@ -91,17 +93,19 @@ option:hover {
 <%= content %>
 <div id="footer" lang="en" xml:lang="en"><hr />
   <p class="left">
-    <a alt="LaTeXML"
-    href="http://dlmf.nist.gov/LaTeXML/"><strong>LaTeXML
-    0.7</strong></a><br />
-  </p><p class="right">
-  <a href="jquery.com"><img alt="jQuery Logo" width="100" src="img/external/JQuery_logo.svg" /></a>
+    <a alt="LaTeXML" href="http://dlmf.nist.gov/LaTeXML/"><strong>LaTeXML 0.7</strong></a>
+  </p>
+<p class="right">
+  <a href="http://jquery.com"><img alt="jQuery Logo" width="100" src="img/external/JQuery_logo.svg" /></a>
   <a href="http://mojolicio.us">
     <img alt="Mojolicious logo" width="100" src="img/external/mojolicious-white.png" />
   </a>
   <a href="http://www.perl.org/">
     <img alt="Perl 5" width="100" src="img/external/raptor-black.png" />
   </a></p>
+  <p class="right">
+    <a href="http://kwarc.info"><img alt="KWARC Research Group" width="60" src="img/external/kwarc-logo-transparent.png"/></a>
+  </p>
 </div>
     <div align="center">
     <div id="sitefooter">

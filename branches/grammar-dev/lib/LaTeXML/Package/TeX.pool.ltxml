@@ -23,11 +23,8 @@ no warnings 'redefine';
 
 RegisterNamespace(ltx=>"http://dlmf.nist.gov/LaTeXML");
 RegisterNamespace(svg=>"http://www.w3.org/2000/svg");
-RegisterNamespace(xev=>"http://www.w3.org/2001/xml-events");
-RegisterNamespace(xlink=>"http://www.w3.org/1999/xlink");
-
- 
-# Not yet used, but let's stake out the ground
+RegisterNamespace(xlink=>"http://www.w3.org/1999/xlink"); # Needed for SVG
+# Not directly used, but let's stake out the ground
 RegisterNamespace(m=>"http://www.w3.org/1998/Math/MathML");
 
 DefMacroI("\\\@empty",undef,Tokens());
@@ -384,7 +381,7 @@ Let(T_CS('\protect'),T_CS('\relax'));
 #======================================================================
 
 DefMacro('\romannumeral Number', sub { roman($_[1]->valueOf); });
-DefMacro('\string Token ',        sub { ExplodeText($_[1]->getString); });
+DefMacro('\string Token',        sub { ExplodeText($_[1]->getString); });
 DefMacroI('\jobname',undef,Tokens()); # Set to the filename by initialization
 
 DefMacroI('\fontname', undef,sub { Explode("fontname not implemented"); });
@@ -488,7 +485,9 @@ DefMacroI('\splitbotmark',   undef, Tokens());
 
 DefMacro('\input TeXFileName',sub { InputFile($_[1]); });
 
-DefMacroI('\endinput',undef,sub { $_[0]->closeMouth(1); return; });
+# Note that TeX doesn't actually close the mouth;
+# it just flushes it so that it will close the next time it's read!
+DefMacroI('\endinput',undef,sub { $_[0]->flushMouth; return; });
 
 # \the<internal quantity>
 DefMacro('\the Register',sub {
@@ -500,7 +499,8 @@ DefMacro('\the Register',sub {
     my $cs = ToString($defn->getCS);
     Error(":unexpected:\\the$cs You can't use $cs after \\the"); return (); }
   my $value = $defn->valueOf(@args);
-  my @tokens = ($type eq 'Tokens' ? ($value ? $value->unlist :()) : ExplodeText(ToString($value)));
+  ## In all cases, these should be OTHER, except for space. (!?)
+  my @tokens = ($type eq 'Tokens' ? ($value ? $value->unlist :()) : Explode(ToString($value)));
   if($LaTeXML::NOEXPAND_THE){	# See \the for the sense in this.
     $gullet->neutralizeTokens(@tokens); }
   else {
@@ -843,6 +843,9 @@ DefPrimitive('\font Token SkipMatch:= SkipSpaces TeXFileName', sub {
 
 });
 
+# Not sure what this should be...
+DefPrimitiveI('\nullfont',undef,undef,font=>{family=>'nullfont'});
+
 DefRegister('\count Number' => Number(0));
 DefRegister('\dimen Number' => Dimension(0));
 DefRegister('\skip Number'  => Glue(0));
@@ -960,23 +963,46 @@ DefPrimitive('\parshape SkipMatch:= Number',sub {
 #            readonly=>1,
 #	     getter=>{ Number($stomach->getGullet->getMouth????? ->lineno); });
 
-# \skewchar ???
-
 DefRegister('\badness',Number(0), readonly=>1);
 
 # <codename> = \catcode | \mathcode | \lccode | \uccode | \sfcode | \delcode
 
 DefRegister('\catcode Number',Number(0),
-	     getter=>sub { my $cc = LookupCatcode(chr($_[0]->valueOf));
-			   $cc = CC_OTHER unless defined $cc;
-			   Number($cc); },
+	     getter=>sub { my $code = LookupCatcode(chr($_[0]->valueOf));
+			   Number(defined $code ? $code : CC_OTHER); },
 	     setter=>sub { AssignCatcode(chr($_[1]->valueOf) => $_[0]->valueOf); });
+# # Only used for active math characters, so far
+DefRegister('\mathcode Number',Number(0),
+	     getter=>sub { my $code = $STATE->lookupMathcode(chr($_[0]->valueOf));
+			   Number(defined $code ? $code : 0); },
+	     setter=>sub { $STATE->assignMathcode(chr($_[1]->valueOf) => $_[0]->valueOf); });
+# Not used anywhere (yet)
+DefRegister('\sfcode Number',Number(0),
+	     getter=>sub { my $code = $STATE->lookupSFcode(chr($_[0]->valueOf));
+			   Number(defined $code ? $code : 0); },
+	     setter=>sub { $STATE->assignSFcode(chr($_[1]->valueOf) => $_[0]->valueOf); });
+DefRegister('\lccode Number',Number(0),
+	     getter=>sub { my $code = $STATE->lookupLCcode(chr($_[0]->valueOf));
+			   Number(defined $code ? $code : 0); },
+	     setter=>sub { $STATE->assignLCcode(chr($_[1]->valueOf) => $_[0]->valueOf); });
+DefRegister('\uccode Number',Number(0),
+	     getter=>sub { my $code = $STATE->lookupUCcode(chr($_[0]->valueOf));
+			   Number(defined $code ? $code : 0); },
+	     setter=>sub { $STATE->assignUCcode(chr($_[1]->valueOf) => $_[0]->valueOf); });
+# Not used anywhere (yet)
+DefRegister('\delcode Number',Number(0),
+	     getter=>sub { my $code = $STATE->lookupDelcode(chr($_[0]->valueOf));
+			   Number(defined $code ? $code : 0); },
+	     setter=>sub { $STATE->assignDelcode(chr($_[1]->valueOf) => $_[0]->valueOf); });
+
+# Remember, we're assigning a NUMBER (codepoint) to a CHARACTER!
+foreach my $letter (ord('A')..ord('Z')){
+  $STATE->assignLCcode(chr($letter),$letter+0x20,'global');
+  $STATE->assignUCcode(chr($letter),$letter,'global');
+  $STATE->assignLCcode(chr($letter+0x20),$letter+0x20,'global');
+  $STATE->assignUCcode(chr($letter+0x20),$letter,'global'); }
+
 # Stub definitions ???
-DefRegister('\mathcode Number',Number(0));
-DefRegister('\sfcode Number',Number(0));
-DefRegister('\lccode Number',Number(0));
-DefRegister('\uccode Number',Number(0));
-DefRegister('\delcode Number',Number(0));
 DefRegister('\hyphenchar{}',Number(ord('-')));
 DefRegister('\skewchar{}',Number(0)); # no idea what the default is here
 
@@ -1079,10 +1105,24 @@ DeclareFontMap('ASCII',
     'p',        'q',        'r',        's',          't',        'u',       'v',        'w',
     'x',        'y',        'z',        "{",          "|",        "}",       "~",        undef]);
 
+# Note that several entries are used for accents, and in practice will actually
+# be used in something like an m:mover; thus they needn't (shouldn't?) be "small"
+# There are also some questions about which choices are best
+# grave & acute accents (entry 0x12 & 0x13) (often typed using 0x60 & 0x27)
+#   are probably best using U+60(grave accent) & U+B4(acute accent)
+#   but could be U+2035 (reversed prime) & U+2032 (prime).  (particularly for math?)
+#   [we do use these for \prime, however!]
+#   or U+02CB (modifier letter grave accent) & U+02CA (modifier letter acute accent)
+# Similarly, hat & tilde (entries 0x5E & 0x7E)
+#   typed using ^ 0x5E circumflex accent) & ~ 0x7E  tilde
+#   are probably best just sticking with U+5E & U+7E
+#   but could be U+02C6 (modifier letter circumflex accent) U+02DC (small tilde)
+# [Note that generally we're using codepoints characterized as "modifier letter"
+# only when no other spacing point is available.]
 DeclareFontMap('OT1',
    ["\x{0393}", "\x{0394}", "\x{0398}", "\x{039B}",  "\x{039E}", "\x{03A0}", "\x{03A3}", "\x{03A5}",
     "\x{03A6}", "\x{03A8}", "\x{03A9}", "\x{FB00}",  "\x{FB01}", "\x{FB02}", "\x{FB03}", "\x{FB04}",
-    "\x{0131}",  "\x{0237}", UTF(0x60),  UTF(0xB4),   UTF(0xA0)."\x{030C}",     "\x{02D8}", UTF(0xAF),  "\x{02DA}",
+    "\x{0131}",  "\x{0237}", UTF(0x60),  UTF(0xB4),  "\x{02C7}", "\x{02D8}", UTF(0xAF),  "\x{02DA}",
     UTF(0xB8),   UTF(0xDF),  UTF(0xE6), "\x{0153}",   UTF(0xF8),  UTF(0xC6), "\x{152}",   UTF(0xD8),
     UTF(0xA0)."\x{0335}", '!', "\x{201D}", '#',          '$',        '%',       '&',        "\x{2019}",
     '(',        ')',        '*',        '+',          ',',        '-',       '.',        '/',
@@ -1095,12 +1135,12 @@ DeclareFontMap('OT1',
     "\x{2018}", 'a',        'b',        'c',          'd',        'e',       'f',        'g',
     'h',        'i',        'j',        'k',          'l',        'm',       'n',        'o',
     'p',        'q',        'r',        's',          't',        'u',       'v',        'w',
-    'x',        'y',        'z',        "\x{2013}",   "\x{2014}", "\x{02DD}", "\x{02DC}", UTF(0xA8) ]);
+    'x',        'y',        'z',        "\x{2013}",   "\x{2014}", "\x{02DD}", UTF(0x7E), UTF(0xA8) ]);
 
 DeclareFontMap('OT1',
    ["\x{0393}", "\x{0394}", "\x{0398}", "\x{039B}",  "\x{039E}", "\x{03A0}", "\x{03A3}", "\x{03A5}",
     "\x{03A6}", "\x{03A8}", "\x{03A9}", "\x{2191}",  "\x{2193}", "'",         UTF(0xA1),  UTF(0xBF),
-    "\x{0131}",  "\x{0237}", UTF(0x60),  UTF(0xB4),   UTF(0xA0)."\x{030C}",     "\x{02D8}", UTF(0xAF),  "\x{02DA}",
+    "\x{0131}",  "\x{0237}", UTF(0x60),  UTF(0xB4),  "\x{02C7}", "\x{02D8}",  UTF(0xAF), "\x{02DA}",
     UTF(0xB8),   UTF(0xDF),  UTF(0xE6), "\x{0153}",   UTF(0xF8),  UTF(0xC6), "\x{152}",   UTF(0xD8),
     "\x{2423}", '!',        "\"",       '#',          '$',        '%',       '&',        "'",
     '(',        ')',        '*',        '+',          ',',        '-',       '.',        '/',
@@ -1149,7 +1189,7 @@ DeclareFontMap('OML',
     # p          q           r           s             t           u          v           w
     'p',        'q',        'r',        's',          't',        'u',       'v',        'w',
     # x          y           z           dotless i    dotless j    weier-p    arrow acc.  inv.breve
-    'x',        'y',        'z',        "\x{0131}",   "j",       "\x{2118}", UTF(0xA0)."\x{1DFE}",UTF(0xA0)."\x{0311}" ]);
+    'x',        'y',        'z',        "\x{0131}",   "j",       "\x{2118}", "\x{2192}",UTF(0xA0)."\x{0311}" ]);
 DeclareFontMap('OMS',
    [#minus       dot         times       ast          divide      diamond    plus-minus   minus-plus
     "-",        "\x{22C5}",  UTF(0xD7), "\x{2217}",   UTF(0xF7), "\x{22C4}", UTF(0xB1),  "\x{2213}",
@@ -1203,7 +1243,7 @@ DeclareFontMap('OMX',
     "\x{222E}", "\x{222E}", "\x{2299}", "\x{2299}",   "\x{2295}", "\x{2295}", "\x{2297}", "\x{2297}",
     "\x{2211}", "\x{220F}", "\x{222B}", "\x{22C3}",   "\x{22C2}", "\x{228C}", "\x{2227}", "\x{2228}",
     "\x{2211}", "\x{220F}", "\x{222B}", "\x{22C3}",   "\x{22C2}", "\x{228C}", "\x{2227}", "\x{2228}",
-    "\x{2210}", "\x{2210}",  UTF(0x5E),  UTF(0x5E),  UTF(0x5E),   "\x{02DC}", "\x{02DC}", "\x{02DC}",
+    "\x{2210}", "\x{2210}",  UTF(0x5E),  UTF(0x5E),  UTF(0x5E),   UTF(0x7E),  UTF(0x7E),  UTF(0x7E),
     "[",        "]",        "\x{230A}", "\x{230B}",   "\x{2308}", "\x{2309}", "{",        "}",
     #                                                              [missing rad frags]     double arrow ext.
     "\x{23B7}", "\x{23B7}", "\x{23B7}", "\x{23B7}",   "\x{23B7}",  undef,      undef,      undef,
@@ -1258,6 +1298,16 @@ DefPrimitive('\mathchardef Token SkipMatch:= Number', sub {
 		  reversion=>$csname) if $glyph;
   $STATE->installDefinition(LaTeXML::CharDef->new($newcs,$value, $internalcs));
   return; });
+
+DefConstructor('\mathaccent Number Digested',
+	       "<ltx:XMApp><ltx:XMTok role='OVERACCENT'>#glyph</ltx:XMTok><ltx:XMWrap>#2</ltx:XMWrap></ltx:XMApp>",
+	       afterDigest=>sub {
+		 my($stomach,$whatsit)=@_;
+		 my $n = $whatsit->getArg(1)->valueOf;
+		 my($role,$glyph) = decodeMathChar($n);
+		 $whatsit->setProperty(glyph=>$glyph) if $glyph;
+		 $whatsit->setProperty(font=>LookupValue('font')->specialize($glyph)) if $glyph;
+		 return; });
 
 # <box> = \box <8bit> | \copy <8bit> | \lastbox | \vsplit <8bit> to <dimen>
 #   | \hbox <box specification>{<horizontal mode material>}
@@ -1333,11 +1383,11 @@ DefParameterType('VBoxContents',sub {
 # This re-binds a number of important control sequences to their default text binding.
 # This is useful within common boxing or footnote macros that can appear within
 # alignments or special environments that have redefined many of these.
+PushValue(TEXT_MODE_BINDINGS=>[T_MATH,T_CS('\@dollar@in@textmode')]);
+PushValue(TEXT_MODE_BINDINGS=>[T_CS('\centerline'),T_CS('\relax')]);
+
 sub reenterTextMode {
-  Let(T_MATH,T_CS('\@dollar@in@textmode'));
-  Let(T_CS('\centerline'),T_CS('\relax'));
-  Let(T_CS("\\\\"), T_CS('\default@cr'));
-}
+  map( Let($$_[0],$$_[1]), @{ LookupValue('TEXT_MODE_BINDINGS') }); }
 
 sub REF { $_[0] && $_[0]->{$_[1]}; }
 
@@ -1387,7 +1437,7 @@ DefConstructor('\vtop BoxSpecification VBoxContents',
 DefParameterType('RuleSpecification',sub {
   my($gullet)=@_;
   my %spec = ();
-  while(my $key = $gullet->readXKeyword('width','height','depth')){
+  while(my $key = $gullet->readKeyword('width','height','depth')){
     $spec{$key} = $gullet->readDimension; }
   LaTeXML::BoxDimensions->new(%spec); },
 		 optional=>1, undigested=>1);
@@ -1472,34 +1522,25 @@ DefPrimitive('\aftergroup Token', sub { PushValue(afterGroup=>$_[1]); });
 
 # upper & lower case, actually expand (?)
 # \uppercase<general text>, \lowercase<general text>
-# and we REALLY should be using lccode & uccode
+sub ucToken {
+  my($token)=@_;
+  my $code = $STATE->lookupUCcode($token->getString);
+  ((defined $code) && ($code !=0) ? Token(chr($code),$token->getCatcode) : $token); }
+
+sub lcToken {
+  my($token)=@_;
+  my $code = $STATE->lookupLCcode($token->getString);
+  ((defined $code) && ($code!=0) ? Token(chr($code),$token->getCatcode) : $token); }
+
 DefMacro('\uppercase',sub {
   my($gullet)=@_;
-  my $t= $gullet->readXToken(0);
-  my @tokens = ();
-  if(Equals($t,T_BEGIN)){
-    my $level=1;
-    while($level && ($t=$gullet->readXToken(0))){
-      if(Equals($t,T_BEGIN)){ $level++; }
-      elsif(Equals($t,T_END)){ $level--; }
-      push(@tokens,$t) if $level; }}
-  else {
-    push(@tokens,$t); }
-  map( ($_->getCatcode == CC_LETTER ? T_LETTER(uc($_->getString)):$_), @tokens); });
+  my $t= $gullet->readToken(0);
+  (Equals($t,T_BEGIN) ? map(ucToken($_),$gullet->readBalanced->unlist) : ucToken($t)); });
 
 DefMacro('\lowercase',sub {
   my($gullet)=@_;
-  my $t= $gullet->readXToken(0);
-  my @tokens = ();
-  if(Equals($t,T_BEGIN)){
-    my $level=1;
-    while($level && ($t=$gullet->readXToken(0))){
-      if(Equals($t,T_BEGIN)){ $level++; }
-      elsif(Equals($t,T_END)){ $level--; }
-      push(@tokens,$t) if $level; }}
-  else {
-    push(@tokens,$t); }
-  map( ($_->getCatcode == CC_LETTER ? T_LETTER(lc($_->getString)):$_), @tokens); });
+  my $t= $gullet->readToken(0);
+  (Equals($t,T_BEGIN) ? map(lcToken($_),$gullet->readBalanced->unlist) : lcToken($t)); });
 
 DefPrimitive('\message{}',sub {
   my($stomach,$stuff)=@_;
@@ -2246,15 +2287,12 @@ DefPrimitive('\unhcopy Number',sub {
 # \vrule
 # \valign ???
 
-DefMacro('\vspace{}','\vskip#1\relax');
+DefMacro('\vspace{}','\vskip#2\relax');
 # \indent, \noindent, \par; see above.
 
-# \accent Number ????
-DefMacro('\accent Number',Tokens());	       # How should these be translated? Depends on font??
 DefMacro('\discretionary{}{}{}','#3'); # No hyphenation here!
 DefPrimitiveI('\-', undef,undef);
 DefPrimitive('\setlanguage Number',undef);
-
 
 #======================================================================
 # Math mode stuff
@@ -2328,11 +2366,10 @@ sub add_body_TeX {
       $LaTeXML::DUAL_BRANCH = 'content';
       my $ctex = UnTeX($body);
       $document->setAttribute($node,tex=>$tex);
-      $document->setAttribute($node,'content-tex'=>$ctex) if $ctex ne $tex;
-    }
+      $document->setAttribute($node,'content-tex'=>$ctex) if $ctex ne $tex;  }
     $thing->setProperty('_added_body_tex',1); }}
 
-Tag('ltx:Math',   afterOpen=>\&add_body_TeX);
+Tag('ltx:Math',  afterClose=>\&add_body_TeX);
 Tag('ltx:Math',  afterClose=>\&cleanup_Math);
 
 sub cleanup_Math {
@@ -2345,21 +2382,225 @@ sub cleanup_Math {
       return unless $document->getModel->getNodeQName($mnode) eq 'ltx:XMText';
     }}
   # Replace Math/XMath/XMText/* by *
-  replace_node($mathnode,
-	       map($_->childNodes,map($_->childNodes,$mathnode->childNodes))); }
+  $document->replaceNode($mathnode,
+			 map($_->childNodes,map($_->childNodes,$mathnode->childNodes))); }
 
-sub replace_node {
-  my($oldnode,@newnodes)=@_;
-  my $parent = $oldnode->parentNode;
-  if(!@newnodes){
-    $parent->removeChild($oldnode); }
-  else {
-    my $new = shift(@newnodes);
-    $parent->replaceChild($new,$oldnode);
-    foreach my $n (@newnodes){
-      $parent->insertAfter($n,$new);
-      $new = $n; }}}
+#======================================================================
+# Support for MathFork.
+# A MathFork supports document-level alignment of math,
+# by collecting equations in an equationgroup. Each equation can contain
+# one or more MathFork structures which separate the semantically meaningful
+# equation (if possible), along with a collection of rows and/or columns for alignment.
+# The structure looks like
+#    <MathFork>
+#        <Math><XMath>...</XMath></Math>
+#        <MathBranch>..</MathBranch>
+#    </MathFork>
+# The initial, "main", Math will contain a complete formula (hopefully).
+# The MathBranch will typically contain one or more <tr>, each of which
+# contains one or more <td>, each of which contains a <Math> representing
+# a cell of the aligned structure.
 
+# openMathFork($document,$equation) will add a MathFork structure
+# to the given $equation, and return ($main, $branch)
+# where $main is the initial <ltx:Math> and $branch is the <ltx:MathBranch>.
+# You'll probably want to be adding Stuff to one or both.
+sub openMathFork {
+  my($document,$equation)=@_;
+  my $fork  = $document->openElementAt($equation,'ltx:MathFork');
+  my $main  = $document->openElementAt($fork,'ltx:Math', _box=>MathWhatsit()); # Start EMPTY!
+  my $xmath = $document->openElementAt($main,'ltx:XMath');
+  my $branch= $document->openElementAt($fork,'ltx:MathBranch');
+  ($main,$branch); }
+
+# Close the appropriate elements of an ltx:MathFork created with openMathFork.
+sub closeMathFork {
+  my($document,$equation,$main,$branch)=@_;
+  # Now, close them all.
+  $document->closeElementAt($branch);
+  $document->closeElementAt($document->getFirstChildElement($main));
+  $document->closeElementAt($main);
+  $document->closeElementAt($main->parentNode); }
+
+# Create an inline math Whatsit from a list of MathBoxes, MathLists or Whatsits.
+# Note that we unwrap @hidden@bgroup's (!) and normalize \displaystyle (!)
+# This is primarily useful for synthesizing the Box for a newly created ltx:Math
+# that is synthesized from other math content within a ltx:MathFork.
+sub MathWhatsit {
+  my(@items)=@_;
+  my $hbgd = LookupDefinition(T_CS('\@hidden@bgroup'));
+  @items = map( ((ref $_ eq 'LaTeXML::Whatsit') && ($_->getDefinition eq $hbgd)
+		 ? $_->getBody->unlist : ($_)),
+		map($_->unlist,grep($_,@items)));
+  my @styles = grep(UnTeX($_) eq '\displaystyle',@items);
+  if(@styles){
+    @items = ($styles[0], grep(UnTeX($_) ne '\displaystyle',@items)); }
+  LaTeXML::Whatsit->new(LookupDefinition(T_CS('\@@BEGININLINEMATH')),[],
+			body=>LaTeXML::MathList->new(@items),
+			trailer=>T_CS('\@@ENDINLINEMATH'),
+			# locator=>$gullet->getLocator, font=>$script->getFont,level=>$level
+			isMath=>1); }
+
+# Add a new table column (ltx:td) into the ltx:MathBranch of a ltx:MathFork.
+# The insertion point will be at $inbranch, which probably should be an ltx:tr
+# created in the ltx:MathBranch using:
+#    $document->openElementAt($branch,'ltx:tr');
+# This moves the math from within $cell (an ltx:_Capture_) into the ltx:td,
+# and also arranges for that math content to be appended (cloned) into $main
+sub XXXXXaddColumnToMathFork {
+  my($document,$main,$inbranch,$cell)=@_;
+  my $td = $document->openElementAt($inbranch,'ltx:td');
+  if(my $align = $cell->getAttribute('align')){
+    $td->setAttribute(align=>$align); }
+  if(my $colspan = $cell->getAttribute('colspan')){
+    $td->setAttribute(colspan=>$colspan); }
+  my $captured =  $document->getFirstChildElement($cell);
+  # Usually, an ltx:Math element will be the complete content of the _Capture_ (cell)
+  if($document->getNodeQName($captured) eq 'ltx:Math'){
+    if(my $xmath = $document->getFirstChildElement($captured)){
+      # We MOVE the ltx:Math from the _Capture_ ($cell)
+      $td->appendChild($captured);
+      # But we CLONE the contents of it's ltx:XMath onto the end of
+      # the main ltx:Math/ltx:XMath (under $main), modifying id's along the way.
+      { local $LaTeXML::Document::ID_SUFFIX = '.mf';
+	$document->appendClone($document->getFirstChildElement($main),
+			       $document->getChildElements($xmath)); }
+      # Add the boxes from this cell to the previously collected ones in the main branch.
+      $document->setNodeBox($main,MathWhatsit($document->getNodeBox($main)->getBody,
+					      $document->getNodeBox($captured)->getBody));
+    }}
+  # But rarely, it could be text or mixed... Punt?
+
+
+    
+  # We can now remove the _Capture_ (and anything still in it?)
+  $cell->unbindNode;
+  $document->closeElementAt($td); }
+
+
+sub addColumnToMathFork {
+  my($document,$main,$inbranch,$cell)=@_;
+  my $td = $document->openElementAt($inbranch,'ltx:td');
+  if(my $align = $cell->getAttribute('align')){
+    $td->setAttribute(align=>$align); }
+  if(my $colspan = $cell->getAttribute('colspan')){
+    $td->setAttribute(colspan=>$colspan); }
+  # Usually, we will have captured a single ltx:Math node, but occasionally text?
+  foreach my $node ($cell->childNodes){
+    # We MOVE the node from the _Capture_ ($cell) to the td
+    $td->appendChild($node);
+    # Usually, an ltx:Math element will be the complete content of the _Capture_ (cell)
+    my $type = $document->getNodeQName($node);
+    if($type eq 'ltx:Math'){
+      if(my $xmath = $document->getFirstChildElement($node)){
+	# But we CLONE the contents of it's ltx:XMath onto the end of
+	# the main ltx:Math/ltx:XMath (under $main), modifying id's along the way.
+	{ local $LaTeXML::Document::ID_SUFFIX = '.mf';
+	  $document->appendClone($document->getFirstChildElement($main),
+				 $document->getChildElements($xmath)); }
+	# Add the boxes from this cell to the previously collected ones in the main branch.
+	$document->setNodeBox($main,MathWhatsit($document->getNodeBox($main)->getBody,
+						$document->getNodeBox($node)->getBody));
+      }}
+    elsif($type eq 'ltx:text'){
+      next if $node->textContent eq '';
+      my $string = $node->textContent;
+      my $txt = $document->openElementAt($document->getFirstChildElement($main),'ltx:XMText');
+      $document->appendClone($txt,$node);
+      $document->setNodeBox($main,MathWhatsit($document->getNodeBox($main)->getBody,
+					      $document->getNodeBox($node)));
+      $document->closeElementAt($txt); }
+    elsif($type eq '#PCDATA'){
+      my $string = $node->textContent;
+      next if $string eq '';
+      my $txt = $document->openElementAt($document->getFirstChildElement($main),'ltx:XMText');
+      $txt->appendText($string);
+      $document->setNodeBox($main,MathWhatsit($document->getNodeBox($main)->getBody,
+					      Box($string)));
+      $document->closeElementAt($txt); }
+    else {
+      Warn(":unexpected:$type Don't know how to synthesize equation with $type in column");
+    }}
+  # We can now remove the _Capture_ (and anything still in it?)
+  $cell->unbindNode;
+  $document->closeElementAt($td); }
+
+#======================================================================
+# Higher level support for equationgroups
+# equationgroups hold a collection of equations
+# each of which will likely have MathFork within that separates
+# the complete semantic expression from a collection of rows & column cells.
+# The latter are used to present an aligned set of equations;
+# the former hopefully will be useful for the math....?
+#
+# Typically, there will be some sort of alignment macros, using &
+# that will be set up to INITIALLY build an arrangement like:
+#  <equationgroup>
+#     <equation><_Capture>cellmath</_Capture>...</equation>
+# that is, an <equation> for each row.
+# Afterwards, we can analyze the cells and determine how the cells and/or rows
+# will be divided up into "real" equations, and insert some MathFork's to reflect.
+
+# For example, the <equationgroup> represents a whole eqnarray,
+# and (initially, at least) the rows are represented as <equation>'s.
+# Some analysis hopefully allows us to recognize
+
+# Given an ltx:equationgroup containing several ltx:equations (rows),
+# equationgroupJoinRows combines one or more of those rows into a
+# semantically meaningful equation and sets up the appropriate MathForks within.
+# This is typically useful for eqnarray.
+sub equationgroupJoinRows {
+  my($document,$equationgroup,@equations)=@_;
+  # Make a new equation, with a single MathFork container
+  my $equation = $document->openElementAt($equationgroup,'ltx:equation');
+  $equationgroup->insertBefore($equation,$equations[0]); # Move to correct position.
+  # move labels, id, refnum to new equation
+  my($labels,$id,$refnum,$frefnum,$idctr);
+  foreach my $eq (@equations){
+    if(my $l = $eq->getAttribute('labels')){
+      $labels = ($labels ? "$labels $l" : $l); }
+    $id     = $eq->getAttribute('xml:id') if $eq->hasAttribute('xml:id');
+    $refnum = $eq->getAttribute('refnum') if $eq->hasAttribute('refnum');
+    $frefnum = $eq->getAttribute('frefnum') if $eq->hasAttribute('frefnum');
+    $idctr  = $eq->getAttribute('_ID_counter_m_') if $eq->hasAttribute('_ID_counter_m_'); }
+
+  $equation->setAttribute(labels=>$labels) if $labels;
+  $equation->setAttribute('xml:id'=>$id) if $id;
+  $equation->setAttribute(refnum=>$refnum) if $refnum;
+  $equation->setAttribute(frefnum=>$frefnum) if $frefnum;
+  $equation->setAttribute('_ID_counter_m_'=>$idctr) if $idctr;
+
+  # Scan equations to see which ones likely are continuations of previous
+  my($main,$branch)=openMathFork($document,$equation);
+  foreach my $eq (@equations){
+    $eq->unbindNode;
+    my $tr = $document->openElementAt($branch,'ltx:tr');
+###    my @cells = $document->getChildElements($eq);
+    my @cells = $document->findnodes('ltx:_Capture_',$eq);
+    $tr->setAttribute(class=>'lefteqn')
+      if ($cells[0]->getAttribute('class')||'') =~ /\blefteqn\b/;
+    foreach my $cell (@cells){
+      addColumnToMathFork($document,$main,$tr,$cell); }
+    $document->closeElementAt($tr); }
+  closeMathFork($document,$equation,$main,$branch);
+  $document->closeElementAt($equation); }
+
+# Given an equation generated in an equationgroup, 
+# collect each $ncols columns into a MathFork structure,
+# with the formatted portion being the columns.
+sub equationgroupJoinCols {
+  my($document,$ncols,$equation)=@_;
+  my ($col,$main,$branch)=(0,undef,undef);
+###  foreach my $cell ($document->getChildElements($equation)){
+  foreach my $cell ($document->findnodes('ltx:_Capture_',$equation)){
+    next unless $document->getNodeQName($cell) =~ /(.*?:)?_Capture_$/;
+    if(($col++ % $ncols) == 0){	# Create new MathFork every $ncols cells.
+      closeMathFork($document,$equation,$main,$branch) if $main;
+      ($main,$branch)=openMathFork($document,$equation); }
+    addColumnToMathFork($document,$main,$branch,$cell); }
+  closeMathFork($document,$equation,$main,$branch) if $main; }
+
+#======================================================================
 Let(T_CS('\vcenter'), T_CS('\vbox'));
 
 # \eqno & \leqno are really bizzare.
@@ -2562,13 +2803,12 @@ DefConstructor('\@SUBSCRIPT{}{}',
 		  : Revert($base)); },
 	       properties=>{scriptpos=>sub{ "post".$_[0]->getBoxingLevel; }});
 
-# This only becomes active in math mode.
-AssignCatcode('math:\''=>1, 'global');
 DefMacroI('\'',undef,sub{
   my($gullet)=@_;
   my $n = 1;
   while($gullet->ifNext(T_OTHER('\''))){ $gullet->readToken; $n++; };
-  (T_SUPER,T_BEGIN,map(T_CS('\prime'), 1..$n),T_END); });
+  (T_SUPER,T_BEGIN,map(T_CS('\prime'), 1..$n),T_END); },
+	 mathactive=>1);	# Only in math!
 
 #======================================================================
 # \choose & friends, also need special argument handling
@@ -2777,8 +3017,6 @@ DefConstructorI('&', undef,sub { Error(":unexpected:& Stray alignment \"&\""); }
 #======================================================================
 # \dospecials ??
 
-# Set up the mathcode table
-
 # Normally, the content branch contains the pure structure and meaning of a construct,
 # and the presentation is generated from lower level TeX macros that only concern
 # themselves with how to display the object.
@@ -2815,19 +3053,17 @@ DefMathI('|',undef,'|', role=>'VERTBAR');
 #DefMath(':',';', role=>'METARELOP', name=>'colon'); # Seems like good default role
 
 # It seems that "MathLigature" should be adapted to make this sort of thing easy!
-AssignCatcode('math::'=>1, 'global');
 DefMacroI(':',undef,sub{
   my($gullet)=@_;
   if($gullet->ifNext(T_OTHER('='))){
     $gullet->readToken;
     T_CS('\@colonequal'); }
   else {
-    T_CS('\@colon'); }});
+    T_CS('\@colon'); }},
+	 mathactive=>1);	# Only in math!
 DefMathI('\@colon',     undef,':', role=>'COLON', name=>'colon',reversion=>':'); # Seems like good default role
 DefMathI('\@colonequal',undef,':=', role=>'RELOP', meaning=>'assign',reversion=>':=');
 
-AssignCatcode('math:<'=>1, 'global');
-AssignCatcode('math:>'=>1, 'global');
 DefMacroI('<',undef,sub{
   my($gullet)=@_;
   if($gullet->ifNext(T_OTHER('<'))){
@@ -2835,7 +3071,8 @@ DefMacroI('<',undef,sub{
     T_CS('\ll'); }
   # leq ? hmmmm
   else {
-    T_CS('\@@<'); }});
+    T_CS('\@@<'); }},
+	 mathactive=>1);	# Only in math!
 
 DefMacroI('>',undef,sub{
   my($gullet)=@_;
@@ -2846,7 +3083,8 @@ DefMacroI('>',undef,sub{
     $gullet->readToken;
     T_CS('\geq'); }
   else {
-    T_CS('\@@>'); }});
+    T_CS('\@@>'); }},
+	 mathactive=>1);	# Only in math!
 
 DefMathI('\@@>',undef, '>', role=>'RELOP', meaning=>'greater-than', name=>'', reversion=>'>');
 DefMathI('\@@<',undef, '<', role=>'RELOP', meaning=>'less-than',    name=>'', reversion=>'<');
@@ -3246,16 +3484,17 @@ AssignValue(frontmatter=>{},'global');
 # \@add@frontmatter{tag}[attributes]{content}
 DefPrimitive('\@add@frontmatter {} OptionalKeyVals {}', sub {
   my($stomach,$tag,$keys,$tokens)=@_;
-  $tag = ToString($tag);
-  my $attr = ($keys ? {$keys->beDigested($stomach)->getHash} : undef);
-
-  my $frontmatter = LookupValue('frontmatter');
+  # Digest this as if we're already in the document body!
   my $inpreamble = LookupValue('inPreamble');
+  AssignValue(inPreamble=>0);
   # Be careful since the contents may also want to add frontmatter
   # (which should be inside or after this one!)
-  my $entry = [$tag,$attr,'to-be-filled-in'];
-  push(@{$$frontmatter{$tag}},$entry);
-  AssignValue(inPreamble=>0);
+  # So, we append this entry before digesting
+  $tag = ToString($tag);
+  my $entry = [$tag,undef,'to-be-filled-in'];
+  push(@{ LookupValue('frontmatter')->{$tag}},$entry);
+  if($keys){
+    $$entry[1] = {$keys->beDigested($stomach)->getHash}; }
   $$entry[2] = Digest(Tokens(T_BEGIN,$tokens,T_END));
   AssignValue(inPreamble=>$inpreamble);
   return; });
@@ -3409,14 +3648,14 @@ our %accents
      '\"' => ["\x{0308}",UTF(0xA8)], # COMBINING DIAERESIS & DIAERESIS
      '\~' => ["\x{0303}","~"],	      # COMBINING TILDE
      '\=' => ["\x{0304}",UTF(0xAF)], # COMBINING MACRON & MACRON
-     '\.' => ["\x{0307}",UTF(0xB7)], # COMBINING DOT ABOVE & MIDDLE DOT (?)
+     '\.' => ["\x{0307}","\x{02D9}"], # COMBINING DOT ABOVE & DOT ABOVE
      '\u' => ["\x{0306}","\x{02D8}"], # COMBINING BREVE & BREVE
      '\v' => ["\x{030C}","\x{02C7}"], # COMBINING CARON & CARON
      '\@ringaccent' => ["\x{030A}","o"], # COMBINING RING ABOVE & non-combining
      '\r' => ["\x{030A}","o"], # COMBINING RING ABOVE & non-combining
      '\H' => ["\x{030B}","\x{02DD}"], # COMBINING DOUBLE ACUTE ACCENT & non-combining
      '\c' => ["\x{0327}",UTF(0xB8)], # COMBINING CEDILLA & CEDILLA
-     '\d' => ["\x{0323}",UTF(0xB7)], # COMBINING DOT BELOW & MIDDLE DOT (?)
+     '\d' => ["\x{0323}",'.'], # COMBINING DOT BELOW & DOT (?)
      '\b' => ["\x{0331}",UTF(0xAF)], # COMBINING MACRON BELOW  & MACRON
      '\t' => ["\x{0361}","-"],	# COMBINING DOUBLE INVERTED BREVE & ???? What????
      # this one's actually defined in mathscinet.sty, but just stick it here!
@@ -3425,33 +3664,44 @@ our %accents
      #		'\bar'=>"\x{0304}", # COMBINING MACRON or is this the longer overbar?
 		);
 
+# Create a box applying an accent to a letter
+sub applyAccent {
+  my($stomach,$letter,$combiningchar,$standalonechar,$reversion)=@_;
+  $letter = Expand($letter);
+  my @letters = map(($_ eq '\i' ? 'i': ($_ eq '\j' ? 'j' : $_)),
+		    map(ToString($_), ($letter ? $letter->unlist : ())));
+  if(!scalar(@letters) || ((scalar(@letters)==1) && ($letters[0] eq '\ '))){
+    Box($standalonechar,undef,undef,$reversion); }
+  else { # Put the accent AFTER the first char(?)
+    Box(NFC($letters[0].$combiningchar.join('',@letters[1..$#letters])),undef,undef,$reversion); }}
+
 # Defines an accent command using a combining char that follows the
 # 1st char of the argument.  In cases where there is no argument, $standalonechar is used.
-sub DefAccentZZZ {
-  my ($accent, $combiningchar, $standalonechar) = @_;
-  DefConstructor($accent."{}", sub {
-    my($document,$letter,%props)=@_;
-    if(my @letters = map(($_ eq '\i' ? 'i':$_),map(ToString($_),($letter ? $letter->unlist : ())))){
-      # Put the accent AFTER the first char(?)
-      $document->openText(NFC($letters[0].$combiningchar.join('',@letters[1..$#letters])),
-			  $letter->getFont);}
-    else {			# Empty argument???
-       $document->openText($standalonechar,$props{font}); }} ); }
-
 sub DefAccent {
   my ($accent, $combiningchar, $standalonechar) = @_;
   DefPrimitive($accent."{}", sub {
     my($stomach,$letter)=@_;
-    $letter = Expand($letter);
-    my @letters = map(($_ eq '\i' ? 'i': ($_ eq '\j' ? 'j' : $_)), map(ToString($_), ($letter ? $letter->unlist : ())));
-    if(!scalar(@letters) || ((scalar(@letters)==1) && ($letters[0] eq '\ '))){
-      Box($standalonechar,undef,undef,Invocation($accent,$letter)); }
-    else { # Put the accent AFTER the first char(?)
-      Box(NFC($letters[0].$combiningchar.join('',@letters[1..$#letters])),undef,undef,
-	  Invocation($accent,$letter)); }} ); }
+    applyAccent($stomach,$letter,$combiningchar, $standalonechar, Invocation($accent,$letter)); });
+}
 
 foreach my $accent (keys %accents) {
   DefAccent($accent, @{$accents{$accent}}); }
+
+# This will fail if there really are "assignments" after the number!
+DefPrimitive('\accent Number {}',sub {
+  my($stomach,$num,$letter)=@_;
+  my $n = $num->valueOf;
+  my $fam   = 0;		# ?
+  my $fontinfo = LookupValue('fontinfo_'.$fam.'_text');
+  my $acc = ($fontinfo && $$fontinfo{encoding} ? FontDecode($n,$$fontinfo{encoding}) : chr($n));
+  my $reversion = Invocation(T_CS('\accent'),$num,$letter);
+  # Reverse lookup of the non-spacing accent char
+  my($entry) = $acc && grep($acc eq $$_[1], values %accents);
+  if($entry){
+    applyAccent($stomach,$letter,@$entry,$reversion); }
+  else {
+    Warn(":unexpected:accent$n Accent $n not recognized");
+    Box(ToString($letter),undef,undef,$reversion); }});
 
 #======================================================================
 # TeX Book, Appendix B. p. 357
@@ -3894,8 +4144,8 @@ DefMathLigature(sub { my($document,@nodes)=@_;
 # LaTeX; Table 3.11. Math Mode Accents, p.50.
 # Are these all TeX (or LaTeX)?
 
-DefMath('\hat Digested',       "\x{2303}", operator_role=>'OVERACCENT');
-DefMath('\check Digested',     "\x{2713}", operator_role=>'OVERACCENT'); # CHECK MARK
+DefMath('\hat Digested',       UTF(0x5E),  operator_role=>'OVERACCENT');
+DefMath('\check Digested',     "\x{02C7}", operator_role=>'OVERACCENT'); # CARON
 DefMath('\breve Digested',     "\x{02D8}", operator_role=>'OVERACCENT'); # BREVE
 DefMath('\acute Digested',     UTF(0xB4),  operator_role=>'OVERACCENT'); # ACUTE ACCENT
 DefMath('\grave Digested',     UTF(0x60),  operator_role=>'OVERACCENT'); # GRAVE ACCENT
@@ -4052,39 +4302,39 @@ sub addDelimiterRole {
   $document->setAttribute($node,role=>$wrapper_role) if $node && $wrapper_role; }
 
 # Defined in e-Tex and other places.
-DefConstructor('\bigl Token',"<ltx:XMWrap size='big'>#1</ltx:XMWrap>",
+DefConstructor('\bigl Token',"<ltx:XMWrap fontsize='big'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'OPEN'); });
-DefConstructor('\bigm Token',"<ltx:XMWrap size='big'>#1</ltx:XMWrap>",
+DefConstructor('\bigm Token',"<ltx:XMWrap fontsize='big'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'MIDDLE'); });
-DefConstructor('\bigr Token',"<ltx:XMWrap size='big'>#1</ltx:XMWrap>",
+DefConstructor('\bigr Token',"<ltx:XMWrap fontsize='big'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'CLOSE'); });
-DefConstructor('\Bigl Token',"<ltx:XMWrap size='Big'>#1</ltx:XMWrap>",
+DefConstructor('\Bigl Token',"<ltx:XMWrap fontsize='Big'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'OPEN'); });
-DefConstructor('\Bigm Token',"<ltx:XMWrap size='Big'>#1</ltx:XMWrap>",
+DefConstructor('\Bigm Token',"<ltx:XMWrap fontsize='Big'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'MIDDLE'); });
-DefConstructor('\Bigr Token',"<ltx:XMWrap size='Big'>#1</ltx:XMWrap>",
+DefConstructor('\Bigr Token',"<ltx:XMWrap fontsize='Big'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'CLOSE'); });
-DefConstructor('\biggl Token',"<ltx:XMWrap size='bigg'>#1</ltx:XMWrap>",
+DefConstructor('\biggl Token',"<ltx:XMWrap fontsize='bigg'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'OPEN'); });
-DefConstructor('\biggm Token',"<ltx:XMWrap size='bigg'>#1</ltx:XMWrap>",
+DefConstructor('\biggm Token',"<ltx:XMWrap fontsize='bigg'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'MIDDLE'); });
-DefConstructor('\biggr Token',"<ltx:XMWrap size='bigg'>#1</ltx:XMWrap>",
+DefConstructor('\biggr Token',"<ltx:XMWrap fontsize='bigg'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'CLOSE'); });
-DefConstructor('\Biggl Token',"<ltx:XMWrap size='Bigg'>#1</ltx:XMWrap>",
+DefConstructor('\Biggl Token',"<ltx:XMWrap fontsize='Bigg'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'OPEN'); });
-DefConstructor('\Biggm Token',"<ltx:XMWrap size='Bigg'>#1</ltx:XMWrap>",
+DefConstructor('\Biggm Token',"<ltx:XMWrap fontsize='Bigg'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'MIDDLE'); });
-DefConstructor('\Biggr Token',"<ltx:XMWrap size='Bigg'>#1</ltx:XMWrap>",
+DefConstructor('\Biggr Token',"<ltx:XMWrap fontsize='Bigg'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'CLOSE'); });
 
 # ?
-DefConstructor('\big Token',"<ltx:XMWrap size='big'>#1</ltx:XMWrap>",
+DefConstructor('\big Token',"<ltx:XMWrap fontsize='big'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0]); });
-DefConstructor('\Big Token',"<ltx:XMWrap size='Big'>#1</ltx:XMWrap>",
+DefConstructor('\Big Token',"<ltx:XMWrap fontsize='Big'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0]); });
-DefConstructor('\bigg Token',"<ltx:XMWrap size='bigg'>#1</ltx:XMWrap>",
+DefConstructor('\bigg Token',"<ltx:XMWrap fontsize='bigg'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0]); });
-DefConstructor('\Bigg Token',"<ltx:XMWrap size='Bigg'>#1</ltx:XMWrap>",
+DefConstructor('\Bigg Token',"<ltx:XMWrap fontsize='Bigg'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0]); });
 
 Let(T_CS('\vert'),T_OTHER('|'));
@@ -4378,7 +4628,7 @@ DefLigature("/\x{2019}\x{2019}/\x{201D}/", fontTest=>sub { ($_[0]->getFamily ne 
 
 DefPrimitiveI('\TeX', undef,'TeX');
 DefPrimitiveI('\i',   undef,"\x{0131}");	# LATIN SMALL LETTER DOTLESS I
-DefPrimitiveI('\j',   undef,"j");	# Apparently, no Unicode equivalent...
+DefPrimitiveI('\j',   undef,"\x{0237}");
 
 DefConstructor('\buildrel Until:\over {}',
 	       "<ltx:XMApp role='RELOP'>"
@@ -4610,9 +4860,10 @@ DefConstructor('\@ADDCLASS{}',sub {
 sub setAlignOrClass {
   my($document,$node,$align,$class)=@_;
   my $model = $document->getModel;
-  if($model->canHaveAttribute($model->getNodeQName($node),'align')){
+  my $qname = $model->getNodeQName($node);
+  if($align && $model->canHaveAttribute($qname,'align')){
     $node->setAttribute(align=>$align); }
-  else {
+  elsif($class && $model->canHaveAttribute($qname,'class')){
     addClass($node,$class); }}
 
 #======================================================================
