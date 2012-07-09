@@ -1,6 +1,6 @@
 # /=====================================================================\ #
 # | LaTeXML::MarpaGrammar                                               | #
-# | A Marpa::XS grammar for mathematical expressions                    | #
+# | A Marpa::R2 grammar for mathematical expressions                    | #
 # |=====================================================================| #
 # | Part of LaTeXML:                                                    | #
 # |  Public domain software, produced as part of work done by the       | #
@@ -23,7 +23,7 @@ use strict;
 }}
 
 
-use Marpa::XS;
+use Marpa::R2;
 use LaTeXML::MathSemantics;
 use LaTeXML::Global;
 use base (qw(Exporter));
@@ -146,13 +146,13 @@ our $RULES = [
 
 sub new {
   my($class,%options)=@_;
-  my $grammar = Marpa::XS::Grammar->new(
+  my $grammar = Marpa::R2::Grammar->new(
   {   start   => 'Start',
       actions => 'LaTeXML::MathSemantics',
       action_object => 'LaTeXML::MathSemantics',
       rules=>$RULES,
-      default_action=>'first_arg',
-      default_null_value=>'no nullables in this grammar'});
+      default_action=>'first_arg'});
+     # default_null_value=>'no nullables in this grammar'});
 
   $grammar->precompute();
 
@@ -161,7 +161,7 @@ sub new {
 
 sub parse {
   my ($self,$rule,$unparsed) = @_;
-  my $rec = Marpa::XS::Recognizer->new( { grammar => $self->{grammar},
+  my $rec = Marpa::R2::Recognizer->new( { grammar => $self->{grammar},
                                           ranking_method => 'high_rule_only'} );
 
   # Insert concatenation
