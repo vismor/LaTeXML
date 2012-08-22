@@ -13,6 +13,11 @@
 package LaTeXML::Package::Pool;
 use strict;
 use LaTeXML::Package;
+use File::Basename;
+my $FILE_BASE;
+$FILE_BASE = dirname(__FILE__);
+$ENV{TEXINPUTS} = "$FILE_BASE/pgf//:".$ENV{TEXINPUTS};
+
 
 DefMacro('\pgfsysdriver', 'pgfsys-latexml.def.ltxml');
 
