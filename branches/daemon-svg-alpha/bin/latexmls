@@ -1,0 +1,178 @@
+#!/usr/bin/perl -w
+
+#######################
+# A Server for LaTeXML
+#######################
+
+eval 'exec /usr/bin/perl -w -S $0 ${1+"$@"}'
+    if 0; # not running under some shell
+
+# General packages
+use strict;
+use warnings;
+use Carp;
+use Pod::Usage;
+use Data::Dumper;
+# LaTeXML
+use FindBin;
+use lib "$FindBin::RealBin/../lib";
+use Storable qw(freeze thaw);
+use LaTeXML;
+use LaTeXML::Daemon;
+use LaTeXML::Util::Config;
+# Server-specific
+use POSIX qw( setsid );
+use IO::Socket;
+
+#**********************************************************************
+
+# Bookkeeping
+my $ARGV_SAVED = [@ARGV], #Save, so that we reinvoke when flushed
+
+# Global Options, with defaults
+my $g_opts = LaTeXML::Util::Config->new(
+ identity => "latexmls (LaTeXML version $LaTeXML::VERSION)",
+ profile => 'standard',
+ input_limit => 100,
+ input_counter => 0,
+ timeout => 60,
+ port => 3354
+);
+
+my $opts=LaTeXML::Util::Config->new();
+
+# Read default options
+$g_opts->read(\@ARGV);
+
+# Daemonize
+daemonize();
+
+#**********************************************************************
+# Set up the server
+my $server = setup_server($g_opts->get('port'));
+
+#**********************************************************************
+# Set up the processing.
+
+# Install signal-handlers
+local $SIG{'ALRM'} = 'dotimeout';
+local $SIG{'TERM'} = 'doterm';
+local $SIG{'INT'} = 'doterm';
+
+binmode(STDERR,":utf8");
+
+alarm($g_opts->get('timeout'));              #Timeout if inactive for too long...
+
+#**********************************************************************
+# Process files on demand:
+while ( my $client = $server->accept() ) {
+  my $request = q{};
+  my $sockstart=1;
+  while (my $line = <$client>) {
+      last if ($line =~ /^(\s*)END REQUEST(\s*)$/);
+      $line .= "\n" unless ((! defined $line) || ($line =~ /\n$/));
+      $request .= $line if (defined $line);
+  }
+  next unless ((defined $request) && (length( $request ) > 0));
+  
+  # Bookkeeping...
+  alarm(0);                    # We are processing, ignore timeout here
+
+  # Thaw request into options:
+  $opts = LaTeXML::Util::Config->new(%{thaw($request)});
+  $opts->set('source',$opts->get('tex')) if (!($opts->get('source')) && $opts->get('tex'));
+  $opts->delete('tex');
+  # Prepare TeX source
+  my $source = $opts->get('source');
+  $opts->delete('source');
+
+  if ($opts->get('base') && $opts->get('base')!~/(\w+):\/\//)
+  { chdir $opts->get('base') or croak "Can't chdir to ".$opts->get('base').": $!";}
+
+
+  # We now have a LaTeXML options object - $opts.
+  # Make sure the g_opts are included as defaults
+  foreach ($g_opts->keys) { $opts->set($_, $g_opts->get($_)) unless $opts->exists($_); }
+
+  # Boot/find a daemon:
+  my $daemon = LaTeXML::Daemon->get_converter($opts);
+
+  #Override/extend with session-specific options in $opt:
+  $daemon->prepare_session($opts);
+
+  #Send a request:
+  $g_opts->set('input_counter',$g_opts->get('input_counter')+1);
+  my $response = $daemon->convert($source);
+  my ($result, $status, $log);
+  if (defined $response) {
+    ($result, $status, $log) = map { $response->{$_} } qw(result status log);
+  }
+
+  # Delete daemon if Fatal occurred
+  undef $daemon unless defined $result;
+
+  # Send back the serialized XML, log and status:
+  print $client freeze($response);
+
+  #Flush daemon, every $input_limit files:
+  if ($g_opts->get('input_limit') && (($g_opts->get('input_counter')||0) >= $g_opts->get('input_limit'))) {
+      exec("$FindBin::RealBin/latexmls",@$ARGV_SAVED)
+	  or croak ("Daemon autoflush Failed!\n");
+  }
+  dotimeout() if ($opts->get('timeout') == -1); # Terminate immediately if desired
+  alarm($opts->get('timeout'));              #Timeout if inactive for too long...
+}
+
+sub dotimeout {
+  print "Daemon timed out after inactivity.\n";
+  print "Self destructing...\n";
+  kill 'TERM', $$;
+  return;
+}
+
+sub doterm {
+  print STDERR "Exiting...\n";
+  exit;
+}
+
+sub daemonize {
+  #chdir '/'                 or croak "Can't chdir to /: $!";
+  #This causes more problems than it solves (e.g. sTeX setup)
+  open STDIN, '<', '/dev/null'   or croak "Can't read /dev/null: $!";
+  open STDOUT, '>', '/dev/null' or croak "Can't write to /dev/null: $!";
+  defined(my $pid = fork)   or croak "Can't fork: $!";
+  exit if $pid;
+  setsid                    or croak "Can't start a new session: $!";
+  *STDERR = *STDOUT         or croak "Can't dup stdout: $!";
+  return;
+}
+
+sub setup_server {
+  my $localport = shift;
+  my $sock_server = IO::Socket::INET->new(
+        'Proto'     => 'tcp',
+        'LocalPort' => $localport,
+        'Listen'    => SOMAXCONN,
+        'Reuse'     => 1,
+    );
+  croak "can't setup server" unless $sock_server;
+  return $sock_server;
+}
+
+
+#**********************************************************************
+__END__
+
+=pod
+
+=head1 NAME
+
+C<latexmls> - A server for latexml, latexmlpost and latexmlmath.
+Remains initialized in memory until an inactivity timeout occurs.
+
+=head1 SEE ALSO
+
+L<latexmlc>, L<ltxmojo>, L<latexml>, L<latexmlpost>, L<latexmlmath>, L<LaTeXML>
+
+=cut
+#**********************************************************************

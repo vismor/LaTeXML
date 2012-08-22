@@ -1,0 +1,179 @@
+#!/usr/bin/perl -w
+
+#######################
+# A Client for LaTeXML
+#######################
+
+use strict;
+use Pod::Usage;
+use Carp;
+use Cwd qw(cwd abs_path);
+use IO::Socket;
+use FindBin;
+use lib "$FindBin::RealBin/../lib";
+use LaTeXML::Daemon;
+use LaTeXML::Util::Pathname;
+use LaTeXML::Util::Config;
+use Storable qw(freeze thaw);
+
+# Some defaults:
+my $opts=LaTeXML::Util::Config->new(
+	  identity => "latexmlc (LaTeXML version $LaTeXML::VERSION)",
+	  profile => 'custom',
+	  'input_limit' => 100,
+	  timeout => -1, # Don't start a server as default
+	  port => 3354,
+          verbosity=>0
+	 );
+
+$opts->read(\@ARGV);
+
+# Standard profile, unless specified
+$opts->set('profile','custom') unless defined $opts->get('profile');
+#Need to make all paths absolute
+my %portlist = ( math=>3334, fragment=>3344, standard=>3354);
+$opts->set('port', $portlist{$opts->get('profile')}) unless $opts->get('port');
+$opts->set('port', 3334) unless $opts->get('port'); #Fall back to 3334 if all fails...
+
+# Local if no timeout wanted (classic latexml invocation):
+$opts->set('local', 1) unless (($opts->get('timeout') != -1) || (defined $opts->get('local')));
+# TODO: Rethink this carefully, where does the "local" security get inspected?
+# Unset destinations unless local conversion has been requested:
+if (!$opts->get('local') && ($opts->get('destination') || $opts->get('log') || $opts->get('postdest') || $opts->get('postlog'))) 
+  {carp "I/O from filesystem not allowed without --local!\n".
+     " Will revert to sockets!\n";
+   $opts->set('destination',undef);
+   $opts->set('log',undef);
+   $opts->set('postdest',undef);
+   $opts->set('postlog',undef);}
+#***************************************************************************
+#Add some base, so that relative paths work
+my $cdir = abs_path(cwd());
+$cdir =~ s/ /\\ /g;
+$opts->set('base',$cdir) unless $opts->get('base');
+
+# Record if destination exists, for summary
+$opts->set('destination', pathname_canonical($opts->get('destination'))) if $opts->get('destination');
+my $deststat = (stat($opts->get('destination')))[9] if ($opts->get('destination'));
+$deststat = 0 unless $deststat;
+
+# Revert to sockets if no --local
+if (!$opts->get('local') && ($opts->get('destination') || $opts->get('log')))
+  {carp "I/O from filesystem not allowed without --local!\n".
+     " Will revert to sockets!\n";
+   $opts->set('destination',undef);
+   $opts->set('log',undef); }
+
+push @{$opts->get('paths')}, $cdir; #add current path, to ensure never empty
+
+#***************************************************************************
+# Prepare output variables:
+my  ($result, $status, $log);
+
+#Setup client and communicate
+my $sock = new IO::Socket::INET
+  ( PeerAddr => '127.0.0.1',
+    PeerPort => $opts->get('port'),
+    Proto => 'tcp',
+  ); #Attempt connecting to a service
+if ((!$sock) && ($opts->get('timeout') == -1)) {
+  # Don't boot a server, single job requested:
+  # NOTE: Log will differ, single run gets initialization log at STDERR
+  #       while server communication suppresses that part of the log otherwise
+  #   (except when errors occur)
+  my $source = $opts->get('source');
+  $opts->delete('source');
+
+  my $daemon = LaTeXML::Daemon->get_converter($opts);
+  $daemon->prepare_session($opts);
+  my $response = $daemon->convert($source);
+
+  ($result, $status, $log) = map { $response->{$_} } qw(result status log) if defined $response;
+
+} else {
+  #Startup daemon and feed in args, if needed
+  my $destopt = (($opts->get('local')) && ($opts->get('destination')) && ('--destination='.$opts->get('destination'))) || '';
+  my $formatopt = (($opts->get('format')) && ('--format='.$opts->get('format'))) || '';
+  system("$FindBin::Bin/latexmls",'--port='.$opts->get('port'),'--timeout='.$opts->get('timeout'),'--autoflush='.$opts->get('input_limit'), $destopt, $formatopt) unless $sock;
+
+  #Daemon is running, reconnect and feed in request
+  $sock = new IO::Socket::INET 
+    ( PeerAddr => '127.0.0.1',
+      PeerPort => $opts->get('port'),
+      Proto => 'tcp',
+    );
+  croak "Could not create socket: $!\n" unless $sock; 
+  my ($response,$batch);
+  $sock->send(freeze($opts->options)."\nEND REQUEST\n");
+  do {
+    $sock->recv($batch,1024);
+    $response.=$batch;
+  } while ($batch);
+  close($sock);
+
+  $response = thaw($response);
+  ($result, $status, $log) = map { $response->{$_} } qw(result status log) if defined $response;
+}
+
+#***************************************************************************
+### Common treatment of output:
+
+# Special features for latexmls:
+if ($log) {
+  if ($opts->get('log') && $opts->get('local')) {
+    my $clog = $opts->get('log');
+    open(LOG,">",$clog) or croak "Couldn't open log file $clog : $!\n";
+    print LOG $log;
+    close LOG;
+  } else {print STDERR $log,"\n";}#STDERR log otherwise
+}
+
+if ($result) {
+
+  if ($opts->get('destination') && $opts->get('local')) {
+    open(OUT,">",$opts->get('destination')) or croak "Couldn't open output file ".$opts->get('destination').": $!";
+    print OUT $result;
+    close OUT;
+  } else { print STDOUT $result,"\n"; } #Output to STDOUT
+}
+
+# Print summary, if requested, to STDERR
+if ($opts->get('destination')) {
+  print STDERR $status;
+  print STDERR summary($opts->get('destination'),$deststat);
+}
+
+# == Helpers ==
+sub summary {
+  my ($dest,$deststat) = @_;
+  my $newstat = (stat($dest))[9];
+  $newstat = 0 unless $newstat;
+  if ($newstat && ($deststat != $newstat)) { "\nWrote $dest\n"; }
+  else { "\nError! Did not write file $dest\n"; }
+}
+
+#**********************************************************************
+__END__
+
+=head1 NAME
+
+C<latexmlc> - A client for L<latexml>, L<latexmlpost> and L<latexmlmath>.
+
+=head1 SYNOPSIS
+
+See L<latexmls> for allowed options.
+
+=head1 DESCRIPTION
+
+L<latexmlc> provides a client which automatically sets up a LaTeXML local server if necessary
+(via L<latexmls>).
+
+If such server already exists, the client proceeds to communicate normally.
+
+=head1 SEE ALSO
+
+L<latexmls>, L<ltxmojo>
+
+=cut
+#**********************************************************************
+

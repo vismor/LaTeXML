@@ -1,0 +1,106 @@
+#!/usr/bin/perl -w
+#======================================================================
+# xtest:
+#    convert all test cases to xhtml
+#    generate a page of links to ease visual comparison of pdf to xml.
+#======================================================================
+use strict;
+use FindBin;
+use Getopt::Long qw(:config no_ignore_case);
+use Pod::Usage;
+
+our $htmldest='/local/www/site/htdocs/latexmltest';
+our $testdir="$FindBin::RealBin/../t";
+our $bindir ="$FindBin::RealBin/../blib/script";
+our @TYPES=("html","xhtml","html5");
+
+#**********************************************************************
+# Parse command line
+
+my $identity = "xtest";
+my($verbosity,$force,$help)=(-1,0,0); # start off quieter
+my($timestamp)=(undef);
+GetOptions("force"     => \$force,
+	   "quiet"     => sub { $verbosity--; },
+	   "verbose"   => sub { $verbosity++; },
+	   "timestamp=s" => \$timestamp,
+	   "help"      => \$help,
+	  ) or pod2usage(-message => $identity, -exitval=>1, -verbose=>0, -output=>\*STDERR);
+pod2usage(-message=>$identity, -exitval=>1, -verbose=>2, -output=>\*STDOUT) if $help;
+
+
+opendir(DIR,$testdir) or die "Couldn't read test directory $testdir: $!";
+my @testsets = grep(!/^\./ && -d "$testdir/$_", readdir(DIR));
+closedir(DIR);
+
+if(! -d $htmldest){
+  mkdir($htmldest) or die "Couldn't create destination directory $htmldest: $!"; }
+
+our $html = <<EOHead;
+<html>
+<head><title>LaTeXML Tests</title>
+<style>
+th { font-weight:bold; }
+.testgroup { text-align:left; font-size:120%; font-style:italic; }
+.testcase { padding-left:2em; font-weight:bold; }
+.pdf { text-align:center; }
+.xml { text-align:center; }
+
+</style>
+</head>
+<body>\n<h1>LaTeXML Tests</h1>
+<table>
+<tr><th class='testcase'>Testcase</th>
+    <th class='pdf'>PDF</th>
+    <th class='xml'>LaTeXML</th>
+    <th colspan='3'>Generated</th></tr>
+EOHead
+
+foreach my $dir (@testsets){
+  print STDERR "Looking at directory $testdir/$dir\n" if $verbosity >= 0;
+  opendir(DIR,"$testdir/$dir") or die "Couldn't read test directory $testdir/$dir: $!";
+  my @tests =  sort grep(-f "$testdir/$dir/$_.xml", map(s/\.pdf$// && $_, grep(/\.pdf$/, readdir(DIR))));
+  closedir(DIR);
+
+  next unless @tests;
+
+  if(! -d "$htmldest/$dir"){
+    print STDERR "Creating $htmldest/$dir\n" if $verbosity >= 0;
+    mkdir("$htmldest/$dir") or die "Couldn't create destination directory $htmldest: $!"; }
+
+  $html .= "<tr><th colspan='5' class='testgroup'>$dir</th></tr>\n";
+
+  foreach my $test (@tests){
+    my $srcxml = "$testdir/$dir/$test.xml";
+    my $srcpdf = "$testdir/$dir/$test.pdf";
+    my $dstpdf = "$htmldest/$dir/$test.pdf";
+    my @links = ("<td class='pdf'><a href='$dir/$test.pdf'>pdf</a></td>",
+		 "<td class='xml'><a href='$dir/$test.xml'>xml</a></td>");
+    my $usesdtd = system('grep','--quiet','DOCTYPE',$srcxml)==0;
+    if($force || (! -f $dstpdf) || ((-M $srcpdf) < (-M $dstpdf))){
+      print STDERR "Copying $dir/$test.pdf to dest\n" if $verbosity >= 0;
+      system('cp',$srcpdf,$dstpdf)
+	== 0 or die "Couldn't copy $testdir/$dir/$test.pdf to $htmldest/$dir: $!"; }
+    foreach my $type (@TYPES){
+      my $dstxml = "$htmldest/$dir/$test.$type";
+      push(@links,"<td class='$type'><a href='$dir/$test.$type'>$type</a></td>");
+      if($force || (! -f $dstxml) || ((-M $srcxml) < (-M $dstxml))){
+	print STDERR "Converting test case $dir/$test ($type)".($usesdtd?" [dtd]":"")."\n"
+	  if $verbosity >= 0;
+	system("$bindir/latexmlpost",
+	       ($usesdtd ? ("--novalidate"):()),
+	       "--dest=$dstxml",
+	       (defined $timestamp ? ("--timestamp=$timestamp") :()),
+	       ($verbosity > 0 ? map("--verbose",1..$verbosity)
+		: ($verbosity < 0 ? map("--quiet",1..-$verbosity)
+		   : ())),
+	       $srcxml)
+	  == 0 or die "Couldn't transform test case $testdir/$dir/$test: $!"; }}
+    $html .= "<tr><td class='testcase'>$test</td> ".join('',@links).".</tr>\n";  }
+}
+$html .= "</table>\n";
+$html .= "</body>\n";
+
+open(DIR,">$htmldest/index.html") or die "Couldn't create $htmldest/index.html: $!";
+print DIR $html;
+close(DIR);

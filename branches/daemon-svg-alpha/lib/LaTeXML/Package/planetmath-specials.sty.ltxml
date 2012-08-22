@@ -1,0 +1,105 @@
+# -*- CPERL -*-
+# /=====================================================================\ #
+# |  planetmath-specials.sty - Implementation for LaTeXML               | #
+# |                                                                     | #
+# |=====================================================================| #
+# | NOT Part of LaTeXML:                                                | #
+# |  Public domain software, produced as part of work done by the       | #
+# |  United States Government & not subject to copyright in the US.     | #
+# |---------------------------------------------------------------------| #
+# | Deyan Ginev <d.ginev@jacobs-university.de>                          | #
+# | http://dlmf.nist.gov/LaTeXML/                                       | #
+# \=====================================================================/ #
+
+package LaTeXML::Package::Pool;
+use strict;
+use LaTeXML::Package;
+
+RequirePackage('webgraphic');
+
+# Metadata namespaces:
+my $pmbaseURI = "http://alpha.planetmath.org"; # Careful: Get the URI right before we publish LOD
+RegisterMetaNamespace('dct'=>'http://purl.org/dc/terms/');
+RegisterMetaNamespace('msc'=>"http://msc2010.org/resources/MSC/2010/");
+RegisterMetaNamespace('xsd'=>'http://www.w3.org/2001/XMLSchema#');
+RegisterMetaNamespace('pm'=>"$pmbaseURI/ns/");
+RegisterMetaNamespace('pmarticle'=>"$pmbaseURI/article/");
+RegisterMetaNamespace('pmuser'=>"$pmbaseURI/user/");
+RegisterMetaNamespace('pmconcept'=>"$pmbaseURI/concept/");
+
+# URIs for Metadata Resources:
+DefMacro('\articleURI{}','pmarticle:#1');
+DefMacro('\userURI{}','pmuser:#1');
+DefMacro('\conceptURI{}','pmconcept:#1');
+
+# Metadata commands
+# Generic metadata constructors (use to define your own metadata):
+
+DefMacro('\pmmeta@literal[]{}{}{}','\@add@frontmatter{ltx:keywords}[datatype=#1,property=#2:#3,content=#4]{}');
+DefMacro('\pmmeta@uri[]{}{}{}','\@add@frontmatter{ltx:keywords}[about=#1,rel=#2:#3,resource=#4]{}');
+
+ DefMacro('\pmmeta@literal@adhoc[]{}{}','\pmmeta@literal[#1]{pm}{#2}{#3}');
+ DefMacro('\pmmeta@uri@adhoc[]{}{}','\pmmeta@uri[#1]{pm}{#2}{#3}');
+ DefMacro('\pmmeta@literal@dct[]{}{}','\pmmeta@literal[#1]{dct}{#2}{#3}');
+ DefMacro('\pmmeta@uri@dct[]{}{}','\pmmeta@uri[#1]{dct}{#2}{#3}');
+ # PlanetMath Metadata:
+
+ DefMacro('\pmselfproof{}','\pmmeta@literal@adhoc{selfproof}{#1}');
+ DefMacro('\pmcomment Semiverbatim','\pmmeta@literal@adhoc{comment}{#1}');
+ DefMacro('\pmdefines{}','\pmmeta@literal@adhoc{defines}{\conceptURI{#1}}'); #We need to figure out both defines and its argument (a concept)
+ DefMacro('\pmkeyword{}','\pmmeta@literal@adhoc{keyword}{#1}');
+
+ DefMacro('\pmparent[]{}','\pmmeta@uri@adhoc{parent}{\articleURI{#2}}'); # Ignore optional argument, the mandatory is a cannonical name
+ DefMacro('\pmrelated{}','\pmmeta@uri@adhoc{related}{\articleURI{#1}}');
+ DefMacro('\pmsynonym{}{}','\pmmeta@uri@adhoc[\conceptURI{#1}]{synonym}{\conceptURI{#2}}'); # Consider DCT alternative for the alias
+DefMacro('\pmowner{}{}','\pmmeta@uri@adhoc{owner}{\userURI{#2}}');
+DefMacro('\pmmodifier{}{}','\pmmeta@uri@adhoc{modifier}{\userURI{#2}}'); # Note : we should use usernames (maybe), but keep in mind they have SPACES in them.
+
+
+ DefMacro('\pmrecord{}{}','\pmmeta@literal@dct{hasVersion}{#1}'); # The second argument of the \pmrecord is the Noosphere ID, which we can ignore
+ DefMacro('\pmcanonicalname{}','\pmmeta@literal@dct{identifier}{#1}');
+ DefMacro('\pmcreated Semiverbatim','\pmmeta@literal@dct[xsd:date]{created}{#1}');
+ DefMacro('\pmmodified Semiverbatim','\pmmeta@literal@dct[xsd:date]{modified}{#1}');
+ DefMacro('\pmtitle{}','\pmmeta@literal@dct{title}{#1}');
+ DefMacro('\pmtype{}','\pmmeta@literal@dct{type}{#1}'); # Maybe types are resources?
+ DefMacro('\pmauthor{}{}','\pmmeta@uri@dct{creator}{\userURI{#2}}'); # First argument is a username, second DB id (ignore second).
+ DefMacro('\pmclassification{}{}','\pmmeta@uri@dct{subject}{#1:#2}'); #Arbitrary metadata, simply register the #1 argument as a namespace (e.g. msc)
+
+#FUTURE: add, as much as you have information, additional triples:
+#<some-URI-you-made-up-from-the-authors-ID> rdf:type foaf:Person ;
+#  foaf:name "Name" ;
+#  foaf:firstname "Firstname" ;
+#  foaf:lastname "...";
+#  foaf:mbox "email@addre.ss"
+#etc.
+
+# TODO: Make this robust and relativize paths when we have Drupal rewriting!
+# Basically, we're transforming the graphics options into graphicx format.
+my $graphicURL = 'http://alpha.planetmath.org/sites/default/files/pictures/';
+DefMacro('\includegraphics','\webgraphic');
+DefKeyVal('webgraphic','width','Semiverbatim');
+DefKeyVal('webgraphic','height','Semiverbatim');
+DefKeyVal('webgraphic','local','Semiverbatim');
+DefKeyVal('webgraphic','alt','Semiverbatim');
+DefConstructor('\webgraphic OptionalKeyVals:webgraphic {}',
+       "<ltx:graphics imagesrc='#url' "
+       . "?#1("
+       . "?&KeyVal(#1,'width')(imagewidth='&KeyVal(#1,'width')' )()"
+       . "?&KeyVal(#1,'height')(imageheight='&KeyVal(#1,'height')' )()"
+       . "?&KeyVal(#1,'alt')(description='&KeyVal(#1,'alt')' )()"
+       . ")() />",
+  afterConstruct => sub{
+    my ($document,$whatsit) = @_;
+    my $graphic_id = $document->getElement->getAttribute('xml:id');
+
+    my $node = $document->openElementAt($document->getDocument->getDocumentElement, 'ltx:keywords',
+                                        rel => 'pm:containsGraphic',resource => '#'.$graphic_id);
+    $document->closeElementAt($node);
+  },
+  properties=> sub {
+    my $src = $graphicURL.ToString($_[2]);
+    $src .= '.png' unless ($src =~ /\.(\w{3})$/);
+    (url=>$src);
+});
+
+1;
