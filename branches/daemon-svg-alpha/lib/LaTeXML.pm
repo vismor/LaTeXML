@@ -211,9 +211,11 @@ sub convertDocument {
        if($state->lookupValue('INCLUDE_COMMENTS')){
 	 $document->insertPI('latexml',searchpaths=>join(',',@$paths)); }}
      foreach my $preload (@{$$self{preload}}){
+       my $options;
        next if $preload=~/\.pool$/;
-       $preload =~ s/^\[([^\]]*)\]//;
-       my $options = $1;
+       if ($preload =~ s/^\[([^\]]*)\]//) {
+         $options = $1;
+       }
        $preload =~ s/\.sty$//;
        $document->insertPI('latexml',package=>$preload,($options ? (options=>$options):())); }
      $document->absorb($digested);

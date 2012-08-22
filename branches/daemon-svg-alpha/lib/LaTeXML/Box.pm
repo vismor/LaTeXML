@@ -61,7 +61,7 @@ sub setProperty   { }
 sub setProperties { }
 
 sub dim { $_[0][4]; }
-
+use File::Basename;
 # Getting the font face. Fine tuning regarding properties (bold, etc.) required.
 sub getFontFace {
   my ($self) = @_;
@@ -70,7 +70,9 @@ sub getFontFace {
   $family .= 'Italic' if $self->getFont->getShape eq 'italic';
   my $size = $self->getFont->getNumericalSize;
   my $freetype = Font::FreeType->new;
-  my $face = $freetype->face('lib/stix/STIX-'.$family.'.otf');
+  my $FILE_BASE;
+  $FILE_BASE = dirname(__FILE__);
+  my $face = $freetype->face($FILE_BASE.'/Package/stix/STIX-'.$family.'.otf');
   $face->set_char_size($size, $size, 0, 0);
   $face;
 }

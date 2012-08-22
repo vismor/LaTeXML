@@ -1084,6 +1084,13 @@ DefRegister('\dp Number',
       Warn("Unknown register: ".$reg);
 });
 
+# DG: Forcing things down LaTeXML's throat for Silviu's demo
+use File::Basename;
+my $FILE_BASE;
+$FILE_BASE = dirname(__FILE__);
+$ENV{TEXINPUTS} = "$FILE_BASE//:".$ENV{TEXINPUTS};
+Tag('ltx:*',afterOpen=>\&GenerateID);
+
 #DefRegister('\fontdimen Number TeXFileName'=>Dimension(0));
 
 DefRegister('\fontdimen Number Token'=>Dimension(0),
