@@ -1032,9 +1032,58 @@ DefRegister('\lastkern'=>Dimension(0), readonly=>1);
 # <box dimension> = \ht | \wd | \dp
 
 # Need some clever getter & setters!
-DefRegister('\ht Number',Dimension(0));
-DefRegister('\wd Number',Dimension(0));
-DefRegister('\dp Number',Dimension(0));
+# DefRegister('\ht Number',Dimension(0));
+# DefRegister('\wd Number',Dimension(0));
+# DefRegister('\dp Number',Dimension(0));
+DefRegister('\wd Number',
+  Dimension(0),
+  getter => sub {
+    my $box = 'box'.$_[0]->valueOf;
+    my $stuff = LookupValue($box); # (Math)Box, List or Whatsit
+#    print STDERR "\n\n",$stuff->stringify,"\n\n";
+    ($stuff ? Dimension($stuff->getDimensions->{'width'}.'pt') : Dimension(0));
+  },
+  setter=>sub {
+    my ($value, $reg) = @_;
+    my $box = 'box'.$reg->valueOf;
+    my $stuff = LookupValue($box); # (Math)Box, List or Whatsit
+    defined $stuff?
+      $stuff->setWidth($value->ptValue):
+      Warn("Unknown register: ".$reg);
+});
+
+DefRegister('\ht Number',
+  Dimension(0),
+  getter => sub {
+    my $box = 'box'.$_[0]->valueOf;
+    my $stuff = LookupValue($box); # (Math)Box, List or Whatsit
+    ($stuff ? Dimension($stuff->getDimensions->{'height'}.'pt') : Dimension(0));
+  },
+  setter=>sub {
+    my ($value, $reg) = @_;
+    my $box = 'box'.$reg->valueOf;
+    my $stuff = LookupValue($box); # (Math)Box, List or Whatsit
+    defined $stuff?
+      $stuff->setHeight($value->ptValue):
+      Warn("Unknown register: ".$reg);
+});
+
+DefRegister('\dp Number',
+  Dimension(0),
+  getter => sub {
+    my $box = 'box'.$_[0]->valueOf;
+    my $stuff = LookupValue($box); # (Math)Box, List or Whatsit
+    ($stuff ? Dimension($stuff->getDimensions->{'depth'}.'pt') : Dimension(0));
+  },
+  setter=>sub {
+    my ($value, $reg) = @_;
+    my $box = 'box'.$reg->valueOf;
+    my $stuff = LookupValue($box); # (Math)Box, List or Whatsit
+    defined $stuff?
+      $stuff->setDepth($value->ptValue):
+      Warn("Unknown register: ".$reg);
+});
+
 #DefRegister('\fontdimen Number TeXFileName'=>Dimension(0));
 
 DefRegister('\fontdimen Number Token'=>Dimension(0),

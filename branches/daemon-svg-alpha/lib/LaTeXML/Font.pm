@@ -187,6 +187,23 @@ sub font_match_xpaths {
 # Presumably a text font is "sticky", if used in math?
 sub isSticky { 1; }
 
+# Dimensions
+# Hm...
+our @font_size_map=(0.60=>'tiny',   0.75=>'script', 0.85=>'footnote',0.95=>'small',
+		    1.10=>'normal', 1.30=>'large',  1.55=>'Large',   1.85=>'LARGE',
+		    2.25=>'huge',   1000.0=>'Huge');
+
+sub getNumericalSize {
+  my ($self) = @_;
+  my @map = @font_size_map;
+  while(@map) {
+    my $value = shift(@map);
+    return $value * 10 if $self->getSize eq shift(@map);
+  }
+  0;
+}
+
+
 #**********************************************************************
 package LaTeXML::MathFont;
 use strict;

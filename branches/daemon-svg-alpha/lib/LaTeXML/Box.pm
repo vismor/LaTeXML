@@ -13,10 +13,11 @@ package LaTeXML::Box;
 use strict;
 use LaTeXML::Global;
 use base qw(LaTeXML::Object);
+use Font::FreeType;
 
 sub new {
   my($class,$string,$font,$locator,$tokens)=@_;
-  bless [$string,$font,$locator,$tokens],$class; }
+  bless [$string,$font,$locator,$tokens,{}],$class; }
 
 # Accessors
 sub isaBox     { 1; }
@@ -59,6 +60,74 @@ sub getProperties { (); }
 sub setProperty   { }
 sub setProperties { }
 
+sub dim { $_[0][4]; }
+
+# Getting the font face. Fine tuning regarding properties (bold, etc.) required.
+sub getFontFace {
+  my ($self) = @_;
+  my $family = 'Regular';
+  $family = 'Bold' if $self->getFont->getSeries eq 'bold';
+  $family .= 'Italic' if $self->getFont->getShape eq 'italic';
+  my $size = $self->getFont->getNumericalSize;
+  my $freetype = Font::FreeType->new;
+  my $face = $freetype->face('lib/stix/STIX-'.$family.'.otf');
+  $face->set_char_size($size, $size, 0, 0);
+  $face;
+}
+
+sub setWidth {
+  my ($self, $width) = @_;
+  $self->dim->{width} = $width;
+}
+
+sub setHeight {
+  my ($self, $height) = @_;
+  $self->dim->{height} = $height;
+}
+
+sub setDepth {
+  my ($self, $depth) = @_;
+  $self->dim->{depth} = $depth;
+}
+
+# This gets overriden for Lists and Whatsits
+sub getDimensionsInternal {
+  my ($self) = @_;
+  my $face = $self->getFontFace;
+  my %dim; $dim{width} = $dim{height} = $dim{depth} = 0;
+  return %dim if !defined $$self[0];
+  foreach (split('', $$self[0])) {
+    next if !defined $_;
+    # Need to handle vertical layouts
+    my $glyph = $face->glyph_from_char($_);
+    if (!$glyph) {
+#      Warn("Cannot find glyph for character '", $_,"'");
+      next;
+    }
+    $dim{width} = $glyph->horizontal_advance;
+    my ($xmin, $ymin, $xmax, $ymax) = $glyph->outline_bbox();
+    $dim{height} = List::Util::max($dim{height}, $ymax);
+    $dim{depth}  = List::Util::max($dim{depth}, abs($ymin));
+  }
+  return %dim;
+}
+
+sub setDimensions {
+  my ($self, %dim) = @_;
+  $self->dim->{width}  = $dim{width} if !defined $self->dim->{width};
+  $self->dim->{height} = $dim{height} if !defined $self->dim->{height};
+  $self->dim->{depth}  = $dim{depth} if !defined $self->dim->{depth};
+}
+
+sub getDimensions {
+  my ($self) = @_;
+  if (scalar keys %{$self->dim} < 3) {
+#    print STDERR "\n--->Setting dimensions of ", $self->stringify,"\n";
+    $self->setDimensions($self->getDimensionsInternal);
+  }
+  return $self->dim;
+}
+
 #**********************************************************************
 # LaTeXML::MathBox
 #**********************************************************************
@@ -69,7 +138,8 @@ use base qw(LaTeXML::Box);
 
 sub new {
   my($class,$string,$font,$locator,$tokens,$attributes)=@_;
-  bless [$string,$font,$locator,$tokens,$attributes],$class; }
+  bless [$string,$font,$locator,$tokens,$attributes,{}],$class; }
+
 
 sub isMath { 1; }		# MathBoxes are math mode.
 
@@ -78,6 +148,10 @@ sub beAbsorbed {
   ((defined $string) && ($string ne '')
    ? $_[1]->insertMathToken($_[0][0],font=>$_[0][1], ($_[0][4]? %{$_[0][4]} : ()))
    : undef); }
+
+# Dimensions
+
+sub dim { $_[0][5]; }
 
 #**********************************************************************
 # LaTeXML::Comment
@@ -112,7 +186,7 @@ sub new {
   # Maybe the most representative font for a List is the font of the LAST box (that _has_ a font!) ???
   while(defined ($b=pop(@b)) && (!defined $font)){
     $font = $b->getFont unless defined $font; }
-  bless [[@boxes],$font,$locator||''],$class; }
+  bless [[@boxes],$font,$locator||'',{}],$class; }
 
 sub isMath     { 0; }			# List's are text mode
 
@@ -142,6 +216,24 @@ sub equals {
   return !(@a || @b); }
 
 sub beAbsorbed { map($_[1]->absorb($_), $_[0]->unlist); }
+
+# Dimensions
+sub dim { $_[0][3]; }
+
+sub getDimensionsInternal {
+#    print STDERR "::List::getDimensionsInternal for ", $_[0]->stringify;
+  my ($self) = @_;
+  my %dim; $dim{width} = $dim{height} = $dim{depth} = 0;
+  foreach ($self->unlist) {
+    next if !defined $_;
+    my $d = $_->getDimensions;
+#    print STDERR "\n Got Dim. for ", $_->stringify,":height:",$d->{width},"\n";
+    $dim{width}  += $d->{width};
+    $dim{height}  = List::Util::max($dim{height}, $d->{height});
+    $dim{depth}   = List::Util::max($dim{depth}, $d->{depth});
+  }
+  return %dim;
+}
 
 #**********************************************************************
 # LaTeXML::MathList
@@ -180,7 +272,7 @@ use base qw(LaTeXML::Box);
 #  trailer
 sub new {
   my($class,$defn,$args,%properties)=@_;
-  bless {definition=>$defn, args=>$args||[], properties=>{%properties}},$class; }
+  bless {definition=>$defn, args=>$args||[], properties=>{%properties},dim=>{}},$class; }
 
 sub getDefinition { $_[0]{definition}; }
 sub isMath        { $_[0]{properties}{isMath}; }
@@ -284,6 +376,29 @@ sub beAbsorbed {
   my($self,$document)=@_;
   $self->getDefinition->doAbsorbtion($document,$self); }
 ####  &{$self->getDefinition->getConstructor}($document,@{$$self{args}},$$self{properties});}
+
+# Dimensions
+
+sub dim { $_[0]{dim}; }
+
+# Well insertpic will have w h d computation as simply \wd argument (box).
+sub getDimensionsInternal {
+#    print STDERR "::Whatsit::getDimensionsInternal for ", $_[0]->stringify;
+  my ($self) = @_;
+  my %dim; $dim{width} = $dim{height} = $dim{depth} = 0;
+  # $self->getDefinition->getCS->getCSName the cs name
+  # get args - all csname args, includes spec
+    my ($a, @b) = $self->getArgs;if ($a){@b=($a,@b) if $a=~/Whatsit/;}
+  foreach (@b) {
+    next if !defined $_ || $_ =~ /Dimension/ || $_ =~ /KeyVal/; # HAHAHA Well where does the actual content start? See how many args the constructor takes (HAHAHA soo weird I really need to do this).
+    my $d = $_->getDimensions;
+ #   print STDERR "\n Got Dim. for ", $_->stringify,":height:",$d->{width},"\n";
+    $dim{width}  += $d->{width};
+    $dim{height}  = List::Util::max($dim{height}, $d->{height});
+    $dim{depth}   = List::Util::max($dim{depth}, $d->{depth});
+  }
+  return %dim;
+}
 
 #**********************************************************************
 1;

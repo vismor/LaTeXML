@@ -109,6 +109,17 @@ sub getNodeQName {
   my($self,$node)=@_;
   $$self{model}->getNodeQName($node); }
 
+# Dimensions
+# Checks if an element is open
+sub isOpen {
+  my ($self,$element) = @_;
+  my $node = $self->getNode;
+  while ($node) {
+    last if $node->nodeName eq $element;
+    $node = $node->parentNode;
+  }
+  return $node;
+}
 
 #**********************************************************************
 # This should be called before returning the final XML::LibXML::Document to the

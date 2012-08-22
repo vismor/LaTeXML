@@ -1,0 +1,967 @@
+# -*- CPERL -*-
+# /=======================================================\ #
+# |  pgf to svg driver - Implementation for LaTeXML       | #
+# |=======================================================| #
+# | Part of LaTeXML : http://dlmf.nist.gov/LaTeXML/       | #
+# | Copyright (c) 2011 arXMLiv group                      | #
+# | Released under the GNU Public License                 | #
+# |=======================================================| #
+# | Author: Silviu Vlad Oprea                             | #
+# | E-mail: s.oprea@jacobs-university.de                  | #
+# \=======================================================/ #
+
+package LaTeXML::Package::Pool;
+use strict;
+use LaTeXML::Package;
+use Image::Magick;
+
+#=====================================================================
+# SVG specific tags
+Tag("svg:g", autoClose => 0);
+Tag("svg:clipPath", autoClose => 0);
+Tag("svg:image", autoClose => 0);
+Tag("svg:title", autoClose => 0);
+Tag("svg:foreignObject", autoOpen => 0, autoClose => 0);
+Tag("svg:pattern", autoOpen => 0, autoClose => 0);
+Tag("svg:symbol", autoOpen => 0, autoClose => 0);
+Tag("svg:use", autoOpen => 0, autoClose => 0);
+
+#=====================================================================
+# Utilities
+sub addToCount {
+  my ($reg, $value, $option) = @_;
+  $option = 'local' if !$option;
+  AssignValue($reg=>(LookupValue($reg)||0) + $value, $option); }
+
+#====================================================================#
+#= 0. Environment specific stuff ====================================#
+#====================================================================#
+
+DefMacro('\installcommands', sub {
+  (Let(T_CS('\hbox'),T_CS('\svghbox')),
+   Let(T_CS('\vbox'),T_CS('\svgvbox')),
+   Let(T_CS('\lower'),T_CS('\svglower')),
+   Let(T_CS('\raise'),T_CS('\svgraise'))); });
+
+# Order might matter here
+DefMacro('\svgpicture', sub {
+    AssignValue('pgf_SVGpath' => '');
+    (T_CS('\begingroup'),T_CS('\installcommands')); });
+
+DefMacro('\endsvgpicture', sub { T_CS('\endgroup'); });
+
+DefConstructor('\svg@pgfsys@insertpicture{}',
+  '<ltx:picture>'.
+    '<svg:svg version="1.1" width="#width" height="#height" '
+      .'viewBox="#minx #miny #width #height" id="#id">'
+      .'<svg:g transform="matrix(1 0 0 -1 0 #flipnmove)">'
+        .'#1'
+      .'</svg:g>'
+    .'</svg:svg>'
+  .'</ltx:picture>',
+  afterDigest => sub {
+    my ($stomach, $whatsit) = @_;
+    my $minx   = LookupValue('\pgf@picminx')->ptValue;
+    my $miny   = LookupValue('\pgf@picminy')->ptValue;
+    my $width  = List::Util::max(LookupValue('\pgf@picmaxx')->ptValue, 1);
+    my $height = List::Util::max(LookupValue('\pgf@picmaxy')->ptValue, 1);
+    $whatsit->setProperty(minx => $minx);
+    $whatsit->setProperty(miny => $miny);
+    $whatsit->setProperty(width => $width);
+    $whatsit->setProperty(height => $height);
+    $whatsit->setProperty(flipnmove => $height + 2 * $miny);
+    # or tikz macro (see corescopes)
+    $whatsit->setProperty(id =>
+      'svgpic'.(LookupValue('\pgf@picture@serial@count')->valueOf));
+    return; });
+
+DefParameterType('SVGMoveableBox', sub {
+  my($gullet)=@_;
+  $gullet->skipSpaces;
+  my ($box,@stuff) = $STATE->getStomach->invokeToken($gullet->readXToken(1));
+  Error(":expected:<box>  A <svghbox> was supposed to be here, got "
+    .Stringify($box))
+    unless $box && $box->isa('LaTeXML::Whatsit')
+      && ($box->getDefinition->getCSName =~ /^(\\svghbox||)$/);
+  $box; });
+
+DefConstructor('\svgraise Dimension SVGMoveableBox',
+  sub {
+    my ($doc, $dim, $box) = @_;
+    if ($doc->isOpen('svg:foreignObject')) {
+      $doc->openElement('ltx:text',
+			yoffset=>$dim->multiply(-1)->ptValue.'px',
+			_noautoclose=>'1');
+      $doc->absorb($box);
+      $doc->closeElement('ltx:text');
+    } else { $doc->absorb($box); } });
+
+DefConstructor('\svglower Dimension SVGMoveableBox', sub {
+  my ($doc, $dim, $box) = @_;
+  if ($doc->isOpen('svg:foreignObject')) {
+      $doc->openElement('ltx:text',
+			yoffset=>$dim->ptValue.'px',
+			_noautoclose=>'1');
+    $doc->absorb($box);
+    $doc->closeElement('ltx:text');
+  } else { $doc->absorb($box); } });
+
+DefConstructor('\hskip Glue', sub {
+  my ($doc, $skip) = @_;
+  print STDERR $skip->toString;
+  if ($doc->isOpen('svg:foreignObject')) {
+    $doc->openElement('ltx:text',
+		      'xoffset'=>$skip->ptValue.'px',
+		      '_noautoclose'=>'0'); } });
+
+DefConstructor('\svghbox BoxSpecification HBoxContents', '#2');
+DefConstructor('\svgvbox BoxSpecification VBoxContents', '#2');
+
+#=====================================================================#
+# 1. Beginning and ending a stream ===================================#
+#=====================================================================#
+DefMacro('\pgfsys@typesetpicturebox{}',
+  '\advance\pgf@picmaxy by-\pgf@picminy\relax%
+   \advance\pgf@picmaxx by-\pgf@picminx\relax%
+   \ht#1=\pgf@picmaxy%
+   \wd#1=\pgf@picmaxx%
+   \dp#1=0pt%
+   \leavevmode%\message{width: \the\pgf@picmaxx, height:\the\pgf@picmaxy}%%
+   \svg@pgfsys@insertpicture{\box#1}%');
+
+DefMacro('\pgfsys@beginpicture', '');
+DefMacro('\pgfsys@endpicture', '');
+
+DefConstructor('\svg@pgfsys@foreignObject{Dimension}{Dimension}{Dimension}{}',
+  sub {
+    my ($doc, $w, $h, $d, $box, %prop) = @_;
+    $doc->openElement('svg:g',
+		      id=>'fobj'.$prop{fobj_num}.'g',
+		      transform=>'matrix(1 0 0 -1 0 '.$h->ptValue.')');
+    my $node = $doc->getNode;
+    while ($node && !$node->getAttribute('stroke')) { $node=$node->parentNode; }
+    $doc->openElement('svg:switch');
+    $doc->openElement('svg:foreignObject',
+		      width=>$w->ptValue,
+		      height=>$h->add($d)->ptValue, class=>'fobj',
+		      id=>'fobj'.$prop{fobj_num}, color=>$node->getAttribute('stroke'));
+    $doc->openElement('ltx:p',
+		      xmlns=>'http://dlmf.nist.gov/LaTeXML',
+		      class=>'fobjc',
+		      'xml:id'=>'fobj'.$prop{fobj_num}.'c');
+    $doc->absorb($box);
+    $doc->maybeCloseElement('ltx:text');
+    $doc->closeElement('ltx:p');
+    $doc->closeElement('svg:foreignObject');
+    $doc->closeElement('svg:switch');
+    $doc->closeElement('svg:g'); },
+  afterDigest => sub {
+    my ($doc, $whatsit) = @_;
+    $whatsit->setProperty(fobj_num=>LookupValue('svg_fobjnum') || 0); },
+  beforeDigest => sub {
+    addToCount('svg_fobjnum', 1, 'global');
+    return; });
+
+DefMacro('\pgfsys@hbox{Number}', sub {
+  my $box = 'box'.$_[1]->valueOf;
+  my $stuff = LookupValue($box);
+  return if !$stuff;
+  my $dim = $stuff->getDimensions;
+  Invocation(T_CS('\svg@pgfsys@foreignObject'),
+	     Dimension($dim->{width}.'pt'), Dimension($dim->{height}.'pt'),
+	     Dimension($dim->{depth}.'pt'), Invocation(T_CS('\box'),$_[1])); });
+
+
+#====================================================================#
+#= 2. Path construction =============================================#
+#====================================================================#
+
+#=====================================================================
+# Helpers
+
+# Adding an element to the current SVG path
+sub addToSVGPath {
+  my($operation, @points) = @_;
+  my $newPath = join(' ', $operation, map($_->ptValue, @points));
+  if (my $currentPath = LookupValue('pgf_SVGpath')) {
+    AssignValue(pgf_SVGpath => $currentPath.' '.$newPath);
+  } else {
+    AssignValue(pgf_SVGpath => $newPath);
+  }
+  return; }
+
+sub updateBB {
+  my ($x, $y) = map($_->ptValue, @_);
+  if (LookupValue('Boolean:pgf@relevantforpicturesize') == 1) {
+    print STDERR "HERE!!!\n";
+  AssignValue(picminx=>List::Util::min(LookupValue('picminx'), $x), 'global');
+  AssignValue(picminy=>List::Util::min(LookupValue('picminy'), $y), 'global');
+  AssignValue(picmaxx=>List::Util::max(LookupValue('picmaxx'), $x), 'global');
+  AssignValue(picmaxy=>List::Util::max(LookupValue('picmaxy'), $y), 'global'); print STDERR "maxy: ", LookupValue('picmaxy'); }}
+
+# Drawing a horizontal line of given dimension
+DefPrimitive('\svg@pgfsys@hline{Dimension}', sub {
+  addToSVGPath('h', $_[1]); return; });
+
+# Drawing a vertical line of given dimension
+DefPrimitive('\svg@pgfsys@vline{Dimension}', sub {
+  addToSVGPath('v', $_[1]); return; });
+
+#=====================================================================
+# Implementation
+
+# Start a path at a specific point (x,y) or to move the current point of the
+# current path to (x,yp) without drawing anything upon stroking (the current
+# path is 'interrupted'
+DefPrimitive('\pgfsys@moveto{Dimension}{Dimension}', sub {
+  addToSVGPath('M', @_[1..$#_]); return; });
+
+# Continue the current path to (#1,#2) with a line.
+DefMacro('\pgfsys@lineto{Dimension}{Dimension}', sub {
+  addToSVGPath('L', @_[1..$#_]); return; });
+
+# Continue the current path with a bezier curver to (#5,#6). The
+# control points of the curve are at (#1,#2) and (#3,#4).
+DefPrimitive('\pgfsys@curveto{Dimension}{Dimension}{Dimension}'.
+                            '{Dimension}{Dimension}{Dimension}', sub {
+  addToSVGPath('C', @_[1..$#_]); return; });
+
+# Append a rectangle to the current path whose lower left corner is at
+# (#1,#2) and whose width/height is given by (#3,#4).
+DefMacro('\pgfsys@rect{}{}{}{}', sub {
+    my ($gullet, $x, $y, $hmove, $vmove) = @_;
+    (Invocation('\pgfsys@moveto', $x, $y),
+     Invocation('\svg@pgfsys@hline', $hmove),
+     Invocation('\svg@pgfsys@vline', $vmove),
+     Invocation('\svg@pgfsys@hline', Dimension('-'.ToString($hmove))),
+     T_CS('\pgfsys@closepath')); });
+
+# Close the current path. This results in joining the current point of
+# the path with the point specified by the last moveto
+# operation.
+DefMacro('\pgfsys@closepath', sub { addToSVGPath('Z'); return; });
+
+#=====================================================================#
+#= 3. Canvas transformation ==========================================#
+#=====================================================================#
+
+#======================================================================
+# SLL
+DefConstructor('\pgfsys@transformcm@{Float}{Float}{Float}{Float}'
+                                   .'{Dimension}{Dimension}',
+  '<svg:g transform="matrix(#c1 #c2 #c3 #c4 #x #y)">',
+  properties => {
+    c1 => sub { $_[1] -> valueOf; },
+    c2 => sub { $_[2] -> valueOf; },
+    c3 => sub { $_[3] -> valueOf; },
+    c4 => sub { $_[4] -> valueOf; },
+    x  => sub { $_[5] -> ptValue; },
+    y  => sub { $_[6] -> ptValue; } });
+#  beforeDigest => sub { addToCount('pgf_gcount', 1, 'global'); });
+
+# Perform a concatenation of the low-level current transformation
+# matrix with the matrix given by the values #1 to #6. The
+# transformation matrix is a transformation on a homogeneous
+# 2D-coordinate system.
+DefMacro('\pgfsys@transformcm{}{}{}{}{}{}', sub {
+  addToCount('pgf_gcount', 1, 'global');
+  Invocation('\pgfsysprotocol@literal', 
+    Invocation('\pgfsys@transformcm@', @_[1..$#_])); });
+
+#=====================================================================#
+#= 4. Stroking, filling, and clipping ================================#
+#=====================================================================#
+
+#======================================================================
+# SLL
+DefConstructor('\svg@pgfsys@drawunclippedpath@{}{}',
+  '<svg:path d="#1" style="#2" />');
+
+DefConstructor('\svg@pgfsys@drawclippedpath@{}{}',
+  '<svg:clipPath id="pgfcp#objcount">'
+  .'<svg:path id="pgfpath#objcount" d="#1" />'
+  .'</svg:clipPath>'
+  .'<svg:use xlink:href="#pgfpath#objcount" style="#2" />'
+  .'<svg:g clip-path="url(#pgfcp#objcount)">',
+  properties => {
+    objcount => sub { LookupValue('pgf_objcount'); },
+    pgfcp => '#pgfcp',
+    pgfpath => '#pgfpath' },
+  beforeDigest=>sub { return; });
+#    addToCount('pgf_objcount', 1, 'global') });
+#    addToCount('pgf_gcount', 1, 'global'); });
+
+DefConstructor('\svg@pgfsys@discardpathclip@{}',
+  '<svg:clipPath id="pgfcp#objcount">'
+    .'<svg:path d="#1" />'
+  .'</svg:clipPath>'
+  .'<svg:g clip-path="url(#pgfcp#objcount)">',
+  properties => {
+    objcount => sub { LookupValue('pgf_objcount'); },
+    pgfcp => '#pgfcp' },
+  beforeDigest => sub {
+#    addToCount('pgf_objcount', 1, 'global');
+#    addToCount('pgf_gcount', 1, 'global');
+    return; });
+
+#======================================================================
+# LL
+DefMacro('\svg@pgfsys@drawunclippedpath{}', sub {
+  my $svgpath = LookupValue('pgf_SVGpath') || '';
+  AssignValue(pgf_SVGpath => '');
+  Invocation('\pgfsysprotocol@literal',
+    Invocation('\svg@pgfsys@drawunclippedpath@', $svgpath, $_[1])); });
+
+DefMacro('\svg@pgfsys@drawclippedpath{}', sub {
+  my $svgpath = LookupValue('pgf_SVGpath') || '';
+  AssignValue(pgf_SVGpath => '');
+  AssignValue(pgf_clipnext => 0);
+  addToCount('pgf_gcount', 1, 'global');
+  addToCount('pgf_objcount', 1, 'global');
+  Invocation('\pgfsysprotocol@literal',
+    Invocation('\svg@pgfsys@drawclippedpath@', $svgpath, $_[1])) });
+
+DefPrimitive('\svg@pgfsys@discardpathnoclip', sub {
+    AssignValue(pgf_SVGpath => '');
+    return; });
+
+DefMacro('\svg@pgfsys@discardpathclip', sub {
+  my $svgpath = LookupValue('pgf_SVGpath') || '';
+  AssignValue(pgf_SVGpath => '');
+  AssignValue(pgf_clipnext => 0);
+  addToCount('pgf_gcount', 1, 'global');
+  addToCount('pgf_objcount', 1, 'global');
+  Invocation('\pgfsysprotocol@literal',
+    Invocation('\svg@pgfsys@discardpathclip@', $svgpath)); });
+
+#======================================================================
+# Implementation
+
+DefMacro('\pgfsys@stroke', sub {
+  Invocation('\svg@pgfsys@drawpath', 'fill:none'); });
+
+DefMacro('\pgfsys@fill', sub {
+  Invocation('\svg@pgfsys@drawpath', 'stroke:none'); });
+
+DefMacro('\pgfsys@fillstroke', sub {
+  Invocation('\svg@pgfsys@drawpath', ''); });
+
+DefMacro('\pgfsys@clipnext', sub { AssignValue(pgf_clipnext => 1); });
+
+DefMacro('\pgfsys@discardpath', sub {
+  if ((LookupValue('pgf_clipnext') || 0) == 1) {
+    return T_CS('\svg@pgfsys@discardpathclip');
+  } else {
+    return T_CS('\svg@pgfsys@discardpathnoclip');
+  } });
+
+#=====================================================================#
+#= 5. Graphic state option ===========================================#
+#=====================================================================#
+
+#=====================================================================
+# SLL
+DefConstructor('\svg@pgfsys@begingroup@', '<svg:g>');
+#  beforeDigest => sub {
+#    addToCount('pgf_gcount', 1, 'global'); });
+
+DefConstructor('\svg@pgfsys@endgroup@', '</svg:g>');
+#  beforeDigest => sub {
+#    addToCount('pgf_gcount', -1, 'global'); });
+
+DefConstructor('\svg@pgfsys@setgroupattr@{}{}', sub {
+    my ($document, $attribute, $value) = @_;
+    $document->setAttribute(
+      $document->getNode,
+      ToString($attribute)=>ToString($value)); });
+
+#=====================================================================
+# LL
+
+DefMacro('\svg@pgfsys@begingroup', sub {
+  addToCount('pgf_gcount', 1, 'global');
+  Invocation('\pgfsysprotocol@literal',
+    T_CS('\svg@pgfsys@begingroup@')); });
+
+DefMacro('\svg@pgfsys@endgroup', sub {
+  addToCount('pgf_gcount', -1, 'global');
+  Invocation('\pgfsysprotocol@literal',
+    T_CS('\svg@pgfsys@endgroup@')); });
+
+DefMacro('\svg@pgfsys@setgroupattr{}{}', sub {
+  Invocation('\pgfsysprotocol@literal',
+    Invocation('\svg@pgfsys@setgroupattr@', $_[1], $_[2])); });
+
+DefMacro('\svg@pgfsys@drawpath{}', sub {
+    my ($gullet, $arg) = @_;
+    if ((LookupValue('pgf_clipnext') || 0) == 0) {
+      Invocation('\svg@pgfsys@drawunclippedpath', $arg);
+    } else {
+      Invocation('\svg@pgfsys@drawclippedpath', $arg);
+    } });
+
+#=====================================================================
+# Implementation
+
+DefMacro('\pgfsys@setlinewidth{}', sub {
+  (T_CS('\svg@pgfsys@begingroup'),
+   Invocation('\svg@pgfsys@setgroupattr', 'stroke-width', $_[1])); });
+
+DefMacro('\pgfsys@buttcap', sub {
+  (T_CS('\svg@pgfsys@begingroup'),
+   Invocation('\svg@pgfsys@setgroupattr', "stroke-linecap", "butt")); });
+
+DefMacro('\pgfsys@roundcap', sub {
+  (T_CS('\svg@pgfsys@begingroup'),
+   Invocation('\svg@pgfsys@setgroupattr', "stroke-linecap", "round")); });
+
+DefMacro('\pgfsys@rectcap', sub {
+  (T_CS('\svg@pgfsys@begingroup'),
+   Invocation('\svg@pgfsys@setgroupattr', "stroke-linecap", "rect")); });
+
+DefMacro('\pgfsys@miterjoin', sub {
+  (T_CS('\svg@pgfsys@begingroup'),
+   Invocation('\svg@pgfsys@setgroupattr', "stroke-linejoin", "miter")); });
+
+DefMacro('\pgfsys@setmiterlimit{}', sub {
+  (T_CS('\svg@pgfsys@begingroup'),
+   Invocation('\svg@pgfsys@setgroupattr', "stroke-miterlimit", $_[1])); });
+
+DefMacro('\pgfsys@roundjoin', sub {
+  (T_CS('\svg@pgfsys@begingroup'),
+   Invocation('\svg@pgfsys@setgroupattr', "stroke-linejoin", "round")); });
+
+DefMacro('\pgfsys@beveljoin', sub {
+  (T_CS('\svg@pgfsys@begingroup'),
+   Invocation('\svg@pgfsys@setgroupattr', "stroke-linejoin", "bevel")); });
+
+DefMacro('\pgfsys@setdash{}{}', sub {
+    my ($gullet, $pat, $offset) = @_;
+    my $pattern;
+    $pat eq ""? $pattern = "none" : $pattern = $pat;
+    (T_CS('\svg@pgfsys@begingroup'),
+     Invocation('\svg@pgfsys@setgroupattr', "stroke-dasharray", $pattern),
+     Invocation('\svg@pgfsys@setgroupattr', "stroke-dashoffset", $offset)); });
+
+DefMacro('\pgfsys@eoruletrue',
+  sub {
+    (T_CS('\svg@pgfsys@begingroup'),
+     Invocation('\svg@pgfsys@setgroupattr', "fill-rule", "evenodd"));
+});
+
+DefMacro('\pgfsys@eorulefalse', sub {
+  (T_CS('\svg@pgfsys@begingroup'),
+   Invocation('\svg@pgfsys@setgroupattr', "fill-rule", "nonzero")); });
+
+#=====================================================================#
+#= 6. Color ==========================================================#
+#=====================================================================#
+
+#=====================================================================
+# Helpers
+
+sub svgColorRgb {
+  my ($r, $g, $b) = map(ToString($_), @_);
+  return 'rgb('.($r*100).'%,'.($g*100).'%,'.($b*100).'%)'; }
+
+sub svgColorCmyk {
+  my ($c, $m, $y, $k) = map(ToString($_), @_);
+  return 'rgb('.((1 - $k)*$c + $k - 1)*(-100).'%'.
+                ((1 - $k)*$m + $k - 1)*(-100).'%'.
+                ((1 - $k)*$y + $k - 1)*(-100).'%'.')'; }
+
+sub svgColorCmy {
+  my ($c, $m, $y) = map(ToString($_), @_);
+  return 'rgb('.((1 - $c)*100).'%'.
+                ((1 - $m)*100).'%'.
+                ((1 - $y)*100).'%'.')'; }
+
+sub svgColorGray {
+  my ($g) = map(ToString($_), @_);
+  return 'rgb('.($g*100).'%'.
+                ($g*100).'%'.
+                ($g*100).'%'.')'; }
+
+DefMacro('\svg@pgfsys@setcolor{}{}',
+  sub {
+    my ($gullet, $attribute, $value) = @_;
+    if ((LookupValue('Boolean:pgfpicture') || 0) == 1) {
+      return (T_CS('\svg@pgfsys@begingroup'),
+       Invocation('\svg@pgfsys@setgroupattr', $attribute, $value));
+    }
+    return; });
+
+DefMacro('\XC@mcolor', '\pgfsetcolor{.}');
+
+#=====================================================================
+# Implementation
+
+DefMacro('\pgfsys@color@rgb{}{}{}', sub {
+  my ($stomach, $r, $g, $b) = @_;
+  (Invocation('\pgfsys@color@rgb@stroke', $r, $g, $b),
+   Invocation('\pgfsys@color@rgb@fill', $r, $g, $b)); });
+
+DefMacro('\pgfsys@color@rgb@stroke{}{}{}', sub {
+  Invocation('\svg@pgfsys@setcolor', 'stroke',
+	     svgColorRgb($_[1], $_[2], $_[3])); });
+
+DefMacro('\pgfsys@color@rgb@fill{}{}{}', sub {
+      Invocation('\svg@pgfsys@setcolor', 'fill',
+		 svgColorRgb($_[1], $_[2], $_[3])); });
+
+DefMacro('\pgfsys@color@cmyk@stroke{}{}{}{}', sub {
+      Invocation('\svg@pgfsys@setcolor', 'stroke',
+		 svgColorCmyk($_[1], $_[2], $_[3], $_[4])); });
+
+DefMacro('\pgfsys@color@cmyk@fill{}{}{}{}', sub {
+      Invocation('\svg@pgfsys@setcolor', 'fill',
+		 svgColorCmyk($_[1], $_[2], $_[3], $_[4])); });
+
+DefMacro('\pgfsys@color@cmy@stroke{}{}{}', sub {
+  Invocation('\svg@pgfsys@setcolor', 'stroke',
+	     svgColorCmy($_[1], $_[2], $_[3])); });
+
+DefMacro('\pgfsys@color@cmy@fill{}{}{}', sub {
+  Invocation('\svg@pgfsys@setcolor', 'fill',
+	     svgColorCmy($_[1], $_[2], $_[3])); });
+
+DefMacro('\pgfsys@color@gray@stroke{}', sub {
+  Invocation('\svg@pgfsys@setcolor', 'stroke',
+	     svgColorGray($_[1])); });
+
+DefMacro('\pgfsys@color@gray@fill{}', sub {
+  Invocation('\svg@pgfsys@setcolor', 'fill',
+	     svgColorGray($_[1])); });
+
+#====================================================================#
+#= 7. Pattern =======================================================#
+#====================================================================#
+
+#=====================================================================
+# SLL
+DefConstructor('\svg@pgfsys@coloredpattern@{}{Dimension}{Dimension}{}',
+'<svg:defs><svg:pattern '.
+    'id ="pgfpat#1" '.
+    'patternUnits="userSpaceOnUse" '.
+    'width="#x_step" height="#y_step">'.
+    '#4'.
+  '</svg:pattern></svg:defs>',
+  properties => {
+    x_step => sub { $_[2] -> ptValue; },
+    y_step => sub { $_[3] -> ptValue; } });
+
+DefConstructor('\svg@pgfsys@uncoloredpattern@{}{Dimension}{Dimension}{}',
+'<svg:defs>'.
+  '<svg:pattern '
+    .'id ="pgfpat#1" '
+    .'patternUnits="userSpaceOnUse" '
+    .'width="#x_step" height="#y_step">'
+    .'<svg:symbol id="pgfsym#1">#4</svg:symbol>'
+  .'</svg:pattern></svg:defs>',
+  properties => {
+    x_step => sub { $_[2] -> ptValue; },
+    y_step => sub { $_[3] -> ptValue; } });
+
+DefConstructor('\pgfsys@setpatternuncolored@{}{}{}{}',
+  '<svg:defs><svg:pattern id="pgfupat#objcount" xlink:href="#pgfpat#1">'
+    .'<svg:g stroke="#color" fill="#color">'
+      .'<svg:use xlink:href="#pgfsym#1"/>'
+    .'</svg:g>'
+  .'</svg:pattern></svg:defs>'
+  .'<svg:g fill="url(#pgfupat#objcount)">',
+  properties => {
+    pgfsym => '#pgfsym',
+    pgfpat => '#pgfpat',
+    pgfupat => '#pgfupat',
+    objcount => sub { LookupValue('pgf_objcount') || 0; },
+    color => sub { svgColorRgb($_[2], $_[3], $_[4]); } },
+  beforeDigest => sub { return; });
+#    addToCount('pgf_gcount', 1, 'global');
+#    addToCount('pgf_objcount', 1, 'global'); });
+
+#=====================================================================
+# LL
+
+DefMacro('\svg@pgfsys@coloredpattern{}{}{}{}', sub{
+  Invocation('\pgfsysprotocol@literal',
+    Invocation('\svg@pgfsys@coloredpattern@', @_[1..$#_])); });
+
+DefMacro('\svg@pgfsys@uncoloredpattern{}{}{}{}', sub {
+  Invocation('\pgfsysprotocol@literal',
+    Invocation('\svg@pgfsys@uncoloredpattern@', @_[1..$#_])); });
+
+#=====================================================================
+# Implementation
+
+# \pgfsys@declarepattern{name}{x1}{y1}{x2}{y2}{x step}{y step}{code}{ﬂag}
+DefMacro('\pgfsys@declarepattern{}'
+	 .'{Dimension}{Dimension}{Dimension}{Dimension}{Dimension}{Dimension}'
+	 .'{}{Number}', sub{
+  my ($gullet,$name, $x1, $y1, $x2, $y2, $x_step, $y_step, $code, $flag) = @_;
+  AssignValue('\pgf@xa' => $x1); AssignValue('\pgf@ya' => $y1);
+  AssignValue('\pgf@xb' => $x2); AssignValue('\pgf@yb' => $y2);
+  AssignValue('\pgf@xc' => $x_step); AssignValue('\pgf@yc' => $y_step);
+  if ($flag->valueOf == 1) {
+    return Invocation('\svg@pgfsys@coloredpattern',
+		      $name, $x_step, $y_step, $code);
+  } else {
+    return Invocation('\svg@pgfsys@uncoloredpattern',
+		      $name, $x_step, $y_step, $code);
+  }
+  return; });
+
+DefMacro('\pgfsys@setpatternuncolored{}{}{}{}', sub {
+  addToCount('pgf_gcount', 1, 'global');
+  addToCount('pgf_objcount', 1, 'global');
+  Invocation('\pgfsysprotocol@literal',
+    Invocation('\pgfsys@setpatternuncolored@', @_[1..$#_])); });
+
+DefMacro('\pgfsys@setpatterncolored{}',
+  '\svg@pgfsys@setcolor{fill}{url(\#pgfpat#1)}');
+
+#====================================================================#
+#= 8. Scoping =======================================================#
+#====================================================================#
+
+# Saves the current graphic state on a graphic state stack. All
+# changes to the graphic state parameters mentioned for \pgfsys@stroke
+# and \pgfsys@fill will be local to the current graphic state and will
+# the old values will be restored after endscope is used.
+DefPrimitive('\svg@internal@savegcount', sub {
+  AssignValue(pgf_gcount_save=>LookupValue('pgf_gcount')||0);
+  AssignValue(pgf_gcount=>0); });
+
+DefPrimitive('\svg@internal@restoregcount', sub {
+  AssignValue(pgf_gcount=>LookupValue('pgf_gcount_save')||0, 'global'); });
+
+DefMacro('\pgfsys@beginscope', sub {
+  (T_CS('\svg@internal@savegcount'), T_CS('\begingroup'),
+   T_CS('\svg@pgfsys@begingroup')); });
+
+DefMacro('\pgfsys@endscope', sub {
+  my @toks = ();
+  push (@toks, T_CS('\svg@pgfsys@endgroup'))
+    foreach (1..LookupValue('pgf_gcount'));
+  (@toks, T_CS('\endgroup'), T_CS('\svg@internal@restoregcount')); });
+
+#=====================================================================#
+#= 9. Image ==========================================================#
+#=====================================================================#
+
+#=====================================================================
+# Helpers
+
+# \svg@pgfsys@insertimage{width}{height}{path}{title}
+DefConstructor('\svg@pgfsys@insertimage{}{}{}{}',
+  '<svg:g transform="matrix(1 0 0 -1 0 #2)">'
+    .'<svg:image x="#x" y="#y" width="#1" height="#2" '
+      .'preserveAspectRatio="none" xlink:href="#3" alt="#4">'
+      .'<svg:title>#4</svg:title>'
+    .'</svg:image>'
+  .'</svg:g>',
+  properties => {
+    x => sub {
+      my ($stomach, $width, $height) = @_;
+      my $prevmaxx = (LookupValue('pgf_lastForeignObjX') || 0);
+      my $newmaxx = $prevmaxx + ToString($width);
+      AssignValue(pgf_lastForeignObjX => $newmaxx, 'global');
+      if ($prevmaxx < LookupValue('\pgf@picminx') -> ptValue) {
+	AssignValue('\pgf@picminx' => Dimension($prevmaxx.'pt'), 'global');
+      }
+      if ($newmaxx > LookupValue('\pgf@picmaxx') -> ptValue) {
+	AssignValue('\pgf@picmaxx' => Dimension($newmaxx.'pt'), 'global');
+      }
+      return $prevmaxx; },
+    y => sub {
+      my ($stomach, $width, $height) = @_;
+      my $prevmaxy = (LookupValue('pgf_lastForeignObjY') || 0);
+      my $newmaxy = $prevmaxy + ToString($height);
+      # AssignValue(pgf_lastForeignObjY => $newmaxy, 'global'); # if needed
+      if ($prevmaxy < LookupValue('\pgf@picminy') -> ptValue) {
+	AssignValue('\pgf@picminy' => Dimension($prevmaxy.'pt'), 'global');
+      }
+      if ($newmaxy > LookupValue('\pgf@picmaxy') -> ptValue) {
+	AssignValue('\pgf@picmaxy' => Dimension($newmaxy.'pt'), 'global');
+      }
+      return $prevmaxy; } });
+
+RawTeX('\newbox\svg@imgbox');
+#=====================================================================
+# Implementation
+
+DefPrimitive('\pgfsys@defineimage',
+  sub {
+    my $path = ToString(Expand(T_CS('\pgf@filename')));
+    print STDERR "OK path is", $path;
+    $path =~ s/^\s+//; $path=~ s/\s+$//;
+    my @candidates = pathname_findall($path,types=>['*'],
+      paths=>LookupValue('GRAPHICSPATHS'));
+    if(my $base = LookupValue('SOURCEDIRECTORY')) {
+      @candidates=map(pathname_relative($_,$base),@candidates);
+    }
+    my $title = $path;
+    $path = $candidates[0]; # probably some priority list here
+    if (defined $path) {
+      my $magick = Image::Magick -> new; $magick -> Read($path);
+      my $width = $magick -> Get('width');   # real width
+      my $height = $magick -> Get('height'); # read height
+      print STDERR "width: ", $width, "height:",$height,"for",$path,"obj:",@candidates,"\n\n\n";
+      my $w = $width; # specified width
+      my $h = $height; # specified height
+      #my $x = (LookupValue('pgf_lastForeignObjX') || 0); # x of tl corner
+      #my $y = 0; # y coordinate of top left corner
+      my $wspec = !(xEquals(T_CS('\pgf@imagewidth'), T_CS('\pgfutil@empty')));
+      my $hspec = !(xEquals(T_CS('\pgf@imageheight'), T_CS('\pgfutil@empty')));
+      if ($wspec) {
+	$w = Dimension(ToString(Expand(T_CS('\pgf@imagewidth')))) -> ptValue;
+	$h *= $w / $width unless $hspec; # scale to preserve ratio
+      }
+      if ($hspec) {
+	$h = Dimension(ToString(Expand(T_CS('\pgf@imageheight')))) -> ptValue;
+	$w *= $h / $height unless $wspec; # scale to preserve ratio
+      }
+      # DefMacro('\pgf@image',
+      # 	'\setbox\svg@imgbox=\hbox{%
+      #      \includegraphics[height='.$h.'pt,width='.$w.'pt]{\pgf@filename}}%
+      #    \wd\svg@imgbox='.$w.'pt\relax\ht\svg@imgbox='.$h.'pt\relax\dp\svg@imgbox=0pt\relax%
+      #    \pgfqbox\svg@imgbox');
+      DefMacro('\pgf@image', ''); # will do a constructor which sets its width somehow
+    } else {
+      Error("File ".$title." not found.");
+      DefMacro('\pgf@image', '');
+    }
+    return; });
+
+#=====================================================================#
+#= 10. Shading =======================================================#
+#=====================================================================#
+
+#=====================================================================
+# Helpers
+
+DefMacro('\svg@pgfsys@sh@create', sub {
+  T_CS('\svg@pgfsys@sh@intervals'), Expand(T_CS('\pgf@sys@shading@ranges')),
+  T_BEGIN,
+    T_BEGIN, T_CS('\pgf@sys@shading@end@pos'), T_END,
+    T_BEGIN, T_CS('\pgf@sys@shading@end@pos'), T_END,
+    T_BEGIN, T_CS('\pgf@sys@shading@end@rgb'), T_END,
+    T_BEGIN, T_CS('\pgf@sys@shading@end@rgb'), T_END,
+  T_END, T_BEGIN, T_END });
+
+DefPrimitive('\svg@pgfsys@sh@color{Float}{Float}{Float}', sub {
+  AssignValue(pgf_sh_color=>svgColorRgb(map($_->valueOf, @_[1..$#_])));
+  return; });
+
+DefPrimitive('\svg@pgfsys@sh@interval@{Dimension}', sub {
+  my $endpos = Dimension(ToString Expand T_CS '\pgf@sys@shading@end@pos');
+  my $offset = $_[1]->ptValue / $endpos->ptValue;
+  AssignValue(pgf_sh=>(LookupValue('pgf_sh')||'')
+    .'<svg:stop offset="'.$offset.'" '
+    .'stop-color="'.LookupValue('pgf_sh_color').'" />');
+  return; });
+
+DefMacro('\svg@pgfsys@sh@interval{}{}{}{}', sub {
+  (T_CS('\svg@pgfsys@sh@color'), $_[3],
+   Invocation(T_CS('\svg@pgfsys@sh@interval@'),$_[1])); });
+
+DefMacro('\svg@pgfsys@sh@intervals{}', sub {
+  my ($gullet, $point) = @_;
+  $point = Expand($point);
+  return if !ToString($point);
+  (T_CS('\svg@pgfsys@sh@interval'), $point,
+   T_CS('\svg@pgfsys@sh@intervals')); });
+
+DefPrimitive('\svg@pgfsys@sh@defstripes{}{Number}', sub{
+  my ($stomach, $name, $flag) = @_;
+  my $stops = LookupValue('pgf_sh'); AssignValue(pgf_sh=>'');
+  my $x = LookupValue('\pgf@x')->ptValue;
+  my $y = LookupValue('\pgf@y')->ptValue;
+  DefPrimitiveI('\@pgfshading'.$name->ToString.'!', undef, sub {
+    my $objcount = (LookupValue('pgf_objcount') || 0) + 1;
+    AssignValue(pgf_objcount => $objcount, 'global');
+print STDERR 'Declaring svg@pgfsys@sh@defs';
+    DefConstructor('\svg@pgfsys@sh@defs',
+      '<svg:defs><svg:linearGradient id="pgfsh'.$objcount.'" '
+        .($flag->valueOf == 1? 'gradientTransform="rotate(90)"' : '').'>'
+        .$stops
+      .'</svg:linearGradient></svg:defs>');
+    DefConstructor('\svg@pgfsys@sh',
+      '<svg:rect width="'.$x.'" height="'.$y.'" '
+      .'style="fill:url(#pgfsh);stroke:none" />',
+      properties=>{ pgfsh=>'#pgfsh'.$objcount });
+    DefMacro('\svg@pgfsys@pos', sub { Invocation(T_CS('\pgfpoint'), $x, $y); });
+    return; }, scope=>'global');
+  return; });
+
+DefPrimitive('\svg@pgfsys@sh@defcircles{}', sub{
+ my ($stomach, $name) = @_;
+ my $stops = LookupValue('pgf_sh'); AssignValue(pgf_sh=>'');
+  my $endpos = Dimension(ToString Expand T_CS '\pgf@sys@shading@end@pos')->ptValue;
+  my $x = LookupValue('\pgf@x')->ptValue * 8 / ($endpos * 16) + 0.5;
+  my $y = LookupValue('\pgf@y')->ptValue * 8 / ($endpos * 16) + 0.5;
+  DefPrimitiveI('\@pgfshading'.$name->ToString.'!', undef, sub {
+    my $objcount = (LookupValue('pgf_objcount') || 0) + 1;
+    AssignValue(pgf_objcount => $objcount, 'global');
+    DefConstructor('\svg@pgfsys@sh@defs',
+      '<svg:defs><svg:radialGradient id="pgfsh'.$objcount.'" '
+        .'fx="'.$x.'" fy="'.$y.'">'
+        .$stops
+      .'</svg:radialGradient></svg:defs>');
+    DefConstructor('\svg@pgfsys@sh',
+      '<svg:circle cx="'.$endpos.'" cy="'.$endpos.'" r="'.$endpos.'" '
+      .'style="fill:url(#pgfsh);stroke:none" />',
+      properties=>{ pgfsh=>'#pgfsh'.$objcount });
+    DefMacro('\svg@pgfsys@pos', sub {
+      Invocation(T_CS('\pgfpoint'), 2 * $endpos, 2 * $endpos) });
+    return; }, scope=>'global');
+  return; });
+
+DefConstructor('\svg@pgfsys@sh@insert{Dimension}{Dimension}{}',
+  '<svg:g transform="translate(#x #y)">#3</svg:g>',
+  properties => {
+    x => sub { $_[1]->ptValue; },
+    y => sub { $_[2]->ptValue; } });
+
+DefMacro('\svg@process{Dimension}{Dimension}',
+  '\ifdim\pgf@picmaxx<#1\global\pgf@picmaxx=#1\fi'
+  .'\ifdim\pgf@picmaxy<#2\global\pgf@picmaxy=#2\fi'
+  .'\ifdim\pgf@picminx>#1\global\pgf@picminx=#1\fi'
+  .'\ifdim\pgf@picminy>#2\global\pgf@picminy=#2\fi');
+
+#=====================================================================
+# Implementation
+
+DefMacro('\pgfsys@shadinginsidepgfpicture{}',
+'\message{Using shading \string#1}'.
+  '#1\svg@pgfsys@sh@defs%
+  \pgf@process{\svg@pgfsys@pos}%
+  \pgf@x=-.5\pgf@x\relax\pgf@y=-.5\pgf@y\relax%
+%  \svg@process{\pgf@x}{\pgf@y}%
+%  \pgf@x=-1\pgf@x\relax\pgf@y=-1\pgf@y\relax%
+%  \svg@process{\pgf@x}{\pgf@y}%
+  \svg@pgfsys@sh@insert{\pgf@x}{\pgf@y}{\svg@pgfsys@sh}');
+
+DefMacro('\pgfsys@shadingoutsidepgfpicture{}',
+  '\begingroup\installcommands%
+    #1%
+    \setbox\pgfpic=\hbox to0pt{%
+      \svg@pgfsys@sh@defs%
+      \svg@pgfsys@sh%
+    }%
+    \pgf@process{\svg@pgfsys@pos}%
+    \pgf@picminx=0pt%
+    \pgf@picminy=0pt%
+    \pgf@picmaxx=\pgf@x%
+    \pgf@picmaxy=\pgf@y%
+    \pgfsys@typesetpicturebox{\pgfpic}%
+  \endgroup'
+);
+
+DefMacro('\pgfsys@horishading{}{Dimension}{}', sub {
+  my ($gullet, $name, $height, $specs) = @_;
+  (Invocation(T_CS('\pgf@parsefunc'), $specs),
+   T_CS('\svg@pgfsys@sh@create'),
+   Invocation(T_CS('\pgf@process'), Invocation(T_CS('\pgfpoint'),
+     T_CS('\pgf@sys@shading@end@pos'), $height)),
+   Invocation(T_CS('\svg@pgfsys@sh@defstripes'),
+     $name, Number(0))); });
+
+DefMacro('\pgfsys@vertshading{}{Dimension}{}', sub {
+  my ($gullet, $name, $height, $specs) = @_;
+print STDERR "\n\nDeclaring shading: ", $name->toString,":", $height->toString,":", $specs->toString,"\n\n";
+  (Invocation(T_CS('\pgf@parsefunc'), $specs),
+   T_CS('\svg@pgfsys@sh@create'),
+   Invocation(T_CS('\pgf@process'), Invocation(T_CS('\pgfpoint'),
+     T_CS('\pgf@sys@shading@end@pos'), $height)),
+   Invocation(T_CS('\svg@pgfsys@sh@defstripes'), $name, Number(1))); });
+
+DefMacro('\pgfsys@radialshading{}{}{}', sub {
+  my ($gullet, $name, $point, $specs) = @_;
+  (Invocation(T_CS('\pgf@parsefunc'), $specs),
+   T_CS('\svg@pgfsys@sh@create'),
+   Invocation(T_CS('\pgf@process'), $point),
+   Invocation(T_CS('\svg@pgfsys@sh@defcircles'), $name)); });
+
+# Wow... postscript function...
+DefMacro('\pgfsys@functionalshading{}{}{}', sub {
+  my ($gullet, $name, $ll, $ur, $psfct) = @_;
+  Let(T_CS('\svg@pgfsys@sh@defs'), T_CS('\relax'));
+  Let(T_CS('\svg@pgfsys@sh'), T_CS('\relax'));
+  Let(T_CS('\svg@pgfsys@pos'), T_CS('\relax')); });
+
+#=====================================================================#
+#= 11. Transparency ==================================================#
+#=====================================================================#
+
+DefMacro('\pgfsys@stroke@opacity{}',
+  sub {
+    (T_CS('\svg@pgfsys@begingroup'),
+     Invocation('\svg@pgfsys@setgroupattr', 'stroke-opacity', $_[1]));
+});
+
+DefMacro('\pgfsys@fill@opacity{}',
+  sub {
+    (T_CS('\svg@pgfsys@begingroup'),
+     Invocation('\svg@pgfsys@setgroupattr', 'fill-opacity', $_[1]));
+});
+
+DefMacro('\pgfsys@fadingfrombox{}{}', '');
+DefMacro('\pgfsys@usefading{}{}{}{}{}{}{}', '');
+DefMacro('\pgfsys@transparencygroupfrombox{}', '');
+DefMacro('\pgfsys@definemask', '');
+
+#=====================================================================#
+#= 12. Reusable objects ==============================================#
+#=====================================================================#
+
+DefConstructor('\pgfsys@invoke{}', '#1');
+DefMacro('\pgfsys@markposition{}', '');
+
+#=====================================================================#
+#= 13. Invisibility ==================================================#
+#=====================================================================#
+
+RawTeX('\def\pgfsys@begininvisible#1\pgfsys@endinvisible{}'); # well...
+
+#=====================================================================#
+#= 14. The protocol subsystem ========================================#
+#=====================================================================#
+
+# # Adds the literal text to the current protocol, after it has been
+# # \edef-ed. This command will always protocol.
+# DefPrimitive('\pgfsysprotocol@literalbuffered{}', sub {});
+
+# # First calls \pgfsysprotocol@literalbuffered on literal text . Then,
+# # if protocolling is currently switched off, the literal text is passed
+# # on to pgfsys@invoke, which just inserts it into the document.
+# DefMacro('\pgfsysprotocol@literal{}', '');
+
+# # Stores the current protocol in macro name for later use.
+# DefPrimitive('\pgfsysprotocol@getcurrentprotocol{}', sub {});
+
+# # Sets the current protocol to macro name.
+# DefMacro('\pgfsysprotocol@setcurrentprotocol{}', sub{});
+
+# # Inserts the text stored in the current protocol into the file.
+# DefMacro('\pgfsysprotocol@invokecurrentprotocol', sub{});
+
+# # First inserts the current protocol, then sets the current protocol to
+# # the empty string.
+# DefMacro('\pgfsysprotocol@flushcurrentprotocol', sub{});
+
+#=====================================================================#
+#= 15. Overflowing ===================================================#
+#=====================================================================#
+
+#=====================================================================
+# Dealing with quick commands
+
+# Coordinates
+# Let(T_CS('\pgfqpoint'),T_CS('\pgfpoint'));
+# Let(T_CS('\pgfqpointxy'),T_CS('\pgfpointxy'));
+# Let(T_CS('\pgfqpointxyz'),T_CS('\pgfpointxyz'));
+# Let(T_CS('\pgfqpointscale'),T_CS('\pgfpointscale'));
+
+# Path construction
+
+1;
