@@ -39,19 +39,31 @@ sub preprocess {
   $doc->addNamespace($omURI,'om'); }
 
 sub outerWrapper {
-  my($self,$doc,$node,@conversion)=@_;
-  ['om:OMOBJ',{},@conversion]; }
+  my($self,$doc,$math,$xmath,@conversion)=@_;
+  my $wrapped = ['om:OMOBJ',{},@conversion];
+  if(my $id = $xmath->getAttribute('fragid')){
+    $wrapped = $self->associateID($wrapped,$id); }
+  ($wrapped); }
 
 sub convertNode {
   my($self,$doc,$xmath,$style)=@_;
-  Expr($xmath); }
+  my($item,@rest)=  element_nodes($xmath);
+  if(@rest){			# Unparsed ???
+    print STDERR "Warning: got extra nodes for content!\n  ".$xmath->toString."\n" if @rest; }
+  Expr($item); }
 
 sub combineParallel {
-  my($self,$doc,$math,$primary,@secondaries)=@_;
+  my($self,$doc,$math,$xmath,$primary,@secondaries)=@_;
   my $tex = isElementNode($math) && $math->getAttribute('tex');
-  (['om:OMATTR',{},
-    map( (['om:OMS',{cd=>"Alternate", name=>$$_[0]->getEncodingName}], ['om:OMFOREIGN',{},$$_[1]]),
-	 @secondaries),
+  my $id = $xmath->getAttribute('fragid');
+  # secondaries should already have been wrapped with m:annotaiton by innerWrapper
+  my @attr = ();
+  foreach my $pair (@secondaries){
+    my($proc,$secondary)=@$pair;
+    my $wrapped = ['om:OMFOREIGN',{},$secondary];
+    $wrapped = $proc->associateID($wrapped,$id) if $id;
+    push(@attr, ['om:OMS',{cd=>"Alternate", name=>$proc->getEncodingName}],$wrapped); }
+  (['om:OMATTR',{}, @attr,
     ($tex ? (['om:OMS',{cd=>'Alternate', name=>'TeX'}],['om:OMFOREIGN',{},$tex]) : ()),
     $primary ]); }
 
@@ -150,7 +162,7 @@ sub om_decoratedSymbol {
   my $pmml;
   {
     local $LaTeXML::Post::MATHPROCESSOR = $pres_processor;
-    $pmml=$pres_processor->convertNode(undef,$item,'text');
+      $pmml = LaTeXML::Post::MathML::pmml($item);
   }
   ['om:OMATTR',{id=>"$id"},
    ['om:OMATP',{},
@@ -165,14 +177,38 @@ sub om_decoratedSymbol {
 # See comments above about meaning.
 # With the gradual refinement of meaning, in the lack of a mapping,
 # we'll just presume that the cd defaults to latexml...
-DefOpenMath('Token:?:?',    sub { 
+our $special_fonts = {
+ 'blackboard' => 1,
+ 'caligraphic' => 1,
+};
+DefOpenMath('Token:?:?',sub {
   my($token)=@_;
+  my $id=$token->getAttribute('xml:id');
+  my $om_token;
   if(my $meaning = $token->getAttribute('meaning')){
     my $cd = $token->getAttribute('omcd') || 'latexml';
-    ['om:OMS',{name=>$meaning, cd=>$cd}]; }
+    $om_token = ['om:OMS',{name=>$meaning, cd=>$cd}]; }
   else {
     my $name = $token->textContent || $token->getAttribute('name');
-    ['om:OMV',{name=>$name}]; }});
+    $om_token = ['om:OMV',{name=>$name}]; }
+  my $font;
+  if (($font = $token->getAttribute('font')) && ($special_fonts->{lc($font)})) {
+    $om_token->[1]->{name} = $font.$om_token->[1]->{name};
+    # Wrap presentation in an OMATTR
+    my $pmml;
+    {
+      local $LaTeXML::Post::MATHPROCESSOR = $pres_processor;
+      $pmml = LaTeXML::Post::MathML::pmml($token);
+    }
+    ['om:OMATTR',{id=>$id},
+     ['om:OMATP',{},
+      ['om:OMS',{name=>'PMML',cd=>'OMPres'}],
+      ['om:OMFOREIGN',{},$pmml]],
+     $om_token];
+  } else {
+    $om_token;
+  }
+});
 
 # NOTE: Presence of '.' distinguishes float from int !?!?
 DefOpenMath('Token:NUMBER:?',sub {

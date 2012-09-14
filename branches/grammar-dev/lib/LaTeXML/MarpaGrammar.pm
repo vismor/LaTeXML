@@ -134,8 +134,12 @@ our $RULES = [
               ['FormulaArgument',['UNKNOWN'],'first_arg_formula'],
               ['FactorArgument',['NUMBER'],'first_arg_term'],
               ['RELOP',['EQUALS']],
+              ['RELOP',['RELOPTerminal']],
+              ['METARELOP',['METARELOPTerminal']],
               ['METARELOP',['EQUALS']],
               ['ADDOP',['LOGICOP']], # Boolean algebra, lattices
+              ['ADDOP',['ADDOPTerminal']],
+              ['LOGICOP',['LOGICOPTerminal']],
               # Start:
               ['Start',['Term']],
               ['Start',['Formula']],
@@ -178,8 +182,9 @@ sub parse {
       $category = 'EQUALS' if ($lexeme eq 'equals');
     }
     print STDERR "$category:$lexeme:$id\n";
+    $category.='Terminal' if $category =~ /^(META)?RELOP|ADDOP|LOGICOP$/;
 
-    last unless $rec->read($category,$lexeme.':'.$id);
+    last unless defined $rec->read($category,$lexeme.':'.$id);
   }
 
   my @values = ();
@@ -188,7 +193,7 @@ sub parse {
   }
 
   # TODO: Support multiple parses!
-  (@values>1) ? (['ltx:XMApp',{},New('Set'),@values]) : (shift @values);
+  (@values>1) ? (['ltx:XMApp',{},New('Set',undef,omcd=>"CDLF"),@values]) : (shift @values);
 }
 
 1;

@@ -4,7 +4,7 @@ my $FILE_BASE;
 BEGIN {
     $FILE_BASE = dirname(__FILE__);
 }
-use lib $FILE_BASE."/../blib";
+use lib $FILE_BASE."/../blib/lib";
 use lib $FILE_BASE."/lib";
 
 use Mojolicious::Lite;
@@ -15,7 +15,7 @@ use Mojo::ByteStream qw(b);
 use Archive::Zip qw(:CONSTANTS :ERROR_CODES);
 use IO::String;
 use File::Path;
-use Data::Dumper;
+#use Data::Dumper;
 use Encode;
 
 use Startup;
@@ -26,7 +26,6 @@ use LaTeXML::Daemon;
 our $version = '0.1';
 our $dbfile  = '.LaTeXML_Mojo.cache';
 
-$ENV{MOJO_REVERSE_PROXY} = 1;
 $ENV{MOJO_HOME} = '.' unless defined $ENV{MOJO_HOME};
 $ENV{MOJO_MAX_MESSAGE_SIZE} = 10485760; # 10 MB file upload limit
 
@@ -53,63 +52,49 @@ helper rand_str => sub {
   return $random_string;
 };
 
-helper prepare_options => sub {
-  my ($self, $opt) = @_;
-  # Mode and Profile are synonyms
-  if (defined $opt->{mode} && (! defined $opt->{profile})) {
-    $opt->{profile} = $opt->{mode};
-    delete $opt->{mode};
-  }
-  if (!defined $opt->{profile}) {
-    if (defined $opt->{user}
-      && $startup->verify_user($opt->{user}, $opt->{password}))
-    {
-      $opt->{profile} =
-        $startup->lookup_user_property($opt->{user}, 'default') || 'custom';
-    }
-    else {
-      $opt->{profile} = 'custom';
-    }
-  }
-  $opt->{identity} =
-    "Mojo for LaTeXML, v$version; Profile: " . $opt->{profile};
-  if ($opt->{pmml}) { push @{$opt->{math_formats}}, 'pmml'; delete $opt->{pmml}; }
-  if ($opt->{cmml}) { push @{$opt->{math_formats}}, 'cmml'; delete $opt->{cmml}; }
-  if ($opt->{xmath}) { push @{$opt->{math_formats}}, 'xmath'; delete $opt->{xmath}; }
-  if ($opt->{openmath}) { push @{$opt->{math_formats}}, 'om'; delete $opt->{openmath}; }
-  # Ugh, disallow 'null' as a value!!! (TODO: Smarter fix??)
-  foreach (keys %$opt) {
-    $opt->{$_} = '' if (($opt->{$_}||'') eq 'null');
-  }
-  return $opt;
-};
-
 helper convert_zip => sub {
   my ($self) = @_;
+
   my $rdir = '/tmp/' . $self->rand_str(6) . '/';
   mkdir $rdir;
   #.zip (can't support others for now)
   my $content_handle = IO::String->new($self->req->body);
   my $zip = Archive::Zip->new();
-  self->render(text=>"Archive is corrupt!") unless
+  $self->render(text=>"Archive is corrupt!") unless
     ($zip->readFromFileHandle( $content_handle ) == AZ_OK);
   $zip->extractTree('',$rdir);
-  #Add $rdir to LaTeXML path, convert with standard profile.
-  my $opt = LaTeXML::Util::Config->new(%{$self->prepare_options({profile=>'standard', format=>'xhtml', post=>1, paths=>[$rdir], local=>1})});
-  my $daemon = LaTeXML::Daemon->get_converter($opt);
-  #Override/extend with session-specific options in $opt:
-  $daemon->prepare_session($opt);
+  # Make sure we point to the actual source directory
   my $name = $self->req->headers->header('x-file-name');
   $name =~ s/\.zip//;
+  my $srcdir = $rdir.$name."/";
+  # HTTP GET parameters hold the conversion options
+  my @all_params = @{ $self->req->url->query->params || [] };
+  my $opts=[];
+  # Ugh, disallow 'null' as a value!!! (TODO: Smarter fix??)
+  while (my ($key,$value) = splice(@all_params,0,2)) {
+    $value = '' if ($value && ($value  eq 'null'));
+    if ($key=~/local|path/) {
+      # You don't get to specify harddrive info in the web service
+      next;
+    }
+    push @$opts, ($key,$value);
+  }
+  push @$opts, ('local','');
+  push @$opts, ('paths',[$srcdir]);
+
+  $opts = $self->create_config($opts);
+  my $daemon = LaTeXML::Daemon->get_converter($opts);
+  #Override/extend with session-specific options in $opt:
+  $daemon->prepare_session($opts);
   #Send a request:
-  my $response = $daemon->convert($rdir.$name.'.tex');
+  my $response = $daemon->convert($srcdir.$name.'.tex');
   if (defined $response) {
       my ($result, $status, $log) = map { $response->{$_} } qw(result status log);
       if ($result) {
-        my $destination = $opt->get('destination');
+        my $destination = $opts->get('destination');
         if (!$destination) {
-          my $ext = '.'.$opt->get('format')||'xml';
-          $destination = $rdir.$name.$ext;
+          my $ext = '.'.$opts->get('format')||'xml';
+          $destination = $srcdir.$name.$ext;
         }
         open(OUT,">",$destination) or $self->render(text=>"Couldn't open output file ".$destination.": $!");
         print OUT encode('UTF-8',$result);
@@ -119,10 +104,10 @@ helper convert_zip => sub {
 	undef $daemon;
       }
       if ($log) {
-        my $logfile = $opt->get('log');
+        my $logfile = $opts->get('log');
         if (!$logfile) {
           my $ext = '.log';
-          $logfile = $rdir.$name.$ext;
+          $logfile = $srcdir.$name.$ext;
         }
         open(OUT,">",$logfile) or $self->render(text=>"Couldn't open log file ".$logfile.": $!");
         print OUT encode('UTF-8',$log);
@@ -132,7 +117,7 @@ helper convert_zip => sub {
   # Zip and send back
   my $returnzip = Archive::Zip->new();
   my $payload='';
-  $returnzip->addTree($rdir,$name);
+  $returnzip->addTree($srcdir,$name);
   $content_handle = IO::String->new($payload);
   $self->render(text=>'final Archive creation failed') unless ($returnzip->writeToFileHandle( $content_handle ) == AZ_OK);
   # Clean up
@@ -144,27 +129,74 @@ helper convert_zip => sub {
   return $self->render(data=>$payload);
 };
 
-helper convert_string => sub {
-  my ($self) = @_;
-  my $param = $self->req->body_params;
-  #TODO: Make sure lists go to array refs, etc.
-  my $opt = {};
-  foreach ($param->param) { $opt->{lc($_)} = $param->param($_) || 1; }
-  my $is_jsonp = $opt->{'jsonp'}; delete $opt->{'jsonp'};
+  # TODO: Maybe reintegrate IF we support username-based profiles
+  # if (!defined $opt->{profile}) {
+  #   if (defined $opt->{user}
+  #     && $startup->verify_user($opt->{user}, $opt->{password}))
+  #   {
+  #     $opt->{profile} =
+  #       $startup->lookup_user_property($opt->{user}, 'default') || 'custom';
+  #   }
+  #   else {
+  #     $opt->{profile} = 'custom';
+  #   }
+  # }
 
-  $opt = $self->prepare_options($opt);
-  # TeX is data, separate
-  my $tex = $opt->{tex};
-  delete $opt->{tex};
-  my $config = LaTeXML::Util::Config->new(%$opt);
-  # We now have a LaTeXML options object - $opt.
+helper create_config => sub {
+  my ($self,$opts) = @_;
+  my $cmdopts = [];
+  while (my ($key,$value) = splice(@$opts,0,2)) {
+    $value = $value ? "=$value" : '';
+    next if ((!$value) && ($key =~ /^preamble|path|preload|profile|destination|postamble|base|bibliography|sitedirectory|sourcedirectory|format|mode|source|whatsin|whatsout|port|autoflush|timeout|log|inputencoding|stylesheet|css|debug|documentid/)); #TODO: How to bootstrap here to avoid preamble=&...?
+    push @$cmdopts, "--$key$value";
+  }
+  # Read into a Config object:
+  my $config = LaTeXML::Util::Config->new;
+  $config->read($cmdopts);
+  $config->set('identity', "Mojo for LaTeXML, v$version; Profile: " . ($config->get('profile')||'custom'));
+  return $config;
+};
+
+helper convert_string => sub {
+  my ($self) = @_;  
+  my ($source,$is_jsonp);
+  my $get_params = $self->req->url->query->params || [];
+  my $post_params = $self->req->body_params->params || [];
+  if (scalar(@$post_params) == 1) {
+    $source = $post_params->[0];
+    $post_params=[];
+  } elsif ((scalar(@$post_params) == 2) && ($post_params->[0] !~ /^tex|source$/)) {
+    $source = $post_params->[0].$post_params->[1];
+    $post_params=[];
+  }
+  # We need to be careful to preserve the parameter order, so use arrayrefs
+  my @all_params = (@$get_params, @$post_params);
+  my $opts = [];
+  # Ugh, disallow 'null' as a value!!! (TODO: Smarter fix??)
+  while (my ($key,$value) = splice(@all_params,0,2)) {
+    $value = '' if ($value && ($value  eq 'null'));
+    # JSONP ?
+    if ($key eq 'jsonp') {
+      $is_jsonp = $value;
+      next;
+    } elsif ($key =~ /^(tex)|(source)$/) {
+      # TeX is data, separate
+      $source = $value unless defined $source;
+      next;
+    } elsif ($key=~/local|path/) {
+      # You don't get to specify harddrive info in the web service
+      next;
+    }
+    push @$opts, ($key,$value);
+  }
+  my $config = $self->create_config($opts);
+  # We now have a LaTeXML config object - $config.
   my $daemon = LaTeXML::Daemon->get_converter($config);
 
   #Override/extend with session-specific options in $opt:
   $daemon->prepare_session($config);
-
   #Send a request:
-  my $response = $daemon->convert($tex);
+  my $response = $daemon->convert($source);
   my ($result, $status, $log);
   if (defined $response) {
     ($result, $status, $log) = map { $response->{$_} } qw(result status log);
@@ -181,6 +213,13 @@ helper convert_string => sub {
       $self->render(json => {result => decode('UTF-8',$result), status => $status, log => $log});
   }
 };
+
+
+################################################
+##                                            ##
+##              ROUTES                        ##
+##                                            ##
+################################################
 
 post '/convert' => sub {
   my $self = shift;
@@ -202,16 +241,17 @@ websocket '/convert' => sub {
   $self->on('message' => sub {
 	      my ($tx, $bytes) = @_;
 	      my $opt = {};
+	      #TODO: We want the options in the right order, is this Decode safe in this respect?
 	      $opt = $json->decode($bytes);
-	      my $tex = $opt->{tex}; delete $opt->{tex};
-	      $opt = $self->prepare_options($opt);
-	      my $config = LaTeXML::Util::Config->new(%$opt);
+	      my $source = $opt->{source}; delete $opt->{source};
+	      $source = $opt->{tex} unless defined $opt->{source}; delete $opt->{tex};
+	      my $config = $self->create_config([%$opt]);
 	      # We now have a LaTeXML options object - $opt.
 	      my $daemon = LaTeXML::Daemon->get_converter($config);
 	      #Override/extend with session-specific options in $opt:
 	      $daemon->prepare_session($config);
 	      #Send a request:
-	      my $response = $daemon->convert($tex);
+	      my $response = $daemon->convert($source);
 	      my ($result, $status, $log);
 	      if (defined $response) {
 		if (! defined $response->{result}) {

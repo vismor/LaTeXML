@@ -403,8 +403,6 @@ sub invoke {
 
   # Call any 'After' code.
   my @post = $self->executeAfterDigest($stomach,$whatsit);
-  if(my $id = $props{id}){
-    $STATE->assignValue('xref:'.$id=>$whatsit,'global'); }
   if(my $cap = $$self{captureBody}){
     $whatsit->setBody(@post,$stomach->digestNextBody((ref $cap ? $cap : undef))); @post=(); }
   (@pre,$whatsit,@post); }
@@ -489,7 +487,7 @@ sub translate_constructor {
       $code .= "\$document->closeElement('$tag');\n" if s|^/||; # Empty element.
       Fatal(":misdefined:$LaTeXML::ConstructorCompiler::Name Missing \">\" in constructor template at \"$_\"") unless s|^>||; }
     # Close tag: </name>
-    elsif(s|^\s*</$QNAME_RE\s*>||so){
+    elsif(s|^</$QNAME_RE\s*>||so){
       $code .= "\$document->closeElement('$1');\n"; }
     # Substitutable value: argument, property...
     elsif(/^$VALUE_RE/o){ 
@@ -525,8 +523,6 @@ use Text::Balanced;
 sub parse_conditional {
   s/^\?//;			# Remove leading "?"
   my $bool =  'ToString('.translate_value().')';
-##  if(s/^\((.*?)\)(\((.*?)\))?//s){
-##    ($bool,$1,$3); }
   if(my $if = Text::Balanced::extract_bracketed($_,'()')){
     $if =~ s/^\(//;    $if =~ s/\)$//;
     my $else = Text::Balanced::extract_bracketed($_,'()');

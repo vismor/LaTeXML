@@ -545,30 +545,58 @@ sub openMathText_internal {
   my $font = $self->getNodeFont($node);
   $node->appendText($string);
 ##print STDERR "Trying Math Ligatures at \"$string\"\n";
+  $self->applyMathLigatures($node);
+  $node;}
+
+# Old strategy: apply ligatures until ANY one succeeds,
+# then return, assuming "all done" (!)
+sub XXXapplyMathLigatures {
+  my($self,$node)=@_;
+  my @ligatures = $STATE->getModel->getMathLigatures;
+  foreach my $ligature (@ligatures){
+    last if $self->applyMathLigature($node,$ligature); } # Hmm.. last? Or restart matches?
+  }
+
+# New stategy (but inefficient): apply ligatures until one succeeds,
+# then remove it, and repeat until ALL (remaining) fail.
+sub applyMathLigatures {
+  my($self,$node)=@_;
+  my @ligatures = $STATE->getModel->getMathLigatures;
+  while(@ligatures){
+    my $matched=0;
+    foreach my $ligature (@ligatures){
+      if($self->applyMathLigature($node,$ligature)){
+	@ligatures = grep($_ ne $ligature,@ligatures);
+	$matched=1;
+	last; }}
+    return unless $matched; }}
+
+# Apply ligature operation to $node, presumed the last insertion into it's parent(?)
+sub applyMathLigature {
+  my($self,$node,$ligature)=@_;
   my @sibs = $node->parentNode->childNodes;
-  foreach my $ligature ($STATE->getModel->getMathLigatures){
-    my($nmatched, $newstring, %attr) = &{$$ligature{matcher}}($self,@sibs);
-    if($nmatched){
-##      print STDERR "Matched $nmatched => \"$newstring\"\n";
-      my @boxes = ($self->getNodeBox($node));
-      $node->firstChild->setData($newstring);
-      for(my $i=0; $i<$nmatched-1; $i++){
-	my $remove = $node->previousSibling;
-	unshift(@boxes,$self->getNodeBox($remove));
-	$node->parentNode->removeChild($remove); }
+  my($nmatched, $newstring, %attr) = &{$$ligature{matcher}}($self,@sibs);
+  if($nmatched){
+    my @boxes = ($self->getNodeBox($node));
+    $node->firstChild->setData($newstring);
+    for(my $i=0; $i<$nmatched-1; $i++){
+      my $remove = $node->previousSibling;
+      unshift(@boxes,$self->getNodeBox($remove));
+      $self->removeNode($remove); }
 ## This fragment replaces the node's box by the composite boxes it replaces
 ## HOWEVER, this gets things out of sync because parent lists of boxes still
 ## have the old ones.  Unless we could recursively replace all of them, we'd better skip it(??)
-      if(scalar(@boxes) > 1){
-	$self->setNodeBox($node,LaTeXML::MathList->new(@boxes)); }
-      foreach my $key (keys %attr){
-	my $value = $attr{$key};
-	if(defined $value){
-	  $node->setAttribute($key=>$value); }
-	else {
-	  $node->removeAttribute($key); }}
-      last; }}			# Hmm.. last? Or restart matches?
-  $node;}
+    if(scalar(@boxes) > 1){
+      $self->setNodeBox($node,LaTeXML::MathList->new(@boxes)); }
+    foreach my $key (keys %attr){
+      my $value = $attr{$key};
+      if(defined $value){
+	$node->setAttribute($key=>$value); }
+      else {
+	$node->removeAttribute($key); }}
+    return 1; }
+  else {
+    undef; }}
 
 # Closing a text node is a good time to apply regexps (aka. Ligatures)
 sub closeText_internal {
@@ -597,9 +625,7 @@ sub closeNode_internal {
   my $closeto = $node->parentNode; # Grab now in case afterClose screws the structure.
   my $n = $self->closeText_internal; # Close any open text node.
   while($n->nodeType == XML_ELEMENT_NODE){
-#    map(&$_($self,$n,$LaTeXML::BOX),$$self{model}->getTagPropertyList($n,'afterClose'));
     $self->closeElementAt($n);
-###    last if $$node eq $$n;	# NOTE: This equality test is questionable
     last if $node->isSameNode($n);	# NOTE: This equality test is questionable
     $n = $n->parentNode; }
   print STDERR "Closing ".Stringify($node)." => ".Stringify($closeto)."\n" if $LaTeXML::Document::DEBUG;
@@ -611,28 +637,44 @@ sub closeNode_internal {
   # If we're closing a node that can take font switches and it contains
   # a single FONT_ELEMENT_NAME node; pull it up.
   my $np = $node->parentNode;
+  my $model = $$self{model};
   if(($$closeto eq $$np)	# node is Still in tree!
      && (scalar(@c=$node->childNodes) == 1) # with single child
-     && ($$self{model}->getNodeQName($c[0]) eq $FONT_ELEMENT_NAME)
-     && $$self{model}->canHaveAttribute($node,'font')){
+     && ($model->getNodeQName($c[0]) eq $FONT_ELEMENT_NAME)
+     # AND, $node can have all the attributes that the child has (but at least 'font')
+     && !grep( !$model->canHaveAttribute($node,$_),
+	       'font',grep(/^[^_]/,map($_->nodeName,$c[0]->attributes)))){
     my $c = $c[0];
     $self->setNodeFont($node,$self->getNodeFont($c));
-    $node->removeChild($c);
+    $self->removeNode($c);
     foreach my $gc ($c->childNodes){
       $node->appendChild($gc); }
+    # Merge the attributes from the child onto $node
     foreach my $attr ($c->attributes()){
       if($attr->nodeType == XML_ATTRIBUTE_NODE){
 	my $key = $attr->nodeName;
 	my $val = $attr->getValue;
+	# Special case attributes
 	if($key eq 'xml:id'){	# Use the replacement id
 	  if(!$node->hasAttribute($key)){
 	    $self->recordID($val,$node);
 	    $node->setAttribute($key, $val); }}
-	elsif($key eq 'class'){
+	elsif($key eq 'class'){	# combine $class
 	  if(my $class = $node->getAttribute($key)){
 	    $node->setAttribute($key,$class.' '.$val); }
 	  else {
 	    $node->setAttribute($key,$class); }}
+	# xoffset, yoffset, pad-width, pad-height should sum up, if present on both.
+	elsif($key =~ /^(xoffset|yoffset|pad-height|pad-width)$/){
+	    if(my $val2 = $node->getAttribute($key)){
+		my $v1 = $val =~/^([\+\-\d\.]*)pt$/ && $1;
+		my $v2 = $val2=~/^([\+\-\d\.]*)pt$/ && $1;
+		$node->setAttribute($key=>($v1+$v2).'pt'); }
+	    else {
+		$node->setAttribute($key=>$val); }}
+	# Remaining attributes should prefer the inner (child's) values, if any
+	# (font, size, color, framed)
+	# (width,height, depth, align, vattach, float)
 	elsif(my $ns = $attr->namespaceURI){
 	  $node->setAttributeNS($ns,$attr->name,$val); }
 	else {
@@ -654,16 +696,24 @@ sub setAttribute {
   my($self,$node,$key,$value)=@_;
   $value = ToString($value) if ref $value;
   if((defined $value) && ($value ne '')){ # Skip if `empty'; but 0 is OK!
-    $value = $self->recordID($value,$node) if $key eq 'xml:id'; # If this is an ID attribute
-    my($ns,$name)=$$self{model}->decodeQName($key);
-    if($ns){
-      my $prefix = $$self{model}->getDocumentNamespacePrefix($ns,1);
-      if(! $node->lookupNamespacePrefix($ns)){	# namespace not already declared?!?!?!
-	$self->getDocument->documentElement->setNamespace($ns,$prefix,0); }
-      my $qname = ($prefix && $prefix ne '#default' ? "$prefix:$name" : $name);
-      $node->setAttributeNS($ns,$qname=>$value); }
+    if($key eq 'xml:id'){		  # If it's an ID attribute
+      $value = $self->recordID($value,$node); # Do id book keeping
+      $node->setAttributeNS($LaTeXML::Common::XML::XML_NS,'id',$value); } # and bypass all ns stuff
+    elsif($key !~ /:/){		# No colon; no namespace (the common case!)
+      $node->setAttribute($key=>$value); }
     else {
-      $node->setAttribute($name=>$value); }}}
+      my($ns,$name)=$$self{model}->decodeQName($key);
+      if($ns){					       # If namespaced attribute (must have prefix!)
+	my $prefix = $node->lookupNamespacePrefix($ns);	# namespace already declared?
+	if(!$prefix){					# if namespace not already declared
+	  $prefix = $$self{model}->getDocumentNamespacePrefix($ns,1); # get the prefix to use
+	  $self->getDocument->documentElement->setNamespace($ns,$prefix,0); } # and declare it
+	if($prefix eq '#default'){
+	  Warn(":unexpected:#default shouldn't have namespaced attributes in default namespace $ns");
+	  $prefix=''; }
+	$node->setAttributeNS($ns,"$prefix:$name"=>$value); }
+      else {
+	$node->setAttribute($name=>$value); }}}} # redundant case...
 
 #**********************************************************************
 # Association of nodes and ids (xml:id)
@@ -731,7 +781,7 @@ sub getNodeBox {
 
 sub setNodeFont {
   my($self,$node,$font)=@_;
-#  my $fontid = "$font";
+  return unless ref $font;	# ?
   my $fontid = $font->toString;
   $$self{node_fonts}{$fontid} = $font;
   if($node->nodeType == XML_ELEMENT_NODE){
@@ -745,6 +795,27 @@ sub getNodeFont {
   (($t == XML_ELEMENT_NODE) && $$self{node_fonts}{$node->getAttribute('_font')})
     || LaTeXML::Font->default(); }
 
+sub decodeFont {
+  my($self,$fontid)=@_;
+  $$self{node_fonts}{$fontid} || LaTeXML::Font->default(); }
+
+# Remove a node from the document (from it's parent)
+sub removeNode {
+  my($self,$node)=@_;
+  if($node->nodeType == XML_ELEMENT_NODE){ # If an element, do ID bookkeeping.
+    if(my $id = $node->getAttribute('xml:id')){
+      $self->unRecordID($id); }
+    map($self->removeNode_aux($_), $node->childNodes); }
+  $node->parentNode->removeChild($node);
+###  $node->unbindNode;		# for cleanup, and also to assure removed if there's no children!
+  $node; }
+
+sub removeNode_aux {
+  my($self,$node)=@_;
+  if($node->nodeType == XML_ELEMENT_NODE){ # If an element, do ID bookkeeping.
+    if(my $id = $node->getAttribute('xml:id')){
+      $self->unRecordID($id); }
+    map($self->removeNode_aux($_), $node->childNodes); }}
 
 #**********************************************************************
 # Inserting new nodes at random points into the document,
@@ -776,6 +847,7 @@ sub openElementAt {
   my $newnode;
   my $font = $attributes{_font}||$attributes{font};
   my $box  = $attributes{_box};
+  $box = $$self{node_boxes}{$box} if $box && !ref $box; # may already be the string key
   # If this will be the document root node, things are slightly more involved.
   if($point->nodeType == XML_DOCUMENT_NODE){ # First node! (?)
     $$self{model}->addSchemaDeclaration($self,$tag);
@@ -948,7 +1020,7 @@ sub replaceNode {
     if($c0){ $parent->insertAfter($c1,$c0); }
     else   { $parent->replaceChild($c1,$node); }
     $c0=$c1; }
-  $node->unbindNode;		# for cleanup, and also to assure removed if there's no children!
+  $self->removeNode($node);
   $node; }
 
 # initially since $node->setNodeName was broken in XML::LibXML 1.58
@@ -981,11 +1053,55 @@ sub renameNode {
   $self->afterOpen($new);
   $self->afterClose($new);
   # Finally, remove the old node
-  $parent->removeChild($node);
+  $self->removeNode($node);
   $new; }
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Finally, another set of surgery methods
+# These take an array representation of the XML Tree to append
+#   [tagname,{attributes..}, children]
+# THESE SHOULD BE PART OF A COMMON BASE CLASS; DUPLICATED IN Post::Document 
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+sub replaceTree {
+  my($self,$new,$old)=@_;
+  my $parent = $old->parentNode;
+  my @following = ();		# Collect the matching and following nodes
+  while(my $sib = $parent->lastChild){
+    last if $$sib == $$old;
+    $parent->removeChild($sib);	# We're putting these back, in a moment!
+##    last if $$sib == $$old;
+    unshift(@following,$sib); }
+  $self->removeNode($old);
+  $self->appendTree($parent,$new);
+  my $inserted = $parent->lastChild;
+  map($parent->appendChild($_),@following); # No need for clone
+  $inserted; }
+
+sub appendTree {
+  my($self,$node,@data)=@_;
+  foreach my $child (@data){
+    if(ref $child eq 'ARRAY'){
+      my($tag,$attributes,@children)=@$child;
+      my $new = $self->openElementAt($node,$tag,($attributes ? %$attributes:()));
+      $self->appendTree($new,@children); }
+    elsif((ref $child) =~ /^XML::LibXML::/){
+      my $type = $child->nodeType;
+      if($type == XML_ELEMENT_NODE){
+	my $tag = $self->getNodeQName($child);
+	my %attributes = map($_->nodeType == XML_ATTRIBUTE_NODE ? ($_->nodeName=>$_->getValue):(),
+			     $child->attributes);
+	my $new = $self->openElementAt($node,$tag,%attributes);
+	$self->appendTree($new, $child->childNodes); }
+      elsif($type == XML_DOCUMENT_FRAG_NODE){
+	$self->appendTree($node,$child->childNodes); }
+      elsif($type == XML_TEXT_NODE){
+	$node->appendTextNode($child->textContent); }
+    }
+    elsif(ref $child){
+      warn "Dont know how to add $child to $node; ignoring"; }
+    elsif(defined $child){
+      $node->appendTextNode($child); }}}
 
 #**********************************************************************
 1;

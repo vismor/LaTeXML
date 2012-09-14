@@ -52,6 +52,7 @@ sub loadSchema {
     $self->setRelaxNGSchema("LaTeXML");
     $self->registerNamespace(ltx=>$LTX_NAMESPACE);
     $self->registerNamespace(svg=>"http://www.w3.org/2000/svg");
+    $self->registerNamespace(xlink=>"http://www.w3.org/1999/xlink"); # Needed for SVG
     $self->registerNamespace(m=>"http://www.w3.org/1998/Math/MathML");
     $$self{permissive}=1; }	# Actually, they could have declared all sorts of Tags....
 
@@ -444,8 +445,8 @@ sub getLigatures {
   @{$$self{ligatures}}; }
 
 sub addMathLigature {
-  my($self,$matcher)=@_;
-  unshift(@{$$self{mathligatures}}, { matcher=>$matcher}); }
+  my($self,$matcher,%options)=@_;
+  unshift(@{$$self{mathligatures}}, { matcher=>$matcher,%options}); }
 
 sub getMathLigatures {
   my($self)=@_;

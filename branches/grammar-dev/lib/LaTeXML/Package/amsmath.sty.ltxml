@@ -80,7 +80,7 @@ DefMacro('\@ams@intertext{}',
 #	 '\@alignment@newline\multicolumn{\@alignment@ncolumns}{l}{\@@ams@intertext{#1}}\nonumber\@alignment@newline');
 	 '\@ams@newline\multicolumn{\@alignment@ncolumns}{l}{\@@ams@intertext{#1}}\nonumber\@ams@newline');
 DefConstructor('\@@ams@intertext{}',
-	       "<ltx:p class='intertext'>#1</ltx:p>", mode=>'text',properties=>{isIntertext=>1});
+	       "<ltx:p class='ltx_intertext'>#1</ltx:p>", mode=>'text',properties=>{isIntertext=>1});
 
 DefMacroI('\@ams@newline', undef, sub {
   my($gullet)=@_;
@@ -174,7 +174,7 @@ DefEnvironment('{split}',
 		 DefConstructor("\\\\","<ltx:XMHint name='newline'/>",
 				reversion=>Tokens(T_CS("\\\\"),T_CR)); 
 		 DefConstructor('\intertext{}',
-				"<ltx:p class='intertext'>#1</ltx:p>", mode=>'text'); });
+				"<ltx:p class='ltx_intertext'>#1</ltx:p>", mode=>'text'); });
 
 #======================================================================
 # Section 3.5 Equation groups without alignment
@@ -188,7 +188,7 @@ DefConstructor('\@@amsgather SkipSpaces DigestedBody',
 		 my($document,$body,%props)=@_;
 		 rearrangeAMSGather($document,
 				     constructAlignment($document,$body,
-							attributes=>{class=>'gather'})); },
+							attributes=>{class=>'ltx_gather'})); },
 	       beforeDigest=>sub { $_[0]->bgroup; });
 DefPrimitive('\end@amsgather',sub{ $_[0]->egroup; });
 
@@ -246,7 +246,7 @@ DefConstructor('\@@amsalign SkipSpaces DigestedBody',
 		 my($document,$body,%props)=@_;
 		 rearrangeAMSAlign($document,
 				    constructAlignment($document,$body,
-						       attributes=>{class=>'align'})); },
+						       attributes=>{class=>'ltx_align'})); },
 	       beforeDigest=>sub { $_[0]->bgroup; });
 DefPrimitive('\end@amsalign',sub{ $_[0]->egroup; });
 
@@ -400,14 +400,15 @@ sub rearrangeLoneAMSAligned {
       foreach my $mtr ($document->findnodes('ltx:XMRow',$array)){
 	# new equation for each row (??? Or should it be each pair of columns?)
 	my $eqn = $document->openElementAt($equationgroup,'ltx:equation');
-	$document->setAttribute($eqn,
-			'xml:id'=>$document->modifyID($equation->getAttribute('xml:id')."X"));
+	if(my $id = $equation->getAttribute('xml:id')){
+	   $document->setAttribute($eqn,'xml:id'=>$document->modifyID($id."X")); }
 	my @mtds = $document->findnodes('ltx:XMCell',$mtr);
 	while(@mtds){
 	  my($math,$branch)=openMathFork($document,$eqn);
 	  my @cells;
 	  foreach (0,1){	# Add the lhs & rhs, separately.
 	    my $cell = shift(@mtds);
+	    next unless $cell;	# alignment not in pairs? Maybe we shouldn't even get this far?
 	    my $td = $document->openElementAt($branch,'ltx:td',
 					      align=>$cell->getAttribute('align'));
 	    if(my $stuff = $cell->firstChild){
@@ -452,7 +453,7 @@ DefMacro('\displaybreak[]','');	# Ignorable
 # Section 3.10 Interrupting a display
 
 # default when not used inside an appropriate alignment.
-DefConstructor('\intertext{}', "<ltx:p class='intertext'>#1</ltx:p>", mode=>'text');
+DefConstructor('\intertext{}', "<ltx:p class='ltx_intertext'>#1</ltx:p>", mode=>'text');
 
 #======================================================================
 # Section 3.11 Equation numbering
@@ -639,12 +640,12 @@ DefMacro('\uproot{}','');
 # Section 4.7 Boxed formulas
 DefMacro('\boxed{}','\ifmmode\boxed@math{#1}\else\boxed@text{#1}\fi');
 DefConstructor('\boxed@math{}',
-	       "<ltx:XMWrap enclose='box'>#1</ltx:XMWrap>");
+	       "<ltx:XMArg enclose='box'>#1</ltx:XMArg>");
 DefConstructor('\boxed@text{}',sub {
   my($document,$body,%props)=@_;
   my @new = insertBlock($document,$body);
   foreach my $node (@new){
-    addClass($node,'framed'); }},
+    $node->addAttribute(framed=>'rectangle'); }}, # if allowed??
 	       bounded=>1,
 	       beforeDigest=>sub {
 		 Let(T_CS("\\\\"),T_CS('\@block@cr')); });
@@ -700,19 +701,19 @@ DefConstructor('\underset{}{}',
 
 DefConstructor('\tfrac{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok meaning='divide' role='MULOP' fracstyle='#fracstyle'/>"
+	       . "<ltx:XMTok meaning='divide' role='MULOP' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeTFrac, afterDigest =>\&afterTFrac);
 DefConstructor('\dfrac{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok meaning='divide' role='MULOP' fracstyle='#fracstyle'/>"
+	       . "<ltx:XMTok meaning='divide' role='MULOP' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeDFrac, afterDigest =>\&afterDFrac);
 DefConstructor('\ifrac{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok meaning='divide' role='MULOP' fracstyle='inline'/>"
+	       . "<ltx:XMTok meaning='divide' role='MULOP' mathstyle='inline'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeFrac, afterDigest =>\&afterFrac);
@@ -720,20 +721,20 @@ DefConstructor('\ifrac{}{}',
 # Section 4.11.2 The \binom, \dbinom, and \tbinom commands
 DefConstructor('\binom{}{}',
 	       "<ltx:XMApp open='(' close=')'>"
-	       . "<ltx:XMTok meaning='binomial' role='STACKED' fracstyle='#fracstyle'/>"
+	       . "<ltx:XMTok meaning='binomial' role='STACKED' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeFrac, afterDigest =>\&afterFrac);
 
 DefConstructor('\tbinom{}{}',
 	       "<ltx:XMApp open='(' close=')'>"
-	       . "<ltx:XMTok meaning='binomial' role='STACKED' fracstyle='#fracstyle'/>"
+	       . "<ltx:XMTok meaning='binomial' role='STACKED' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeTFrac, afterDigest =>\&afterTFrac);
 DefConstructor('\dbinom{}{}',
 	       "<ltx:XMApp open='(' close=')'>"
-	       . "<ltx:XMTok meaning='binomial' role='STACKED' fracstyle='#fracstyle'/>"
+	       . "<ltx:XMTok meaning='binomial' role='STACKED' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeDFrac, afterDigest =>\&afterDFrac);
@@ -742,7 +743,7 @@ DefConstructor('\dbinom{}{}',
 DefConstructor('\genfrac{}{}{Dimension}{}{}{}',
 	       "<ltx:XMApp open='#open' close='#close'>"
 	       . "<ltx:XMTok ?&IsZero(#3)(role='STACKED')(role='MULOP' meaning='divide')"
-	       .           " thickness='#3' fracstyle='?#4(#4)(#fracstyle)'/>"
+	       .           " thickness='#3' mathstyle='?#4(#4)(#mathstyle)'/>"
 	       . "<ltx:XMArg>#5</ltx:XMArg>"
 	       . "<ltx:XMArg>#6</ltx:XMArg>"
 	       ."</ltx:XMApp>",
@@ -756,7 +757,7 @@ DefConstructor('\genfrac{}{}{Dimension}{}{}{}',
 				  $close = $$entry{char}; }
 				$whatsit->setProperties(open=>$open,
 							close=>$close,
-							fracstyle=>($style eq 'display'
+							mathstyle=>($style eq 'display'
 								    ? $style : 'text')); });
 
 #======================================================================
@@ -767,7 +768,7 @@ DefConstructor('\genfrac{}{}{Dimension}{}{}{}',
 # I've left it to a special case in conversion to pmml.
 DefConstructor('\cfrac{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok name='cfrac' fracstyle='#cfracstyle' meaning='continued-fraction'/>"
+	       . "<ltx:XMTok name='cfrac' mathstyle='#mathstyle' meaning='continued-fraction'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg>"
 	       . "<ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
@@ -776,7 +777,7 @@ DefConstructor('\cfrac{}{}',
 		 AssignValue(mathstyle=>'text'); },
 	       afterDigest=>sub {
 		 $_[0]->egroup;
-		 $_[1]->setProperties(cfracstyle=>LookupValue('CFRACSTYLE')); });
+		 $_[1]->setProperties(mathstyle=>LookupValue('CFRACSTYLE')); });
 
 AssignValue(CFRACSTYLE=>'display');
 # This should get incorporated into any \cfrac's that are constructed in scope.
@@ -839,9 +840,9 @@ DefConstructor('\substack{}',
 							     "</ltx:XMArg><ltx:XMArg>",
 							     reversion=>Tokens(T_CS("\\\\"),T_CR));
 					      Let(T_CS('\cr'),T_CS("\\\\")); });
-DefEnvironment('{subarray}[]',
+DefEnvironment('{subarray}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok name='list' alignment='#1'/>"
+	       . "<ltx:XMTok name='list' role='STACKED' class='align#1'/>"
 	       . "<ltx:XMArg>#body</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>sub{ DefConstructor("\\\\ OptionalMatch:* [Dimension]",
@@ -897,10 +898,14 @@ DefConstructor('\sideset{}{}{}', sub {
 #======================================================================
 # Section 7.4 Multiple integral signs
 
-DefMath('\iint', "\x{222C}", meaning=>'double-integral', role=>'INTOP'); # DOUBLE INTEGRAL
-DefMath('\iiint',"\x{222D}", meaning=>'triple-integral', role=>'INTOP'); # TRIPLE INTEGRAL
-DefMath('\iiiint',"\x{2A0C}", meaning=>'quadruple-integral', role=>'INTOP');
-DefMath('\idotsint',"\x{222B}\x{22EF}\x{222B}", meaning=>'multiple-integral', role=>'INTOP');
+DefMath('\iint', "\x{222C}", meaning=>'double-integral', role=>'INTOP',
+	mathstyle=>\&doVariablesizeOp);
+DefMath('\iiint',"\x{222D}", meaning=>'triple-integral', role=>'INTOP',
+	mathstyle=>\&doVariablesizeOp);
+DefMath('\iiiint',"\x{2A0C}", meaning=>'quadruple-integral', role=>'INTOP',
+	mathstyle=>\&doVariablesizeOp);
+DefMath('\idotsint',"\x{222B}\x{22EF}\x{222B}", meaning=>'multiple-integral', role=>'INTOP',
+	mathstyle=>\&doVariablesizeOp);
 
 DefMacro('\MultiIntegral{}',sub {
   my($gullet,$n)=@_;

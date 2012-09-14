@@ -76,8 +76,6 @@ sub isExecutable { $executable_catcode[$_[0]->[1]]; }
 
 # Defined so a Token or Tokens can be used interchangeably.
 sub unlist { ($_[0]); }
-sub getLocator { ''; }
-sub getSource  { ''; }
 
 our @NEUTRALIZABLE=(0,0,0,1,
 		    1,0,1,1,
@@ -145,7 +143,14 @@ use base qw(LaTeXML::Object);
 
 sub new {
   my($class,@tokens)=@_;
-  bless [@tokens],$class; }
+  my @filtered=();
+  while(@tokens){		# Flatten Tokens, check Token's
+    my $t = shift(@tokens);
+    my $ref = ref $t;
+    if($ref eq 'LaTeXML::Token'){ push(@filtered,$t); }
+    elsif($ref eq 'LaTeXML::Tokens'){ unshift(@tokens,@$t); } # Opencoded $t->unlist
+    else { Fatal(":misdefined:<unknown> Expected Token, got ".Stringify($t)); }}
+  bless [@filtered],$class; }
 
 # Return a list of the tokens making up this Tokens
 sub unlist { @{$_[0]}; }
@@ -159,17 +164,9 @@ sub clone {
 # Return a string containing the TeX form of the Tokens
 sub revert { @{$_[0]}; }
 
-sub toString {
-  my($self)=@_;
-  my $string='';
-  my $wascs=0;
-  foreach my $tok (@$self){
-    my $cc = $tok->getCatcode;
-    $string .= ' ' if $wascs && $cc == CC_LETTER;
-    my $s = $tok->toString;
-    $string .= $s;
-    $wascs = ($cc == CC_CS) && ($s=~/[a-zA-Z]$/); }
-  $string; }
+# toString is used often, and for more keyword-like reasons,
+# NOT for creating valid TeX (use revert or UnTeX for that!)
+sub toString { join('',map($$_[0], @{$_[0]})); }
 
 # Methods for overloaded ops.
 sub equals {
@@ -192,32 +189,6 @@ sub beDigested {
 sub neutralize {
   Tokens(map($_->neutralize,$_[0]->unlist)); }
 
-#======================================================================
-# The following implements the Mouth API, so that a Token list can
-# act as a pre-tokenized source of tokens.
-
-sub finish {}
-sub hasMoreInput {
-  my($self)=@_;
-  scalar(@$self); }
-
-sub readToken {
-  my($self)=@_;
-  return unless @$self;
-  shift(@$self); }
-
-sub readTokens {
-  my($self,$until)=@_;
-  my @tokens=();
-  while(defined(my $token = $self->readToken())){
-    last if $until and $token->getString eq $until->getString;
-    push(@tokens,$token); }
-  while(@tokens && $tokens[$#tokens]->getCatcode == CC_SPACE){ # Remove trailing space
-    pop(@tokens); }
-  Tokens(@tokens); }
-
-sub getLocator { ''; }
-sub getSource  { ''; }
 #**********************************************************************
 1;
 
@@ -297,10 +268,6 @@ The following methods are specific to C<LaTeXML::Tokens>.
 
 Return a shallow copy of the $tokens.  This is useful before reading from a C<LaTeXML::Tokens>.
 
-=item C<< $token = $tokens->readToken; >>
-
-Returns (and remove) the next token from $tokens.  This is part of the public API of L<LaTeXML::Mouth>
-so that a C<LaTeXML::Tokens> can serve as a L<LaTeXML::Mouth>.
 
 =back
 

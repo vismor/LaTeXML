@@ -37,6 +37,7 @@ var sendRequest = function(tex, my_counter, onthefly){
 	$('#message').html('');
 	$('#log').html('');
 	$('#previewtext').text('Converting...');
+	$('#message').text('Converting...');
         $("body").css("cursor","progress");
 	if (ac_counter == 1) send_called = 0;
 	send_called++;
@@ -45,7 +46,7 @@ var sendRequest = function(tex, my_counter, onthefly){
         var m = hasPreamble.exec(tex);
         var preamble = null;
         if (m != null) {
-            preamble = m[1];
+            preamble = 'literal:'+m[1];
             tex = m[2];
         }
 	$.post("/convert", { "tex": tex, "preamble" :

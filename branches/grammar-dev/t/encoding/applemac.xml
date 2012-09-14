@@ -247,7 +247,7 @@
             <td align="center">
               <Math mode="inline" xml:id="S1.p1.m19" tex="/" text="/">
                 <XMath>
-                  <XMTok fracstyle="inline" meaning="divide" role="MULOP">/</XMTok>
+                  <XMTok mathstyle="inline" meaning="divide" role="MULOP">/</XMTok>
                 </XMath>
               </Math>
             </td>
@@ -278,7 +278,7 @@
           </tr>
           <tr>
             <td align="left" border="r" thead="true">Fx</td>
-            <td align="center">[applelogo]</td>
+            <td/>
             <td align="center">Ò</td>
             <td align="center">Ú</td>
             <td align="center">Û</td>

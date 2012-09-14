@@ -150,12 +150,7 @@ sub EndSemiverbatim() {  $LaTeXML::STATE->popFrame; }
 
 # Return a LaTeXML::Tokens made from the arguments (tokens)
 sub Tokens {
-  my(@tokens)=@_;
-  # Flatten any Tokens to Token's
-  @tokens = map( ( (((ref $_)||'') eq 'LaTeXML::Tokens') ? $_->unlist : $_), @tokens);
-  # And complain about any remaining Non-Token's
-  map( ((ref $_) && $_->isaToken)|| Fatal(":misdefined:<unknown> Expected Token, got ".Stringify($_)), @tokens);
-  LaTeXML::Tokens->new(@tokens); }
+  LaTeXML::Tokens->new(@_); }
 
 # Explode a string into a list of tokens w/catcode OTHER (except space).
 sub Explode {
@@ -210,8 +205,10 @@ sub Box {
   $font = $LaTeXML::Global::STATE->lookupValue('font') unless defined $font;
   $locator = $LaTeXML::Global::STATE->getStomach->getGullet->getLocator unless defined $locator;
   $tokens  = T_OTHER($string) if $string && !defined $tokens;
-  if($LaTeXML::Global::STATE->lookupValue('IN_MATH')){
-    LaTeXML::MathBox->new($string,$font->specialize($string),$locator,$tokens); }
+  my $state = $LaTeXML::Global::STATE;
+  if($state->lookupValue('IN_MATH')){
+    my $attr = (defined $string) && $state->lookupValue('math_token_attributes_'.$string);
+    LaTeXML::MathBox->new($string,$font->specialize($string),$locator,$tokens,$attr); }
   else {
     LaTeXML::Box->new($string, $font, $locator,$tokens); }}
 
@@ -266,7 +263,7 @@ sub Error {
     Fatal($msg); }
   else {
     $LaTeXML::Global::STATE->noteStatus('error');
-    print STDERR LaTeXML::Error::generateMessage("Error",$msg,1,"Continuing... Expect trouble.\n")
+    print STDERR LaTeXML::Error::generateMessage("Error",$msg,1,"Continuing... Expect trouble.")
       unless $LaTeXML::Global::STATE->lookupValue('VERBOSITY') < -2; }
   if(($LaTeXML::Global::STATE->getStatus('error')||0) > $MAXERRORS){
     Fatal(":too_many:$MAXERRORS Too many errors!"); }

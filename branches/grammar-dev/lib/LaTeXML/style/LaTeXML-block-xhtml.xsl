@@ -162,9 +162,9 @@
     <div>
       <xsl:call-template name="add_id"/>
       <xsl:call-template name="add_attributes"/>
-      <xsl:if test="@refnum and $eqnopos='left'"><xsl:apply-templates select="@refnum"/></xsl:if>
+      <xsl:if test="@refnum and not(descendant::ltx:equation[@refnum]) and $eqnopos='left'"><xsl:apply-templates select="@refnum"/></xsl:if>
       <xsl:apply-templates select="ltx:equationgroup | ltx:equation | ltx:p"/>
-      <xsl:if test="@refnum and $eqnopos='right'"><xsl:apply-templates select="@refnum"/></xsl:if>
+      <xsl:if test="@refnum and not(descendant::ltx:equation[@refnum]) and $eqnopos='right'"><xsl:apply-templates select="@refnum"/></xsl:if>
       <xsl:apply-templates select="ltx:constraint[not(@hidden='true')]"/>
     </div>
     <xsl:apply-templates select="ltx:metadata" mode="meta"/>
@@ -228,7 +228,7 @@
 -->
 <!--    <xsl:param name="ncolumns" select="f:countcolumns(ltx:equation[1])"/>-->
     <xsl:param name="ncolumns" select="f:maxcolumns(ltx:equation | ltx:equationgroup/ltx:equation)"/>
-    <table><xsl:call-template name="add_attributes"/><!-- but not id -->
+    <table><xsl:call-template name="add_id"/><xsl:call-template name="add_attributes"/><!-- but not id ??????? -->
       <xsl:text>
       </xsl:text>
       <xsl:apply-templates select="." mode="aligned">
@@ -247,7 +247,7 @@
 Currently we assume the content will be placed in a single tr/td. -->
   <xsl:template name="equation-aligned">
     <xsl:param name="ncolumns" select="f:countcolumns(.)"/>
-    <table><xsl:call-template name="add_attributes"/><!-- but not id -->
+    <table><xsl:call-template name="add_id"/><xsl:call-template name="add_attributes"/><!-- but not id ????-->
       <xsl:text>
       </xsl:text>
       <xsl:apply-templates select="." mode="aligned">
@@ -269,7 +269,7 @@ Currently we assume the content will be placed in a single tr/td. -->
     <xsl:param name="side"/>				       <!-- left or right -->
     <xsl:choose>
       <xsl:when test="$eqnopos != $side"/>                       <!-- Wrong side: Nothing -->
-      <xsl:when test="ancestor-or-self::ltx:equationgroup[position()=1][@refnum]"> <!-- eqn.group is numbered! -->
+      <xsl:when test="ancestor-or-self::ltx:equationgroup[position()=1][@refnum][not(descendant::ltx:equation[@refnum])]"> <!-- eqn.group is numbered, but not eqns! -->
 	<!-- place number only for 1st row -->
 	<xsl:if test="(ancestor-or-self::ltx:tr and not(preceding-sibling::ltx:tr))
 		      or (not(ancestor-or-self::ltx:tr) and not(preceding-sibling::ltx:equation))">
@@ -352,9 +352,7 @@ ancestor-or-self::ltx:equationgroup[position()=1][@refnum]/descendant::ltx:equat
     <xsl:param name="ncolumns"/>
     <xsl:choose>
       <xsl:when test="ltx:MathFork/ltx:MathBranch[1]/ltx:tr">
-	<!-- What class information were we obtaining from the tr???
-	     class="{concat('baseline ',f:classes(.),' ',
-		   f:classes(ltx:MathFork/ltx:MathBranch[1]/ltx:tr[1]))}" -->
+	<!-- What class information were we obtaining from the tr??? -->
 	<tr>
 	  <xsl:call-template name="add_id"/>
 	  <xsl:call-template name="add_attributes">
