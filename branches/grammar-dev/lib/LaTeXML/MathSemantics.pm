@@ -64,7 +64,12 @@ sub prescript_apply {
 sub concat_apply {
  my ( $state, $t1, $c, $t2) = @_;
  #print STDERR "ConcApply: ",Dumper($lhs)," <--- ",Dumper($rhs),"\n\n";
- Apply(New('Concatenation',undef,omcd=>"underspecified"),$t1,$t2);
+ Apply(New('concatenation',undef,role=>"MULOP",omcd=>"underspecified"),$t1,$t2);
+}
+
+sub sumop_apply_term {
+  my ($state, $sumop, $c, $t) = @_;
+  Apply($sumop,$t);
 }
 
 sub set {
@@ -85,7 +90,7 @@ sub fenced_empty {
  my ($state, $open, $c, $close) = @_;
  $open=~/^([^:]+)\:/; $open=$1;
  $close=~/^([^:]+)\:/; $close=$1;
-  Fence($open,New('Empty',undef,omcd=>"underspecified"),$close);
+  Fence($open,New('empty',undef,role=>"ATOM",omcd=>"underspecified"),$close);
 }
 
 ## 2. Intermediate layer, records categories on resulting XML:

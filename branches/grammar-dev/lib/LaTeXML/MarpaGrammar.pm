@@ -29,105 +29,126 @@ use LaTeXML::Global;
 use base (qw(Exporter));
 
 our $RULES = [
-              # 1.0. Concatenation - Left and Right
+              # I. Operators
+              # I.1. Infix operators
+              # I.1.0. Concatenation - Left and Right
               ['Factor', [qw/Factor _ Factor/],'concat_apply_factor'],
 
-              # 2.1. Infix Operator - Factors
+              # I.1.1. Infix Operator - Factors
               ['Factor',['FactorArgument']],
               ['Factor',[qw/Factor _ MULOP _ FactorArgument/],'infix_apply_factor'],
 
-              # 2.1. Infix Operator - Additives
+              # I.1.2. Infix Operator - Additives
               ['Term',['Factor']],
               ['Term',['TermArgument']],
               ['Term',[qw/Term _ ADDOP _ Factor/],'infix_apply_term'],
               ['Term',[qw/Term _ ADDOP _ TermArgument/],'infix_apply_term'],
 
-              # 2.3. Infix Operator - Type Constructors
+              # I.1.3. Infix Operator - Type Constructors
               ['Type',[qw/FactorArgument _ ARROW _ FactorArgument/],'infix_apply_type'],
               ['Type',[qw/Type _ ARROW _ FactorArgument/],'infix_apply_type'],
 
-              # 3. Infix Relation
+              # I.1.4. Infix Logical Operators
+              ['Formula',['FormulaArgument']],
+              ['Formula',['Relative']],
+              ['Formula',[qw/Formula _ LOGICOP _ Relative/],'infix_apply_formula'],
+              ['Formula',[qw/Formula _ LOGICOP _ FormulaArgument/],'infix_apply_formula'],
+
+              # I.2. Prefix operators
+              # I.2.1. Big Summation
+              # Think about this -> it behaves as a Factor argument on the left e.g.
+              #    (1-t)\sum ...
+              # but never on the right! We should enforce this to avoid confusion? 
+              # use a BigTerm category?
+              ['Term',['BigTerm']],
+              ['BigTerm',[qw/BIGOP _ Factor/],'sumop_apply_term'],
+              ['BigTerm',[qw/BIGOP _ TermArgument/],'sumop_apply_term'],
+              # I.2.1.2 Operations on BigTerms:
+              ['BigTerm', [qw/Factor _ BigTerm/],'concat_apply_factor'],
+              ['BigTerm',[qw/Factor _ MULOP _ BigTerm/],'infix_apply_factor'],
+              ['Term',[qw/Term _ ADDOP _ BigTerm/],'infix_apply_term'],
+
+              # II. Relations
+              # II.1. Infix relations
               # TODO: How do we deal with term sequences, 1,2,3\in N ?
               ['Termlike',['Term']],
               ['Termlike',['TermSequence']],
               ['Relative',[qw/Termlike _ RELOP _ Termlike/],'infix_apply_relation'],
               ['Relative',[qw/Relative _ RELOP _ Termlike/],'chain_apply_relation'],
 
-              # 4.1. Infix Logical Operators
-	      ['Formula',['FormulaArgument']],
-	      ['Formula',['Relative']],
-              ['Formula',[qw/Formula _ LOGICOP _ Relative/],'infix_apply_formula'],
-              ['Formula',[qw/Formula _ LOGICOP _ FormulaArgument/],'infix_apply_formula'],
-              # 4.2. Infix Metarelations
-	      ['RelativeFormula',[qw/'RelativeFormulaArgument'/]],
+              # III. Metarelations
+              # III.1. Infix Metarelations
+              ['RelativeFormula',[qw/'RelativeFormulaArgument'/]],
               ['RelativeFormula',[qw/Formula _ METARELOP _ Formula/],'infix_apply_formula'],
               ['RelativeFormula',[qw/RelativeFormula _ METARELOP _ Formula/],'chain_apply'],
 
-	      # 5.1. Infix Modifier - Generic
-	      # Modified terms should only appear in sequences, hence entries
-	      # Hm, not really, they can appear anywhere with ease, as long as 
-	      #      the relation ops are from different domains, so that there is a unique reading
-              #['Entry',[qw/FactorArgument _ RELOP _ Term/],'infix_apply_entry'],
-	      # So, allow them everywhere and let them explode:
-              ['FactorArgument',[qw/FactorArgument _ RELOP _ Term/],'infix_apply_term'],
-              ['TermArgument',[qw/TermArgument _ RELOP _ Term/],'infix_apply_term'],
-              ['FormulaArgument',[qw/FormulaArgument _ RELOP _ Term/],'infix_apply_formula'],
-	      # 5.2 Infix Modifier - Typing
+              # IV. Modifiers
+              # IV.1. Infix Modifier
+              # IV.1.1. Infix Modifier - Generic
+	            # Modified terms should only appear in sequences, hence entries
+              # Hm, not really, they can appear anywhere with ease, as long as 
+              # the relation ops are from different domains, so that there is a unique reading
+              ['Entry',[qw/FactorArgument _ RELOP _ Term/],'infix_apply_entry'],
+	            # So, allow them everywhere and let them explode:
+              #['FactorArgument',[qw/FactorArgument _ RELOP _ Term/],'infix_apply_term'],
+              #['TermArgument',[qw/TermArgument _ RELOP _ Term/],'infix_apply_term'],
+              #['FormulaArgument',[qw/FormulaArgument _ RELOP _ Term/],'infix_apply_formula'],
+
+      	      # IV.1.2. Infix Modifier - Typing
               #['Entry',[qw/FactorArgument _ COLON _ Type/],'infix_apply'],
               ['FactorArgument',[qw/FactorArgument _ COLON _ Type/],'infix_apply_term'],
               ['TermArgument',[qw/TermArgument _ COLON _ Type/],'infix_apply_term'],
               ['FormulaArgument',[qw/FormulaArgument _ COLON _ Type/],'infix_apply_formula'],
 
-              # 6. Fences
+              # V. Fences
               ['FactorArgument',[qw/OPEN _ Term _ CLOSE/],'fenced'],
-	      ['FormulaArgument',[qw/OPEN _ Formula _ CLOSE/],'fenced'],
-	      ['RelativeFormulaArgument',[qw/OPEN _ RelativeFormula _ CLOSE/],'fenced'], # Examples???
+              ['FormulaArgument',[qw/OPEN _ Formula _ CLOSE/],'fenced'],
+              ['RelativeFormulaArgument',[qw/OPEN _ RelativeFormula _ CLOSE/],'fenced'], # Examples???
               ['ADDOP',[qw/OPEN _ ADDOP _ CLOSE/],'fenced'], # (-) ?? TODO: what about the other ops?
               ['FactorArgument',[qw/OPEN _ Vector _ CLOSE/],'fenced'], # vectors are factors
               ['TermArgument',[qw/OPEN _ Sequence _ CLOSE/],'fenced'], # objects are terms
 
-              # 7. Sequence structures
-              # 7.1. Vectors:
+              # VI. Sequence structures
+              # VI.1. Vectors:
               ['Entry', ['Term']],
               ['Vector',[qw/Entry _ PUNCT _ Entry/],'infix_apply'],
               ['Vector',[qw/Vector _ PUNCT _ Entry/],'infix_apply'],
-              # 7.2. General sequences:
-              # 7.2.1 Base case: elements
+              # VI.2. General sequences:
+              # VI.2.1 Base case: elements
               ['Element',['Formula']],
               ['Element',['ADDOP']], # implicitly includes logicop
               ['Element',['MULOP']],
               ['Element',['RELOP']],
               ['Element',['METARELOP']],
-              # 7.2.1 Recursive case: sequences
-	      ['Sequence',[qw/Vector _ PUNCT _ Element/],'infix_apply'],
-	      ['Sequence',[qw/Entry _ PUNCT _ Element/],'infix_apply'],
-	      ['Sequence',[qw/Element _ PUNCT _ Entry/],'infix_apply'],
-	      ['Sequence',[qw/Sequence _ PUNCT _ Entry/],'infix_apply'],
-	      # Yuck! Vector adjustments to avoid multiple parses
-
+              # VI.2.2 Recursive case: sequences
+              ['Sequence',[qw/Vector _ PUNCT _ Element/],'infix_apply'],
+              ['Sequence',[qw/Entry _ PUNCT _ Element/],'infix_apply'],
+              ['Sequence',[qw/Element _ PUNCT _ Entry/],'infix_apply'],
+              ['Sequence',[qw/Sequence _ PUNCT _ Entry/],'infix_apply'],
+              # Yuck! Vector adjustments to avoid multiple parses
               ['Sequence',[qw/Element _ PUNCT _ Element/],'infix_apply'],
               ['Sequence',[qw/Sequence _ PUNCT _ Element/],'infix_apply'],
 
-              # 7.3. Term sequences - TODO: what are these really? progressions?
+              # VI.3. Term sequences - TODO: what are these really? progressions?
               ['TermSequence',[qw/Term _ PUNCT _ Term/],'infix_apply'],
               ['TermSequence',[qw/TermSequence _ PUNCT _ Term/],'infix_apply'],
 
-	      # 8. Scripts
-	      # 8.1. Post scripts
-	      (map { my $script=$_;
-		    map { my $op=$_; {lhs=>$op, rhs=>[$op,'_',$script],action=>'postscript_apply',rank=>2} }
-		      qw/FactorArgument TermArgument FormulaArgument RelativeFormulaArgument
-			 ADDOP LOGICOP MULOP RELOP METARELOP ARROW/;
-		  } qw/POSTSUPERSCRIPT POSTSUBSCRIPT/),
-	      # 8.2. Pre/Float scripts
-	      (map { my $script=$_;
-		    map { my $op=$_; [$op, [$script,'_',$op],'prescript_apply'] }
-		      qw/FactorArgument TermArgument FormulaArgument RelativeFormulaArgument
-			 ADDOP LOGICOP MULOP RELOP METARELOP ARROW/;
-		  } qw/FLOATSUPERSCRIPT FLOATSUBSCRIPT/),
+              # VII. Scripts
+	            # VII.1. Post scripts
+              (map { my $script=$_;
+                map { my $op=$_; {lhs=>$op, rhs=>[$op,'_',$script],action=>'postscript_apply',rank=>2} }
+                    qw/FactorArgument TermArgument FormulaArgument RelativeFormulaArgument
+                      ADDOP LOGICOP MULOP RELOP METARELOP ARROW BIGOP/;
+                } qw/POSTSUPERSCRIPT POSTSUBSCRIPT/),
+              # VII.2. Pre/Float scripts
+              (map { my $script=$_;
+                map { my $op=$_; [$op, [$script,'_',$op],'prescript_apply'] }
+                    qw/FactorArgument TermArgument FormulaArgument RelativeFormulaArgument
+                      ADDOP LOGICOP MULOP RELOP METARELOP ARROW BIGOP/;
+              } qw/FLOATSUPERSCRIPT FLOATSUBSCRIPT/),
 
 
-              # 9. Lexicon
+              # X. Lexicon adjustments
               ['FactorArgument',['ATOM'],'first_arg_term'],
               ['FormulaArgument',['ATOM'],'first_arg_formula'],
               ['FactorArgument',['UNKNOWN'],'first_arg_term'],
@@ -140,10 +161,13 @@ our $RULES = [
               ['ADDOP',['LOGICOP']], # Boolean algebra, lattices
               ['ADDOP',['ADDOPTerminal']],
               ['LOGICOP',['LOGICOPTerminal']],
-              # Start:
+              ['BIGOP',['SUMOP']],
+              ['BIGOP',['INTOP']],
+              # XI. Start:
               ['Start',['Term']],
               ['Start',['Formula']],
               ['Start',['RelativeFormula']],
+              ['Start',['Vector']],
               ['Start',['Sequence']]
 ];
 
@@ -171,7 +195,7 @@ sub parse {
   # Insert concatenation
   @$unparsed = map (($_, '_::'), @$unparsed);
   pop @$unparsed;
-  print STDERR "\n\n";
+  #print STDERR "\n\n";
   foreach (@$unparsed) {
     my ($category,$lexeme,$id) = split(':',$_);
     # Issues: 
@@ -181,7 +205,7 @@ sub parse {
     } elsif ($category eq 'RELOP') {
       $category = 'EQUALS' if ($lexeme eq 'equals');
     }
-    print STDERR "$category:$lexeme:$id\n";
+    #print STDERR "$category:$lexeme:$id\n";
     $category.='Terminal' if $category =~ /^(META)?RELOP|ADDOP|LOGICOP$/;
 
     last unless defined $rec->read($category,$lexeme.':'.$id);
@@ -193,7 +217,7 @@ sub parse {
   }
 
   # TODO: Support multiple parses!
-  (@values>1) ? (['ltx:XMApp',{},New('Set',undef,omcd=>"CDLF"),@values]) : (shift @values);
+  (@values>1) ? (['ltx:XMApp',{meaning=>"cdlf-set"},New('cdlf-set',undef,omcd=>"cdlf"),@values]) : (shift @values);
 }
 
 1;
