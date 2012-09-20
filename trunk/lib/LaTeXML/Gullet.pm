@@ -24,79 +24,6 @@ sub new {
 	}, $class; }
 
 #**********************************************************************
-# Hmm, we should record in the output which files were included/required/etc.
-# This is for the benefit of anything wanting to interpret the Math/TeX ???
-# In which case, *.tex files that are included should probably be ignored
-# (they're output will already be incorporated),
-# But *.sty, *.cls etc, (or the *.pm equivalents) should be noted.
-# However, if things are included via some other `package', presumably
-# that package will be responsible for loading those extra pacakges, so
-# they should be ignored too, right?
-
-# HMM: the packageLoaded check only makes sense for style files, and
-# is probably only important for latexml implementations?
-sub input {
-  my($self,$file,$types,%options)=@_;
-  $file = ToString($file) if ref $file;
-  # Try to find a Package implementing $file.
-  $file = $1 if $file =~ /^\{(.*)\}$/; # just in case
-  my $filecontents = $STATE->lookupValue($file.'_contents');
-  my $path = ($filecontents ? $file
-	      : pathname_find($file,paths=>$STATE->lookupValue('SEARCHPATHS'),
-			      types=>$types, installation_subdir=>'Package'));
-  if(! $path) {
-    $STATE->noteStatus(missing=>$file);
-    Error(":missing_file:$file Cannot find file $file of type ".join(', ',@{$types||[]})
-	  ." in paths ".join(', ',@{$STATE->lookupValue('SEARCHPATHS')})); 
-    return; }
-  my($dir,$name,$type)=pathname_split($path);
-  if($type eq 'ltxml'){		# Perl module.
-    return if $STATE->lookupValue($name.'.'.$type.'_loaded');
-    $STATE->assignValue($name.'.'.$type.'_loaded'=>1,'global');
-    $STATE->assignValue($name.'_loaded'=>1,'global');
-    $self->openMouth(LaTeXML::PerlMouth->new($path),0);
-    my $pmouth = $$self{mouth};
-    do $path; 
-    Fatal(":perl:die Package $file had an error:\n  $@") if $@; 
-    $self->closeMouth if $pmouth eq $$self{mouth}; # Close immediately, unless recursive input
-  }
-  elsif(($type ne 'tex') && ($path =~ /\.(tex|pool|sty|cls|clo|cnf|cfg|ldf|def|dfu)$/)){ # (attempt to) interpret a style file.
-    return if $STATE->lookupValue($name.'.'.$type.'_loaded');
-    if(! ($options{raw} || $STATE->lookupValue('INCLUDE_STYLES')
-	 || ($path =~ /(\.ldf|enc\.def)$/) )){
-      Warn(":unexpected:$path Ignoring style file $path");
-      return; }
-    $STATE->assignValue($name.'.'.$type.'_loaded'=>1,'global');
-    if($filecontents){
-      $self->openMouth(LaTeXML::StyleStringMouth->new($path,$filecontents), 0);  }
-    else {
-      $self->openMouth(LaTeXML::StyleMouth->new($path), 0);  }}
-  else {			# Else read as an included file.
-    # If there is a file-specific declaration file (name.latexml), load it first!
-    my $file = $path;
-    $file =~ s/\.tex//;
-    local $LaTeXML::INHIBIT_LOAD=0;
-    $self->inputConfigfile($file); #  Load configuration for this source, if any.
-    # NOW load the input --- UNLESS INHIBITTED!!!
-    if(!$LaTeXML::INHIBIT_LOAD){
-      if($filecontents){
-	$self->openMouth(LaTeXML::Mouth->new($filecontents) ,0); }
-      else {
-	$self->openMouth(LaTeXML::FileMouth->new($path) ,0); }}
-  }}
-
-sub inputConfigfile {
-  my($self,$file)=@_;
-  if(my $conf = pathname_find("$file.latexml",
-			      paths=>$STATE->lookupValue('SEARCHPATHS'))){
-    $self->openMouth(LaTeXML::PerlMouth->new($conf),0);
-    my $pmouth = $$self{mouth};
-    do $conf; 
-    Fatal(":perl:die Configuration file $conf had an error:\n  $@") if $@; 
-    $self->closeMouth if $pmouth eq $$self{mouth}; # Close immediately, unless rec. input
-  }}
-
-#**********************************************************************
 # Start reading tokens from a new Mouth.
 # This pushes the mouth as the current source that $gullet->readToken (etc) will read from.
 # Once this Mouth has been exhausted, readToken, etc, will return undef,
@@ -115,13 +42,15 @@ sub closeMouth {
   my($self,$forced)=@_;
   if(!$forced && (@{$$self{pushback}} || $$self{mouth}->hasMoreInput)){
     my $next = Stringify($self->readToken);
-    Error(":unexpected:$next Closing mouth with input remaining: $next"); }
+    Error('unexpected',$next,$self,"Closing mouth with input remaining '$next'"); }
   $$self{mouth}->finish;
   if(@{$$self{mouthstack}}){
     ($$self{mouth},$$self{pushback},$$self{autoclose}) = @{ shift(@{$$self{mouthstack}}) }; }
   else {
     $$self{pushback}=[];
-    $$self{mouth}=Tokens(); 
+##    $$self{mouth}=Tokens(); 
+    $$self{mouth}=LaTeXML::Mouth->new(); 
+####    $$self{mouth}=undef;
     $$self{autoclose}=1; }}
 
 sub getMouth { $_[0]->{mouth}; }
@@ -131,6 +60,14 @@ sub mouthIsOpen {
   ($$self{mouth} eq $mouth)
     || grep($_ && ($$_[0] eq $mouth), @{$$self{mouthstack}}); }
 
+# This flushes a mouth so that it will be automatically closed, next time it's read
+# Corresponds (I think) to TeX's \endinput
+sub flushMouth {
+  my($self)=@_;
+  $$self{mouth}->finish;;	# but not close!
+  $$self{pushback}=[];	# And don't read anytyhing more from it.
+  $$self{autoclose}=1; }
+
 # Obscure, but the only way I can think of to End!! (see \bye or \end{document})
 # Flush all sources (close all pending mouth's)
 sub flush {
@@ -139,9 +76,39 @@ sub flush {
   foreach my $entry (@{$$self{mouthstack}}){
     $entry->[0]->finish; }
   $$self{pushback}=[];
-  $$self{mouth}=Tokens();
+##  $$self{mouth}=Tokens();
+    $$self{mouth}=LaTeXML::Mouth->new(); 
+####    $$self{mouth}=undef;
   $$self{autoclose}=1;
   $$self{mouthstack}=[]; }
+
+# Do something, while reading stuff from a specific Mouth.
+# This reads ONLY from that mouth (or any mouth openned by code in that source),
+# and the mouth should end up empty afterwards, and only be closed here.
+sub readingFromMouth {
+  my($self,$mouth,$closure)=@_;
+  $self->openMouth($mouth,1); # only allow mouth to be explicitly closed here.
+  my($result,@result);
+  if(wantarray){
+    @result = &$closure($self); }
+  else {
+    $result = &$closure($self); }
+  # $mouth must still be open, with (at worst) empty autoclosable mouths in front of it
+  while(1){
+    if($$self{mouth} eq $mouth){
+      $self->closeMouth(1); last; }
+    elsif(! @{$$self{mouthstack}}){
+      Error('unexpected','<closed>',$self,"Mouth is unexpectedly already closed",
+	    "Reading from ".Stringify($mouth).", but it has already been closed."); }
+    elsif(!$$self{autoclose} || @{$$self{pushback}} || $$self{mouth}->hasMoreInput){
+      my $next = Stringify($self->readToken);
+      Error('unexpected',$next,$self,"Unexpected input remaining: '$next'",
+	    "Finished reading from ".Stringify($mouth).", but it still has input.");
+      $$self{mouth}->finish;
+      $self->closeMouth(1); }	# ?? if we continue?
+    else {
+      $self->closeMouth; }}
+  (wantarray ? @result : $result); }
 
 # User feedback for where something (error?) occurred.
 sub getLocator {
@@ -165,6 +132,25 @@ sub getSource {
       last if $source; }}
   $source; }
 
+sub getSourceMouth {
+  my($self)=@_;
+  my $mouth = $$self{mouth};
+  my $source = defined $mouth && $mouth->getSource;
+  if(!$source || ($source eq "Anonymous String")){
+    foreach my $frame ( @{$$self{mouthstack}} ){
+      $mouth = $$frame[0];
+      $source = $mouth->getSource;
+      last if $source && $source ne "Anonymous String"; }}
+  $mouth; }
+
+# Handy message generator when we didn't get something expected.
+sub showUnexpected {
+  my($self)=@_;
+  my $token = $self->readToken;
+  my $message = ($token ? "Next token is ".Stringify($token) : "Input is empty");
+  $self->unread($token);
+  $message; }
+
 sub show_pushback {
   my($pb)=@_;
   my @pb = @$pb;
@@ -172,17 +158,6 @@ sub show_pushback {
   (@pb ? "\n  To be read again ".ToString(Tokens(@pb)) : ''); }
 
 #**********************************************************************
-# Return $tokens with all tokens expanded
-sub expandTokens {
-  my($self,$tokens)=@_;
-  return () unless $tokens;
-  $self->openMouth((ref $tokens eq 'LaTeXML::Token' ? Tokens($tokens) : $tokens->clone),1);
-  my @expanded=();
-  while(defined(my $t=$self->readXToken(0))){
-    push(@expanded,$t);}
-  $self->closeMouth;
-  Tokens(@expanded); }
-
 # Not really 100% sure how this is supposed to work
 # See TeX Ch 20, p216 regarding noexpand, \edef with token list registers, etc.
 # Solution: Duplicate param tokens, stick NOTEXPANDED infront of expandable tokens.
@@ -321,6 +296,7 @@ sub readMatch {
 
 # Match the input against a set of keywords; Similar to readMatch, but the keywords are strings,
 # and Case and catcodes are ignored; additionally, leading spaces are skipped.
+# AND, macros are expanded.
 sub readKeyword {
   my($self,@keywords)=@_;
   $self->skipSpaces;
@@ -329,23 +305,7 @@ sub readKeyword {
     my @tomatch=split('',uc($keyword));
     my @matched=();
     my $tok;
-    while(@tomatch && defined ($tok=$self->readToken) && push(@matched,$tok) 
-	  && (uc($tok->getString) eq $tomatch[0])){ 
-      shift(@tomatch); }
-    return $keyword unless @tomatch;	# All matched!!!
-    $self->unread(@matched);	# Put 'em back and try next!
-  }
-  return undef; }
-
-sub readXKeyword {
-  my($self,@keywords)=@_;
-  $self->skipSpaces;
-  foreach my $keyword (@keywords){
-    $keyword = ToString($keyword) if ref $keyword;
-    my @tomatch=split('',uc($keyword));
-    my @matched=();
-    my $tok;
-    while(@tomatch && defined ($tok=$self->readXToken) && push(@matched,$tok) 
+    while(@tomatch && defined ($tok=$self->readXToken(0)) && push(@matched,$tok) 
 	  && (uc($tok->getString) eq $tomatch[0])){ 
       shift(@tomatch); }
     return $keyword unless @tomatch;	# All matched!!!
@@ -494,9 +454,9 @@ sub readNumber {
   if   (defined (my $n = $self->readNormalInteger    )){ ($s < 0 ? $n->negate : $n); }
   elsif(defined (   $n = $self->readInternalDimension)){ Number($s * $n->valueOf); }
   elsif(defined (   $n = $self->readInternalGlue     )){ Number($s * $n->valueOf); }
-  else{ my $t = $self->readToken;
-	$self->unread($t);
-	Warn(":expected:<number> Missing number, treated as zero at ".ToString($t));        Number(0); }}
+  else {
+    Warn('expected','<number>',$self,"Missing number, treated as zero");
+    Number(0); }}
 
 # <normal integer> = <internal integer> | <integer constant>
 #   | '<octal constant><one optional space> | "<hexadecimal constant><one optional space>
@@ -558,10 +518,12 @@ sub readDimension {
   elsif(defined (   $d = $self->readFactor)           ){ 
     my $unit = $self->readUnit;
     if(!defined $unit){
-      Warn(":expected:<unit> Illegal unit of measure (pt inserted).");
+      Warn('expected','<unit>',$self,"Illegal unit of measure (pt inserted).");
       $unit = 65536; }
     Dimension($s * $d * $unit); }
-  else{ Warn(":expected:<number> Missing number, treated as zero.");        Dimension(0); }}
+  else {
+    Warn('expected','<number>',$self,"Missing number, treated as zero.");
+    Dimension(0); }}
 
 # <unit of measure> = <optional spaces><internal unit>
 #     | <optional true><physical unit><one optional space>
@@ -599,11 +561,13 @@ sub readMuDimension {
   if   (defined (my $m = $self->readFactor        )){
     my $munit = $self->readMuUnit;
     if(!defined $munit){
-      Warn(":expected:<unit> Illegal unit of measure (mu inserted).");
+      Warn('expected','<unit>',$self,"Illegal unit of measure (mu inserted).");
       $munit = $STATE->convertUnit('mu'); }
     MuDimension($s * $m * $munit); }
   elsif(defined (   $m = $self->readInternalMuGlue)){ MuDimension($s * $m->valueOf); }
-  else{ Warn(":expected:<mudimen> Expecting mudimen; assuming 0 ");       MuDimension(0); }}
+  else{ 
+    Warn('expected','<mudimen>',$self,"Expecting mudimen; assuming 0");
+    MuDimension(0); }}
 
 sub readMuUnit {
   my($self)=@_;
@@ -626,12 +590,13 @@ sub readGlue {
   else{
     my $d = $self->readDimension;
     if(!$d){
-      Warn(":expected:<number> Missing number, treated as zero."); return Glue(0); }
+      Warn('expected','<number>',$self,"Missing number, treated as zero.");
+      return Glue(0); }
     $d = $d->negate if $s < 0;
     my($r1,$f1,$r2,$f2);
     ($r1,$f1) = $self->readRubber if $self->readKeyword('plus');
     ($r2,$f2)  = $self->readRubber if $self->readKeyword('minus');
-    Glue($d->valueOf*$s,$r1,$f1,$r2,$f2); }}
+    Glue($d->valueOf,$r1,$f1,$r2,$f2); }}
 
 our %FILLS = (fil=>1,fill=>2,filll=>3);
 sub readRubber {
@@ -646,13 +611,13 @@ sub readRubber {
   elsif($mu){
     my $u = $self->readMuUnit;
     if(!defined $u){
-      Warn(":expected:<unit> Illegal unit of measure (mu inserted).");
+      Warn('expected','<unit>',$self,"Illegal unit of measure (mu inserted).");
       $u = $STATE->convertUnit('mu'); }
     ($s*$f*$u,0); }
   else {
     my $u = $self->readUnit;
     if(!defined $u){
-      Warn(":expected:<unit> Illegal unit of measure (pt inserted).");
+      Warn('expected','<unit>',$self,"Illegal unit of measure (pt inserted).");
       $u = 65536; }
     ($s*$f*$u,0); }}
 
@@ -674,12 +639,13 @@ sub readMuGlue {
   else{
     my $d = $self->readMuDimension;
     if(!$d){
-      Warn(":expected:<number> Missing number, treated as zero."); return MuGlue(0); }
+      Warn('expected','<number>',$self,"Missing number, treated as zero.");
+      return MuGlue(0); }
     $d = $d->negate if $s < 0;
     my($r1,$f1,$r2,$f2);
     ($r1,$f1) = $self->readRubber(1) if $self->readKeyword('plus');
     ($r2,$f2)  = $self->readRubber(1) if $self->readKeyword('minus');
-    MuGlue($d->valueOf*$s,$r1,$f1,$r2,$f2); }}
+    MuGlue($d->valueOf,$r1,$f1,$r2,$f2); }}
 
 # Return a muglue value or undef.
 sub readInternalMuGlue { $_[0]->readRegisterValue('MuGlue'); }
@@ -713,15 +679,6 @@ to TeX's rules.
 =head2 Managing Input
 
 =over 4
-
-=item C<< $gullet->input($file,$types,%options); >>
-
-Input the file named C<$file>; Searches for matching files in the
-current C<searchpath> with an extension being one of  C<$types> (an array
-of strings). If the found file has a perl extension (pm, ltxml, or latexml), 
-it will be executed (loaded).  If the found file has a TeX extension
-(tex, sty, cls) it will be opened and latexml will prepare to read
-from it.
 
 =item C<< $gullet->openMouth($mouth, $noautoclose); >>
 

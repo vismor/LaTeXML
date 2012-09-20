@@ -9,8 +9,7 @@ use LaTeXML::Util::Pathname;
 
 #**********************************************************************
 # Parse command line
-
-my $identity = "latexml (LaTeXML version $LaTeXML::VERSION)";
+my $identity = "$FindBin::Script (LaTeXML version $LaTeXML::VERSION)";
 my($verbosity,$strict,$comments,$noparse,$includestyles)=(0,0,1,0,0);
 my ($format,$destination,$help,$showversion)=('xml','');
 my ($preamble,$postamble)=(undef,undef);
@@ -50,10 +49,11 @@ my $source = $ARGV[0];
 #**********************************************************************
 # Set up the processing.
 print STDERR "$identity\n" unless $verbosity < 0;
+print STDERR "processing started ".localtime()."\n" unless $verbosity < 0;
 
 @paths = map(pathname_canonical($_),@paths);
 if(my @baddirs = grep(! -d $_, @paths)){
-  warn "$identity: these path directories do not exist: ".join(', ',@baddirs)."\n"; }
+  warn "These path directories do not exist: ".join(', ',@baddirs)."\n"; }
 
 my $latexml= LaTeXML->new(preload=>[@preload], searchpaths=>[grep(-d $_,reverse(@paths))], graphicspaths=>['.'],
 			  verbosity=>$verbosity, strict=>$strict,
@@ -98,6 +98,7 @@ if($digested){
 	$serialized = $dom->toString(1);
     }}
 print STDERR "\nConversion complete: ".$latexml->getStatusMessage.".\n";
+print STDERR "processing finished ".localtime()."\n" unless $verbosity < 0;
 
 if($destination){
 #  open(OUT,">:utf8",$destination) or die "Couldn't open output file $destination: $!"; }

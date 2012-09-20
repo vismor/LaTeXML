@@ -1,0 +1,33 @@
+%% Some shades
+\definecolor{Dark}{gray}{0.2}
+\definecolor{MedDark}{gray}{0.4}
+\definecolor{Medium}{gray}{0.6}
+\definecolor{Light}{gray}{0.8}
+\newlength{\drop}% for my convenience
+\newlength{\dropt}% for my convenience
+
+\renewcommand{\maketitle}{\begingroup%
+\drop = 0.1\textheight
+\dropt = 0.05\textheight
+\fboxsep 0.5\baselineskip
+\sffamily
+\vspace*{\dropt}
+\centering
+{\textcolor{NavyBlue}{\HUGE The Structure of Mathematical\\[3mm] Expressions}}\par
+\vspace{0.5\drop}
+\fcolorbox{NavyBlue}{Dark}{\textcolor{white}{\normalfont\Large
+An {\textsc{arXiv}} Case Study}}\par
+\vspace{\drop}
+{\Large Deyan Ginev and Bruce R. Miller}\par
+\vspace{0.05\textheight}
+{\large National Institute of Standards and Techonology}\par
+\vfill
+{\begin{center}\today\end{center}}
+\vspace*{\drop}
+{\hfill\includegraphics{NIST}}
+\endgroup}
+\makeatother
+
+\pagestyle{empty}
+\maketitle
+\newpage

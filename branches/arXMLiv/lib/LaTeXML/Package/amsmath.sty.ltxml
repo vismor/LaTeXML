@@ -80,7 +80,7 @@ DefMacro('\@ams@intertext{}',
 #	 '\@alignment@newline\multicolumn{\@alignment@ncolumns}{l}{\@@ams@intertext{#1}}\nonumber\@alignment@newline');
 	 '\@ams@newline\multicolumn{\@alignment@ncolumns}{l}{\@@ams@intertext{#1}}\nonumber\@ams@newline');
 DefConstructor('\@@ams@intertext{}',
-	       "<ltx:p class='intertext'>#1</ltx:p>", mode=>'text',properties=>{isIntertext=>1});
+	       "<ltx:p class='ltx_intertext'>#1</ltx:p>", mode=>'text',properties=>{isIntertext=>1});
 
 DefMacroI('\@ams@newline', undef, sub {
   my($gullet)=@_;
@@ -174,7 +174,7 @@ DefEnvironment('{split}',
 		 DefConstructor("\\\\","<ltx:XMHint name='newline'/>",
 				reversion=>Tokens(T_CS("\\\\"),T_CR)); 
 		 DefConstructor('\intertext{}',
-				"<ltx:p class='intertext'>#1</ltx:p>", mode=>'text'); });
+				"<ltx:p class='ltx_intertext'>#1</ltx:p>", mode=>'text'); });
 
 #======================================================================
 # Section 3.5 Equation groups without alignment
@@ -186,9 +186,9 @@ DefEnvironment('{split}',
 DefConstructor('\@@amsgather SkipSpaces DigestedBody',
 	       sub {
 		 my($document,$body,%props)=@_;
-		 processAMSGatherRows($document,
-				      constructAlignment($document,$body,
-					      attributes=>{class=>'gather'})); },
+		 rearrangeAMSGather($document,
+				     constructAlignment($document,$body,
+							attributes=>{class=>'ltx_gather'})); },
 	       beforeDigest=>sub { $_[0]->bgroup; });
 DefPrimitive('\end@amsgather',sub{ $_[0]->egroup; });
 
@@ -199,13 +199,14 @@ DefPrimitive('\@amsgather@bindings', sub {
   amsalignBindings(LaTeXML::AlignmentTemplate->new(columns=>[$col]));
 });
 
-# Each equation row (except intertext) consists of pairs (LHS, =RHS); group accordingly.
-# Since each column is a single equation, we'll skip the MathFork stuff,
+# Each equation row (except intertext) consists of single equation.
+# Since each equation is single column, w/ no alignment, we'll skip the MathFork stuff,
 # and just pull the math content up past the _Capture_
-sub processAMSGatherRows {
+#[maybe we could have avoided creating the capture in the first place?]
+sub rearrangeAMSGather {
   my($document,$equationgroup)=@_;
-  foreach my $equation ($document->getChildElements($equationgroup)){
-    my @cells = $document->getChildElements($equation);
+  foreach my $equation ($document->findnodes('ltx:equation',$equationgroup)){
+    my @cells = $document->findnodes('ltx:_Capture_',$equation);
     my @cell1cont = $document->getChildElements($cells[0]);
     # Check if this equation is really an intertext
     if((scalar(@cells)==1) && (scalar(@cell1cont)==1)
@@ -214,7 +215,7 @@ sub processAMSGatherRows {
     elsif((scalar(@cells)==1) && (scalar(@cell1cont)==0)){ # Empty row? Remove it!
       $equationgroup->removeChild($equation); }
     else {
-      equationgroupFlattenCols($document,$equation); }}}
+      map($document->unwrapNodes($_),$document->getChildElements($equation)); }}}
 
 # Note that some people use align or gather inside equation, which seems to "work"
 # So, we'll treat align as aligned in such cases.
@@ -243,9 +244,9 @@ DefMacro('\csname endgather*\endcsname',
 DefConstructor('\@@amsalign SkipSpaces DigestedBody',
 	       sub {
 		 my($document,$body,%props)=@_;
-		 processAMSAlignRows($document,
-			     constructAlignment($document,$body,
-						attributes=>{class=>'align'})); },
+		 rearrangeAMSAlign($document,
+				    constructAlignment($document,$body,
+						       attributes=>{class=>'ltx_align'})); },
 	       beforeDigest=>sub { $_[0]->bgroup; });
 DefPrimitive('\end@amsalign',sub{ $_[0]->egroup; });
 
@@ -259,11 +260,10 @@ DefPrimitive('\@amsalign@bindings', sub {
 });
 
 # Each equation row (except intertext) consists of pairs (LHS, =RHS); group accordingly.
-sub processAMSAlignRows {
+sub rearrangeAMSAlign {
   my($document,$equationgroup)=@_;
-  foreach my $equation ($document->getChildElements($equationgroup)){
-    my @cells = $document->getChildElements($equation);
-    shift(@cells) if $document->getNodeQName($cells[0]) eq 'ltx:metadata';
+  foreach my $equation ($document->findnodes('ltx:equation',$equationgroup)){
+    my @cells = $document->findnodes('ltx:_Capture_',$equation);
     my @cell1cont = $document->getChildElements($cells[0]);
     # Check if this equation is really an intertext
     if((scalar(@cells)==1) && (scalar(@cell1cont)==1)
@@ -333,7 +333,7 @@ DefMacro('\endxxalignat',
 	 '\@finish@alignment\end@amsalign');
 
 #======================================================================
-# Section 3.7. Alignmnet building blocks
+# Section 3.7. Alignment building blocks
 #    gathered, aligned alignedat
 # These are intended to be used within math environments, but do they have the same
 # `semanitic' intent as far as separating equations?
@@ -368,9 +368,6 @@ DefMacro('\endaligned',   '\@finish@alignment\@end@amsaligned');
 DefMacro('\alignedat{}[]','\@@amsaligned\@start@alignment');
 DefMacro('\endalignedat', '\@finish@alignment\@end@amsaligned');
 
-# NOTE: If this is the only child of an equation, it would seem better
-# to rewrite the thing into an equationgroup/equation/MathFork construct!
-# Besides, the MathML alignment (at least in firefox), pretty much sucks.
 DefPrimitive('\@end@amsaligned',sub{ $_[0]->egroup; });
 DefConstructor('\@@amsaligned DigestedBody',
 	       sub { my($document,$body,%props)=@_;
@@ -387,6 +384,50 @@ DefConstructor('\@@amsaligned DigestedBody',
 				 },
 	       reversion=>'\begin{aligned}#1\end{aligned}');
 
+# If an aligned is the only child of an equation,
+# it seems better to rewrite the thing into an equationgroup/equation/MathFork construct!
+Tag('ltx:equation',afterClose=>\&rearrangeLoneAMSAligned);
+sub rearrangeLoneAMSAligned {
+  my($document,$equation)=@_;
+  # Test whether this is a lone aligned within the equation.
+  my($math,@more) = $document->findnodes('ltx:Math',$equation);
+  if($math && !scalar(@more)){
+    my($array,@morenodes) = $document->getChildElements($document->getFirstChildElement($math));
+    if($array && !scalar(@morenodes) && ($document->getNodeQName($array) eq 'ltx:XMArray')
+       && (($array->getAttribute('name')||'') eq 'aligned')){
+      $math->unbindNode;
+      my $equationgroup = $document->renameNode($equation,'ltx:equationgroup');
+      foreach my $mtr ($document->findnodes('ltx:XMRow',$array)){
+	# new equation for each row (??? Or should it be each pair of columns?)
+	my $eqn = $document->openElementAt($equationgroup,'ltx:equation');
+	if(my $id = $equation->getAttribute('xml:id')){
+	   $document->setAttribute($eqn,'xml:id'=>$document->modifyID($id."X")); }
+	my @mtds = $document->findnodes('ltx:XMCell',$mtr);
+	while(@mtds){
+	  my($math,$branch)=openMathFork($document,$eqn);
+	  my @cells;
+	  foreach (0,1){	# Add the lhs & rhs, separately.
+	    my $cell = shift(@mtds);
+	    next unless $cell;	# alignment not in pairs? Maybe we shouldn't even get this far?
+	    my $td = $document->openElementAt($branch,'ltx:td',
+					      align=>$cell->getAttribute('align'));
+	    if(my $stuff = $cell->firstChild){
+	      push(@cells,$stuff);
+	      my $math  = $document->openElementAt($td,'ltx:Math',
+					   _box=>MathWhatsit(Digest(T_CS('\displaystyle')),
+							     $document->getNodeBox($stuff)));
+	      my $xmath = $document->openElementAt($math,'ltx:XMath');
+	      { local $LaTeXML::Document::ID_SUFFIX = '.mf';
+		$document->appendClone($xmath,$stuff->childNodes); }
+	      $document->closeElementAt($xmath);
+	      $document->closeElementAt($math); }
+	    $document->closeElementAt($td); }
+	  # Finally, move the contents of the cells into the main branch!!!
+	  map($math->firstChild->appendChild($_),map($_->childNodes,@cells));
+	  # and synthesize a box from the lhs & rhs.
+	  $document->setNodeBox($math,MathWhatsit(map($document->getNodeBox($_),@cells)));
+	  closeMathFork($document,$eqn,$math,$branch);
+      }}}}}
 
 DefMacro('\cases',   '\@@cases\@start@alignment');
 DefMacro('\endcases', '\@finish@alignment\@end@cases');
@@ -412,7 +453,7 @@ DefMacro('\displaybreak[]','');	# Ignorable
 # Section 3.10 Interrupting a display
 
 # default when not used inside an appropriate alignment.
-DefConstructor('\intertext{}', "<ltx:p class='intertext'>#1</ltx:p>", mode=>'text');
+DefConstructor('\intertext{}', "<ltx:p class='ltx_intertext'>#1</ltx:p>", mode=>'text');
 
 #======================================================================
 # Section 3.11 Equation numbering
@@ -536,12 +577,27 @@ DefConstructor('\@@smallmatrix DigestedBody',
 # \negmedspace
 # \negthickspace
 # I think only these are new
-DefConstructor('\medspace',"?#isMath(<ltx:XMHint name='medspace'/>)(\x{2005})");  # FOUR-PER-EM SPACE
-DefConstructor('\negthinspace',"?#isMath(<ltx:XMHint name='negthinspace'/>)()");
-DefConstructor('\negmedspace',"?#isMath(<ltx:XMHint name='negmedspace'/>)()");
-DefConstructor('\negthickspace',"?#isMath(<ltx:XMHint name='negthickspace'/>)()");
 
-DefConstructor('\mspace{MuDimension}',"<ltx:XMHint name='#1'/>");
+DefConstructorI('\thinspace',undef,
+		"?#isMath(<ltx:XMHint name='thinspace' width='#width'/>)(\x{2009})",
+		properties=>{isSpace=>1, width=>sub{ LookupValue('\thinmuskip'); }});
+DefConstructorI('\negthinspace',undef,
+		"?#isMath(<ltx:XMHint name='negthinspace' width='#width'/>)()",
+		properties=>{isSpace=>1, width=>sub{ LookupValue('\thinmuskip')->negate; }});
+DefConstructorI('\medspace',undef,
+		"?#isMath(<ltx:XMHint name='medspace' width='#width'/>)()",
+		properties=>{isSpace=>1, width=>sub{ LookupValue('\medmuskip'); }});
+DefConstructorI('\negmedspace',undef,
+		"?#isMath(<ltx:XMHint name='negmedspace' width='#width'/>)()",
+		properties=>{isSpace=>1, width=>sub{ LookupValue('\medmuskip')->negate; }});
+DefConstructorI('\thickspace',undef,
+		"?#isMath(<ltx:XMHint name='thickspace' width='#width'/>)(\x{2004})",
+		properties=>{isSpace=>1, width=>sub{ LookupValue('\thickmuskip'); }});
+DefConstructorI('\negthickspace',undef,
+		"?#isMath(<ltx:XMHint name='negthickspace' width='#width'/>)(\x{2004})",
+		properties=>{isSpace=>1, width=>sub{ LookupValue('\thickmuskip')->negate; }});
+
+DefConstructor('\mspace{MuDimension}',"<ltx:XMHint name='mspace' width='#1'/>");
 
 #======================================================================
 # Section 4.3 Dots
@@ -584,12 +640,12 @@ DefMacro('\uproot{}','');
 # Section 4.7 Boxed formulas
 DefMacro('\boxed{}','\ifmmode\boxed@math{#1}\else\boxed@text{#1}\fi');
 DefConstructor('\boxed@math{}',
-	       "<ltx:XMWrap style='boxed'><ltx:XMArg>#1</ltx:XMArg></ltx:XMWrap>");
+	       "<ltx:XMArg enclose='box'>#1</ltx:XMArg>");
 DefConstructor('\boxed@text{}',sub {
   my($document,$body,%props)=@_;
   my @new = insertBlock($document,$body);
   foreach my $node (@new){
-    addClass($node,'framed'); }},
+    $node->addAttribute(framed=>'rectangle'); }}, # if allowed??
 	       bounded=>1,
 	       beforeDigest=>sub {
 		 Let(T_CS("\\\\"),T_CS('\@block@cr')); });
@@ -645,19 +701,19 @@ DefConstructor('\underset{}{}',
 
 DefConstructor('\tfrac{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok meaning='divide' role='MULOP' style='#style'/>"
+	       . "<ltx:XMTok meaning='divide' role='MULOP' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeTFrac, afterDigest =>\&afterTFrac);
 DefConstructor('\dfrac{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok meaning='divide' role='MULOP' style='#style'/>"
+	       . "<ltx:XMTok meaning='divide' role='MULOP' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeDFrac, afterDigest =>\&afterDFrac);
 DefConstructor('\ifrac{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok meaning='divide' role='MULOP' style='inline'/>"
+	       . "<ltx:XMTok meaning='divide' role='MULOP' mathstyle='inline'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeFrac, afterDigest =>\&afterFrac);
@@ -665,20 +721,20 @@ DefConstructor('\ifrac{}{}',
 # Section 4.11.2 The \binom, \dbinom, and \tbinom commands
 DefConstructor('\binom{}{}',
 	       "<ltx:XMApp open='(' close=')'>"
-	       . "<ltx:XMTok meaning='binomial' role='STACKED' style='#style'/>"
+	       . "<ltx:XMTok meaning='binomial' role='STACKED' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeFrac, afterDigest =>\&afterFrac);
 
 DefConstructor('\tbinom{}{}',
 	       "<ltx:XMApp open='(' close=')'>"
-	       . "<ltx:XMTok meaning='binomial' role='STACKED' style='#style'/>"
+	       . "<ltx:XMTok meaning='binomial' role='STACKED' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeTFrac, afterDigest =>\&afterTFrac);
 DefConstructor('\dbinom{}{}',
 	       "<ltx:XMApp open='(' close=')'>"
-	       . "<ltx:XMTok meaning='binomial' role='STACKED' style='#style'/>"
+	       . "<ltx:XMTok meaning='binomial' role='STACKED' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>\&beforeDFrac, afterDigest =>\&afterDFrac);
@@ -687,20 +743,22 @@ DefConstructor('\dbinom{}{}',
 DefConstructor('\genfrac{}{}{Dimension}{}{}{}',
 	       "<ltx:XMApp open='#open' close='#close'>"
 	       . "<ltx:XMTok ?&IsZero(#3)(role='STACKED')(role='MULOP' meaning='divide')"
-	       .           " thickness='#3' style='?#4(#4)(#style)'/>"
+	       .           " thickness='#3' mathstyle='?#4(#4)(#mathstyle)'/>"
 	       . "<ltx:XMArg>#5</ltx:XMArg>"
 	       . "<ltx:XMArg>#6</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	      afterDigest=>sub{ my($stomach,$whatsit)=@_;
 				my $open  = ToString($whatsit->getArg(1));
 				my $close = ToString($whatsit->getArg(2));
+				my $style = LookupValue('mathstyle');
 				if(my $entry = LaTeXML::Package::Pool::lookup_delimiter($open)){
 				  $open = $$entry{char}; }
 				if(my $entry = LaTeXML::Package::Pool::lookup_delimiter($close)){
 				  $close = $$entry{char}; }
 				$whatsit->setProperties(open=>$open,
 							close=>$close,
-							style=>LookupValue('mathstyle')); });
+							mathstyle=>($style eq 'display'
+								    ? $style : 'text')); });
 
 #======================================================================
 # Section 4.12 Continued fractions
@@ -710,12 +768,16 @@ DefConstructor('\genfrac{}{}{Dimension}{}{}{}',
 # I've left it to a special case in conversion to pmml.
 DefConstructor('\cfrac{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok name='cfrac' style='#cstyle' meaning='continued-fraction'/>"
+	       . "<ltx:XMTok name='cfrac' mathstyle='#mathstyle' meaning='continued-fraction'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg>"
 	       . "<ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
-	       properties=>sub{ (cstyle=>LookupValue('CFRACSTYLE')); },
-	       beforeDigest=>\&beforeFrac, afterDigest =>\&afterFrac);
+	       beforeDigest=>sub {
+		 $_[0]->bgroup;
+		 AssignValue(mathstyle=>'text'); },
+	       afterDigest=>sub {
+		 $_[0]->egroup;
+		 $_[1]->setProperties(mathstyle=>LookupValue('CFRACSTYLE')); });
 
 AssignValue(CFRACSTYLE=>'display');
 # This should get incorporated into any \cfrac's that are constructed in scope.
@@ -778,9 +840,9 @@ DefConstructor('\substack{}',
 							     "</ltx:XMArg><ltx:XMArg>",
 							     reversion=>Tokens(T_CS("\\\\"),T_CR));
 					      Let(T_CS('\cr'),T_CS("\\\\")); });
-DefEnvironment('{subarray}[]',
+DefEnvironment('{subarray}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok name='list' alignment='#1'/>"
+	       . "<ltx:XMTok name='list' role='STACKED' class='align#1'/>"
 	       . "<ltx:XMArg>#body</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 	       beforeDigest=>sub{ DefConstructor("\\\\ OptionalMatch:* [Dimension]",
@@ -836,10 +898,14 @@ DefConstructor('\sideset{}{}{}', sub {
 #======================================================================
 # Section 7.4 Multiple integral signs
 
-DefMath('\iint', "\x{222C}", meaning=>'double-integral', role=>'INTOP'); # DOUBLE INTEGRAL
-DefMath('\iiint',"\x{222D}", meaning=>'triple-integral', role=>'INTOP'); # TRIPLE INTEGRAL
-DefMath('\iiiint',"\x{2A0C}", meaning=>'quadruple-integral', role=>'INTOP');
-DefMath('\idotsint',"\x{222B}\x{22EF}\x{222B}", meaning=>'multiple-integral', role=>'INTOP');
+DefMath('\iint', "\x{222C}", meaning=>'double-integral', role=>'INTOP',
+	mathstyle=>\&doVariablesizeOp);
+DefMath('\iiint',"\x{222D}", meaning=>'triple-integral', role=>'INTOP',
+	mathstyle=>\&doVariablesizeOp);
+DefMath('\iiiint',"\x{2A0C}", meaning=>'quadruple-integral', role=>'INTOP',
+	mathstyle=>\&doVariablesizeOp);
+DefMath('\idotsint',"\x{222B}\x{22EF}\x{222B}", meaning=>'multiple-integral', role=>'INTOP',
+	mathstyle=>\&doVariablesizeOp);
 
 DefMacro('\MultiIntegral{}',sub {
   my($gullet,$n)=@_;

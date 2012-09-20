@@ -130,7 +130,7 @@ DefRegister('\everyeof',Tokens());
 
 # NOTE REMOVE defn from TeX.pool.ltxml.
 # \middle
-DefConstructor('\middle Token ',"<ltx:XMWrap style='stretchy'>#1</ltx:XMWrap>",
+DefConstructor('\middle Token ',"<ltx:XMWrap fontsize='stretchy'>#1</ltx:XMWrap>",
 	       afterConstruct=>sub { addDelimiterRole($_[0],'MIDDLE'); });
 
 # \unless someif
@@ -141,7 +141,7 @@ DefConditional('\unless Token',sub {
    # Invert the if's test!
    ! &$test($gullet,$defn->readArguments($gullet)); }
  else {
-   Error(":unexpected:".Stringify($if)." \\unless should not be followed by ".Stringify($if)); }});
+   Error('unexpected',$if,"\\unless should not be followed by ".Stringify($if)); }});
 
 #======================================================================
 1;

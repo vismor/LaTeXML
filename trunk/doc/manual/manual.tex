@@ -7,9 +7,7 @@
 % Should the additional keywords be indexed?
 \lstdefinestyle{shell}{language=bash,escapechar=@,basicstyle=\ttfamily\small,%
    morekeywords={latexml,latexmlpost,latexmlmath},
-%   moredelim=[is][\itshape]{\{}{\}}}
    moredelim=[is][\itshape]{\%}{\%}}
-% Can (should?) I make $ prefix give \itshape ?
 \lstdefinestyle{latexml}{basicstyle=\small\ttfamily,language=Perl,%
    morekeywords={CC_ESCAPE,CC_BEGIN,CC_END,CC_MATH,CC_ALIGN,CC_EOL,CC_PARAM,CC_SUPER,%
      CC_SUB,CC_IGNORE,CC_SPACE,CC_LETTER,CC_OTHER,CC_ACTIVE,CC_COMMENT,CC_INVALID,CC_CS,CC_NOTEXPANDED,%
@@ -122,6 +120,14 @@ we'll try to put `programming' oriented material (Perl, \TeX) in a typewriter fo
 \texttt{like this}; \XML\ material will be put in a sans-serif face
 \textsf{like this}.
 
+\begin{advanced}
+In the interests of at least attempting to describe everything,
+there will be a lot of material that will not make much sense until
+you have dabbled quite a bit in \LaTeXML's internals.
+Such `advanced' or dangerous material will be presented like this paragraph
+to make it easier to skip over.
+\end{advanced}
+
 %%%======================================================================
 \chapter{Using \LaTeXML}\label{usage}
 The main commands provided by the \LaTeXML\ system are
@@ -169,7 +175,7 @@ for converting individual formula into various formats.
 \section[Conversion]{Basic \XML\ Conversion}\label{usage.conversion}\index{latexml!basic usage}
 The command
 \begin{lstlisting}[style=shell]
-latexml {options} --destination={doc}.xml {doc}
+latexml {options} --destination=%doc%.xml %doc%
 \end{lstlisting}
 converts the \TeX\ document \texttt{doc.tex},
 or standard input if \texttt{-} is used in place of the filename, to \XML.
@@ -186,6 +192,7 @@ If the source file has an explicit extension of \texttt{.bib},
 or if the \cmd{--bibtex} option is used, the source will be
 treated as a \BibTeX\ database.
 
+\begin{advanced}
 Note that the timing is different than with \BibTeX\ and \LaTeX.
 Normally, \BibTeX\ simply selects and formats a subset of the
 bibliographic entries according to the \texttt{.aux} file;
@@ -198,6 +205,7 @@ One implication is that latexml does not know about packages
 included in the main document; if the bibliography uses
 macros defined in such packages, the packages must be explicitly
 specified using the \cmd{--preload} option.
+\end{advanced}
 
 \paragraph{Useful Options}
 The number and detail of progress and debugging messages printed
@@ -262,13 +270,13 @@ An \verb|\include| directive (and related ones) search only for
 a \texttt{.tex} file, which is processed and digested as usual.
 
 There are two mechanisms for customization:
-a document-specific binding file \shellcode|{doc}.latexml| will
+a document-specific binding file \shellcode|%doc%.latexml| will
 be loaded, if present;
 the option
 \begin{lstlisting}[style=shell]
 --preload=%binding%
 \end{lstlisting}
-will load the binding file \shellcode|{binding}.ltxml|.
+will load the binding file \shellcode|%binding%.ltxml|.
 The \shellcode|--preload| option can be repeated;
 both kinds of preload are loaded before document processing,
 and are processed in order.
@@ -286,7 +294,9 @@ The command
 \begin{lstlisting}[style=shell]
 latexmlpost %options% --destination=%doc%.xhtml %doc%
 \end{lstlisting}
-or similarly with \shellcode|--destination={doc}.html|,
+or similarly with
+\shellcode|--destination=%doc%.html| or
+\shellcode|--destination=%doc%.html5|,
 will carry out a set of appropriate transformations in sequence:
 \begin{itemize}
   \item scanning of labels and ids;
@@ -299,13 +309,17 @@ will carry out a set of appropriate transformations in sequence:
 The output format affects the defaults for each step and is determined
 by the file extension of \code{--destination}, or by the option
 \begin{lstlisting}[style=shell]
---format=(xhtml|html|xml)
+--format=(xhtml|html|html5|xml)
 \end{lstlisting}
+which overrides the extension used in the destination. The recognized formats are:
 \begin{description}
  \item[html] both math and graphics are converted to png images;
     the stylesheet \code{LaTeXML-html.xslt} is used.
  \item[xhtml] math is converted to Presentation \MathML, other graphics are converted to images;
     the stylesheet \code{LaTeXML-xhtml.xslt}  is used.
+ \item[html5] math is converted to Presentation \MathML, other graphics are converted to images;
+    the stylesheet \code{LaTeXML-html5.xslt} is used.
+    (Note that the extension \code{.html5} is not commonly recognized by web servers)
  \item[xml] no math, graphics or \XSLT\ conversion is carried out.
 \end{description}
 Of course, all of these conversions can be controlled or overridden
@@ -370,10 +384,10 @@ Specific conversions of the mathematics can be requested
 using the options
 \begin{lstlisting}[style=shell]
 --mathimages                   # converts math to png images,
---presentationmathml %or% --pmml # creates Presentation \MathML
---contentmathml %or% --cmml      # creates Content \MathML
---openmath %or% --om             # creates \OpenMath
---keepXMath                      # preserves \LaTeXML's XMath
+--presentationmathml %or% --pmml # creates Presentation @\MathML@
+--contentmathml %or% --cmml      # creates Content @\MathML@
+--openmath %or% --om             # creates @\OpenMath@
+--keepXMath                      # preserves @\LaTeXML@'s XMath
 \end{lstlisting}
 (Each of these options can also be negated if needed, eg.~\code{--nomathimages})
 It must be pointed out that the Content \MathML\ and \OpenMath\
@@ -403,16 +417,22 @@ controlled by
 --svg %or% --nosvg
 \end{lstlisting}
 
-\paragraph{Stylesheet}
-If you wish to provide your own \XSLT\  or
-\CSS\ stylesheets, the options 
+\paragraph{Stylesheets and Javascript}
+If you wish to provide your own \XSLT\,
+\CSS\ stylesheets or javascript programs, the options 
 \begin{lstlisting}[style=shell]
 --stylesheet=%stylesheet%.xsl
 --css=%stylesheet%.css
+--nodefaultcss
+--javascript=%program%.js
 \end{lstlisting}
- can be used.  The \code{--css} option can be repeated to include multiple stylesheets;
-for example, the distribution provides several in addition to the \code{core.css} stylesheet
-which is included by default.
+can be used.  The \code{--css} and  \code{--javascript} options provide \CSS\ stylesheets
+and javascript programs respectively; they can be repeated to include multiple files.
+In both cases, if a local file is referenced, it will be copied to the
+destination directory, but otherwise urls are accepted.
+
+The distribution provides several stylesheets in addition to \code{core.css} stylesheet
+(which is included by default unless \code{--nodefaultcss} is used).
 \begin{description}
 \item[\code{navbar-left.css}] Places a navigation bar on the left.
 \item[\code{navbar-right.css}] Places a navigation bar on the left.
@@ -420,8 +440,18 @@ which is included by default.
 \item[\code{amsart.css}] A style appropriate for many journal articles.
 \end{description}
 
-To develop such stylesheets, a knowledge
-of the \LaTeXML\ document type is necessary; See Appendix \ref{schema}.
+For example, to convert your document to HTML5 with MathML,
+but use \URL[MathJax]{http://www.mathjax.org} for browsers that don't natively support MathML,
+you might use:
+\begin{lstlisting}[style=shell]
+latexmlpost --format=html5 \
+   --javascript='http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=MML_HTMLorMML.js' \
+   --destination=%somewhere/doc%.html %doc%
+\end{lstlisting}
+
+See \ref{customization.latexmlpost.css} for more information on developing your own stylesheets.
+To develop \CSS\ and \XSLT\ stylesheets, 
+a knowledge of the \LaTeXML\ document type is also necessary; see  Appendix \ref{schema}.
 
 %%%----------------------------------------------------------------------
 \section[Splitting]{Splitting the Output}\label{usage.multiple}\index{latexmlpost!basic usage!split pages}
@@ -1633,33 +1663,29 @@ the structure won't work.
 \emph{To be written}
 
 \section{Math Forks}\label{mathfork}
-Although parsing and recognizing the intended structure, let alone meaning,
-of mathematical expressions from the presentational markup is non-trivial,
-going the other way to convert content into presentation
-is usually relatively straightforward, given some formatting conventions.
-The most common exception is usually a fine-grained correspondence
-associating a small content oriented expression with its presentation
-such that both are easily encapsulated within the same mathematical expression.
-Semantic markup defined using \code{DefMath} uses the \elementref{XMDual} element
-for that purpose.
+There are several constructs for aligning mathematics in \LaTeX, and common
+packages. Here we are concerned with the large scale alignments where
+one or more equations are displayed in a grid,
+such as \code{eqnarray}, in standard \LaTeX,
+and a suite of constructs of the amsmath packages.
+The arrangements are worth preserving as they often convey important information to the
+reader by the grouping, or by drawing attention to similarities or differences
+in the formula.   At the same time, the individual fragments within the grid
+cells often have little `meaning' on their own:
+it is subsequences of these fragments that represent the logical
+mathematical objects or formula.  Thus, we would also like to
+recognize those sequences and synthesize complete formula
+for use in content-oriented services.
+We therefore have to devise an \XML\ structure to represent this duality,
+as well as developing strategies for inferring and rearranging
+the mathematics as it was authored into the desired form.
 
-A more challenging situation arises when mathematical subexpressions
-are aligned across several distinct equations.
-Not only is the scale larger, but the alignment crosses the boundary
-between the mathematics and the document itself; moreover,
-there are often interspersed equation numbers
-(which are distinctly document,  \emph{not} mathematical, elements),
-or even textual insertions (such as amsmath's \verb|\intertext|).
-
-These alignment structures are often very carefully authored;
-and while they are difficult for automatic understanding,
-they can be quite useful for the human reader.
-We thus wish to preserve them and consequently need a structure that can represent 
-on the one hand a grid of math fragments,
-and on the other hand, a sequence of equations.
-The two forms are interconnected, with the equations generally
-being (the parse of) concatenations of sequences of adjacent
-cells or rows.
+The needed structure shares some characteristics with \elementref{XMDual},
+\emph{which needs to be described},
+but needs to resided at the document level, containing several,
+possibly numbered, equations each of which provide two views.
+Additional objects, such as textual insertions (such as amsmath's \verb|\intertext|),
+must also be accomodated.
 
 The following \XML\ is used to represent these structures:
 \begin{lstlisting}[style=xml]
@@ -1675,7 +1701,7 @@ The following \XML\ is used to represent these structures:
     </ltx:MathFork>
   </ltx:equation>
   <ltx:text>@\textit{inter-text}@</ltx:text>
-  @\ldots@
+  @\ldots \textit{more text or equations}@
 </ltx:equationgroup>
 \end{lstlisting}
 Typically, the contents of the \elementref{MathBranch} will be a sequence
@@ -1701,19 +1727,16 @@ should have \code{.fork1} appended.
 
 
 \section{eqnarray}\label{eqnarray}
-From \LaTeXML's point of view, desiring to construct well-structured mathematics,
-an \code{eqnarray} is an awkward object.
-It is formatted as a 3 column, multi-row alignment, with equation
-numbering potentially on each row.
-Each row might represent an equation, but if the 1st column is empty
-and the 2nd contains a relation, that row may be a continuation of the
-equation in the previous row.  If both of the first two columns are empty,
-the row may be a continuation of the RHS of equation in the previous row.
-Of course, in a given invocation, there can be multiple continuations,
-of either or both kind.
-
-And this ignores the fact that \code{eqnarray} is a common subject of markup abuse.
-Often one or two columns are always left empty.
+The \code{eqnarray} environment seems intended to represent one or more
+equations, but each equation can be continued with additional right-hand-sides
+(by omitting the 1st column), or the RHS itself can be continued on multiple
+lines by omitting the 1st two columns on a row.
+With our goal of constructing well-structured mathematics, this gives us
+a fun little puzzle to sort out. 
+However, being essentially the only structure for aligning mathematical
+stuff in standard \LaTeX, \code{eqnarray} tended to be stretched
+into various other use cases; aligning numbered equations with bits of text on the side,
+for example.  We therefore have some work to do to guess what the intent is.
 
 The strategy used for \code{eqnarray} is process the material as
 an alignment in math mode and convert initially to the following \XML\ structure:
@@ -1745,6 +1768,44 @@ the environments, their expected use case and describe the strategy used
 for converting them.
 
 \emph{To be done}
+Describe alternates for \code{equation} and things inside equations;
+Describe single vs multiple logical equations.
+(and started variants)
+
+This list outlines the \emph{intended} use of the AMS alignment environments
+The following constructs are intended as top-level environments, used like \code{equation}.
+
+Several of the constructs are used in place of a top-level \code{equation}
+and represent one or more logical equations.  The following describes
+the intended usage, as a guide to understanding the implementation code (or its limitations!)
+\begin{itemize}
+\item \code{align},\code{flalign},\code{alignat},\code{xalignat}:
+  Each row may be numbered; has even number of columns;
+  Each pair of columns, aligned right then left, represents a logical equation;
+  Note that the documentation suggests that annotative text can be added
+  by putting \verb|\text{}| in a column followed by an empty column.  
+\item \code{gather}:
+  Each row is a single centered column representing an equation.
+\item \code{multline}:
+  This environment represents a single equation broken to multiple lines;
+  the lines are aligned left, center (repeated) and finally, right.
+  \emph{alignment not yet implemented}
+\end{itemize}
+The following environments are used \emph{within} an equation (or similar)
+environment and thus do not generate \elementref{MathFork} structures.
+Moreover, except for \code{aligned}, their semantic intent is less clear.
+The preservation of the alignment have not yet been implemented;
+they; presumably would yeiled an \elementref{XMDual}.
+\begin{itemize}
+\item \code{split}
+\item \code{gathered}
+\item \code{aligned},\code{alignedat}
+\end{itemize}
+Note that the case of a single equation containing a single \code{aligned}
+is transformed into and treated equivalently to a top-level \code{align}.
+
+%% \section{DLMF Alignments}
+%% I'll just mention \code{equationmix},\code{equationgroup}.
 
 %%%======================================================================
 \chapter{ToDo}\label{todo}
@@ -1853,7 +1914,7 @@ originated; sometimes it is only realized later on that some problem
 has occurred, such as a missing brace. Moreover, whereas error messages
 from \TeX\ may be safely assumed to indicate errors with the source
 document, with \LaTeXML\ they may also indicate \LaTeXML's inability
-to figure out what you wanted, or simply bugs in \LaTeXML, itself.
+to figure out what you wanted, or simply bugs in \LaTeXML\ or the librarys it uses.
 
 \begin{description}
 \item[Warnings] are generally
@@ -1874,9 +1935,26 @@ have been encountered.
 Warning and Error messages are slightly structured to allow
 unattended processing of documents to classify the degree
 of success in processing. A typical message satisfies the following regular expression:
-\begin{verbatim}
-  (Warning|Error|Fatal)(:\S*)\s+(.*)
-\end{verbatim}
+\begin{lstlisting}[escapechar=@,basicstyle=\ttfamily\small]
+  @severity@:@category@:@object@ @summary@  
+      @source locator@
+      @description@
+      @\ldots@
+      @stack trace@
+\end{lstlisting}
+the second and following lines are indented using a tab.
+\begin{description}
+\item[\textit{severity}] One of \texttt{Info}, \texttt{Warn}, \texttt{Error} or \texttt{Fatal},
+  indicating the severity of the problem;
+\item[\textit{category}] classifies the error or warning into an open-ended set
+   of categories  indicating whether something was \texttt{expected}, or \texttt{undefined};
+\item[\textit{object}] indicates the offending object; what filename was missing,
+  or which token was undefined;
+\item[\textit{summary}] gives a brief readable summary of the condition;
+\item[\textit{source locator}] indicates where in the source document the error occurred;
+\item[\textit{description}] gives one or more lines of more detailed information;
+\item[\textit{stack trace}] optionally gives a brief or long trace of the current execution stack.
+\end{description}
 The type is followed by one or more keywords separated by colons,
 then a space, and a human readable error message.
 Generally, this line is followed by one or more lines describing
@@ -1893,37 +1971,38 @@ The following errors are generally due to malformed \TeX\ input,
 incomplete \LaTeXML\ bindings, or bindings that
 do not properly account for the way \TeX, or the macros, are actually used.
 \begin{description}
-\item[\texttt{undefined}]: \textit{arg} indicates the undefined control sequence.
-\item[\texttt{expected}]: \textit{arg} was expected in the input but missing.
- The expected thing will likely either be a control sequence or something like
- \verb|<variable>| to indicate that a variable was expected.
+\item[\texttt{undefined}]: The operation indicated by \textit{arg},
+  typically a control sequence or other operation, is undefined.
+\item[\texttt{ignore}]: Indicates that \textit{arg} is being ignored;
+ typically it is a duplicated definition, or a definition of something that cannot be redefined.
+\item[\texttt{expected}]: A particular token, or other type of data object,
+   indicated by \textit{arg}, was expected in the input but was missing.
 \item[\texttt{unexpected}]: \textit{arg} was not expected to appear in the input.
+\item[\texttt{not\_parsed}]: A mathematical formula could not be successfully parsed.
 \item[\texttt{missing\_file}]: the file \textit{arg} could not be found.
-  Also used when the file is otherwise not readable or processable.
 \item[\texttt{latex}]: An error or message generated from \LaTeX\ code.
-\item[\texttt{parse}]: An issue parsing the mathematics.
+  and the corresponding \LaTeXML\ code should be updated.
+\item[\texttt{too\_many\_errors}]: Too many non-fatal errors were encountered,
+  causing a Fatal error and program termination.
 \end{description}
 
 The following errors are more likely to be due to programming errors in the
 \LaTeXML\ core, or in binding files, or in the document model.
 \begin{description}
-\item[\texttt{perl}]: A perl-level error or warning,not specifically recognized
- by LaTeXML, was encountered.
-The second keyword will typically \texttt{die}, \texttt{interrupt} or \texttt{warn}.
-\item[\texttt{malformed}]: some sort of malformed XML problem.
-\item[\texttt{model}]: some sort of problem with the document model or schema.
-\item[\texttt{misdefined}]: Some sort of error in the definition of \textit{arg}.
+\item[\texttt{misdefined}]: The operation indicated by \textit{arg},
+   typically a control sequence or other operation,
+   has not been defined properly.
+\item[\texttt{deprecated}]: Indicates that \textit{arg} is a deprecated usage.
+\item[\texttt{malformed}]: The document is malformed, or will be made so
+  by insert \textit{arg} into it.
+\item[\texttt{I/O}]: some problem with input/output of the file \textit{arg},
+  such as it not being readable. The exact error is reported in the additional details.
+\item[\texttt{perl}]: A perl-level error or warning, not specifically recognized
+  by LaTeXML, was encountered.
+  \textit{arg} will typically \texttt{die}, \texttt{interrupt} or \texttt{warn}.
 \item[\texttt{internal}]: Something unexpected happened; most likey an
-internal coding error within \LaTeXML.
-\item[\texttt{too\_many}]: Too many error were encountered.
+  internal coding error within \LaTeXML.
 \end{description}
-
-
-Should there be an additional level that identifies the processing stage?
-Eg.~ mouth, gullet, stomach, intestine, \ldots ?
-That might semi-automatically distinguish expected, unexpected, malformed?
-Or does it?
-
 
 %%%======================================================================
 \backmatter

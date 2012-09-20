@@ -26,11 +26,13 @@ no warnings 'redefine';
 foreach my $option (qw(T2A T2B T2C X2 LCY OT2)){
   DeclareOption($option, sub { 
 		  setupCyrillic(); 
-		  loadFontEncoding(); }); }
+		  loadFontEncoding();
+		  return; }); }
 
 # Anything else doesn't really matter....
 DeclareOption(undef, sub {
-		loadFontEncoding(); });
+		loadFontEncoding();
+		return; });
 
 # WELL... Actually, some "encodings" map the normal 7bit (or 8)
 # apparently ASCII input characters to a completely different font.
@@ -96,9 +98,7 @@ ProcessOptions();
 sub loadFontEncoding {
   my $encoding = ToString(Digest(T_CS('\CurrentOption')));
   my $encfile = lc($encoding)."enc";
-  InputDefinitions($encfile,type=>'def')
-    || Warn(":missing:$encfile.def Couldn't find $encfile input encoding definition $encfile.def");
-
+  InputDefinitions($encfile,type=>'def');
   if(LoadFontMap($encoding)){
     MergeFont(encoding=>$encoding); }
 }

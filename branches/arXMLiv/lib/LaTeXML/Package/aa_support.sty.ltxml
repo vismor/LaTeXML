@@ -189,6 +189,11 @@ DefMacro('\subfigures','');
 #   \longtab{num}{table}
 DefMacro('\longtab{}','');	# just let it do the table contents as usual.
 
+# variations of footnote used within tables
+Let(T_CS('\tablefoot'),T_CS('\footnote'));
+DefMacro('\tablefootmark{}','\footnotemark[$#1$]');
+DefMacro('\tablefoottext{}{}','\footnotetext[$#1$]{#2}');
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # References
 # the usual...
@@ -307,7 +312,7 @@ DefPrimitiveI('\bbbz',  undef,"\x{2124}");
 # Astronomical objects
 
 DefConstructor('\object Semiverbatim',
-	       "<ltx:text class='objectname'>#1</ltx:text>");
+	       "<ltx:text class='ltx_ast_objectname'>#1</ltx:text>");
 DefMacro('\listofobjects','');
 DefMacro('\listobjectname','List of Objects');
 

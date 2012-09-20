@@ -1,0 +1,144 @@
+% \iffalse meta-comment
+% A LaTeX Package for Annotation Macros for Math Expressions
+% Copyright (c) 2012 Deyan Ginev, all rights reserved
+%               this file is released under the
+%               LaTeX Project Public License (LPPL)
+%
+% The development version of this file can be found at
+% $HeadURL: https://svn.mathweb.org/repos/LaTeXML/contrib/package/mathanno/mathanno.dtx $
+% \fi
+%   
+% \iffalse
+%<package>\NeedsTeXFormat{LaTeX2e}[1999/12/01]
+%<package>\ProvidesPackage{mathanno}[2012/03/28 v0.1 Annotation Macros for Math Expressions]
+%
+%<*driver>
+\documentclass{ltxdoc}
+\usepackage{url,array,float}
+\usepackage[show]{ed}
+\usepackage{latexml}
+\usepackage{mathanno}
+\usepackage{hyperref}
+\makeindex
+\begin{document}\DocInput{mathanno.dtx}\end{document}
+%</driver>
+% \fi
+% 
+%\iffalse\CheckSum{275}\fi
+% 
+% \changes{v0.1}{2012/03/28}{First Version}
+%
+% 
+% \GetFileInfo{mathanno.sty}
+% 
+% \MakeShortVerb{\|}
+%
+% \title{{\texttt{mathanno.sty}}: Annotation Macros for Math Expressions}
+%    \author{Deyan Ginev\\
+%            Jacobs University, Bremen\\
+%            \url{http://kwarc.info/dginev}}
+% \maketitle
+%
+% \begin{abstract}
+%   This package provides macros for annotating {\LaTeX}-authored mathematical
+%   expressions, with a focus on structural and syntactic properties.
+% \end{abstract}
+%
+% \tableofcontents\newpage
+% 
+% \section{Introduction}\label{sec:intro}
+% \ednote{we need this for the {arXiv} case study.}
+%
+% \section{User Interface}\label{sec:user}%
+%  \ednote{talk about keywords, trees, tikz}
+% \begin{figure}[ht]\centering
+% \begin{verbatim}
+% \documentclass{article}
+% 
+% An annotation for $1+2=3$:
+% @=(@+(1,2)) ???
+% ==================
+% First try: $1+2\is{infix,relation,expression}{=}3$
+% 
+% \end{verbatim}
+% \caption{Example of a Basic Annotation}\label{fig:example-doc}
+% \end{figure}
+%
+% Linear: $1+2\is{infix,relation,expression}{=}3$ \\
+% Tree: \MathTree [.$=$ [.\is{infix,operator}{+} [ 1 2 ] ] 3 ]
+%
+% \section{Exhaustive Feature List}\label{sec:features} 
+%
+% \section{Implementation}\label{sec:impl}
+% 
+% We proceed to doing the actual work on the {\LaTeX} side of affairs.
+%
+% To start things off, we provide Tikz-based tree building macros.
+%    \begin{macrocode}
+%<*package>
+\usepackage{color}
+\usepackage{qtree}
+
+% PDF annotation internals:
+\def\tooltiptarget{\phantom{\rule{1mm}{1mm}}}
+\newbox\tempboxa
+\setbox\tempboxa=\hbox{} 
+\immediate\pdfxform\tempboxa 
+\edef\emptyicon{\the\pdflastxform}
+
+% Magic for ,
+\begingroup
+\lccode`\~=`\,%
+\lowercase{\endgroup%
+ \def~{\string\r}%
+}%
+
+\def\activatecomma{\begingroup\catcode`,=\active}
+\def\deactivatecomma{\endgroup}
+\def\MathTree{\Tree}
+
+\def\TreeOp#1#2{%
+\begingroup
+\edef\boxname{\csname #1box\endcsname}%
+\global\expandafter\newsavebox\boxname%
+\global\expandafter\setbox\boxname=\hbox{\frame{\scriptsize #2}}%
+
+\expandafter\xdef\csname #1\endcsname{\expandafter\usebox\csname #1box\endcsname}%
+\endgroup
+}
+
+% Annotation macro:
+\def\is{\activatecomma\annoi}
+\def\isa{\is}
+\newcommand\annoi[2]{%
+\pdfstartlink user{%
+  /Subtype /Text
+  /Contents  (#1)
+  /AP <<
+    /N \emptyicon\space 0 R
+  >>
+}%
+{\color{red}#2}%
+\pdfendlink%
+\deactivatecomma
+}
+
+\newcommand{\labelentry}{.}
+\newcounter{entryi}
+%%% ENTRIES for expression case study:
+\newenvironment{nextentries}[2]%
+{\begin{table}[hp]\def\capentries{#1}\def\labelentries{#2}%
+ \begin{tabular}{|llll|}\hline  & Expression & Denotation & Annotation \\}%
+{\hline\end{tabular}\caption{\capentries}\label{\labelentries}\end{table}}%
+
+\newenvironment{entries}[2]%
+{\setcounter{entryi}{1}\begin{nextentries}{#1}{#2}}
+{\end{nextentries}}
+
+\newcommand\entry[4]{\hline\\[-4mm] {\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & {\scriptsize#3} \\[1.5mm] & \multicolumn{3}{l|}{{\footnotesize\textbf{Discussion:} #4}}\\[1mm]}
+%</package>
+%    \end{macrocode}
+%
+% 
+% \Finale
+% \endinput

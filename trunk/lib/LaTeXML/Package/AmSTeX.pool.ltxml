@@ -36,7 +36,8 @@ DefPrimitive('\define SkipSpaces Token UntilBrace {}', sub {
   my($stomach,$cs,$params,$body)=@_;
   $params = parseDefParameters($cs,$params); # in TeX.pool
   my $key = "defined:".Stringify($cs);
-  Error(":unexpected:\\define ".Stringify($cs)." is already defined") if LookupValue($key);
+  Error('ignore',$cs,$stomach,
+	"Ignoring redefinition (\\define) of '".Stringify($cs)."'") if LookupValue($key);
   AssignValue($key=>1);		# only if defined by \define (or \newcommand!)??? Or ANY \def ???
   DefMacroI($cs,$params,$body);
   return; });
@@ -66,13 +67,9 @@ DefConstructor('\documentstyle  Semiverbatim',
   afterDigest=>sub {
     my($stomach,$whatsit)=@_;
     my $style   = ToString($whatsit->getArg(1));
-    my $stylefile = FindFile($style, type=>'sty');
-    if($stylefile && $stylefile =~/\.sty\.ltxml$/){
-      # Load the package, but note that we're pretending it's a class (to some extent!)
-      RequirePackage($style, as_class=>1); }
-    else {
-      Warn(":missing_file:$style.sty.ltxml No LaTeXML implementation of ams class $style found, using amsppt");
-      RequirePackage('amsppt'); }
+    # Load the package, but note that we're pretending it's a class (to some extent!)
+    RequirePackage($style, type=>'sty', notex=>1, as_class=>1)
+      || RequirePackage('amsppt');
     return;});
 
 DefMacro('\NoPageNumbers','');
@@ -114,10 +111,10 @@ DefMacro('\boldnotloaded{}','');
 DefMacro('\galleys','');
 DefMacro('\flushpar','\par\noindent');
 
-DefMacro('\pagewidth Dimension','');
-DefMacro('\pageheight Dimension','');
-DefMacro('\hcorrection Dimension','');
-DefMacro('\vcorrection Dimension','');
+DefMacro('\pagewidth{Dimension}','');
+DefMacro('\pageheight{Dimension}','');
+DefMacro('\hcorrection{Dimension}','');
+DefMacro('\vcorrection{Dimension}','');
 
 #======================================================================
 # The Document
@@ -174,6 +171,8 @@ DefPrimitive('\linebreak',undef);
 DefPrimitive('\nolinebreak',undef);
 DefPrimitive('\mathbreak',undef);
 DefPrimitive('\nomathbreak',undef);
+DefPrimitive('\allowdisplaybreaks',undef);
+DefPrimitive('\allowdisplaybreak',undef);
 
 DefMacro('\tie','\unskip\nobreak\ ');
 Let(T_CS('\graveaccent'),T_CS("\\`"));
@@ -215,7 +214,7 @@ Let(T_CS('\sssize'),T_CS('\scriptscriptstyle'));
 
 DefMath('\and', '\&', role=>'ADDOP', meaning=>'and');
 DefConstructor("\\\\",
-	       "?#isMath(<ltx:XMHint name='\\'/>)(<ltx:break/>)",
+	       "?#isMath(<ltx:XMHint name='newline'/>)(<ltx:break/>)",
 	       reversion=>Tokens(T_CS("\\\\"),T_CR));
 
 # This is an analog to \align's template, but hopefully we can just ignore it???
@@ -243,7 +242,7 @@ Let(T_CS('\underarrow'),T_CS('\underrightarrow'));
 
 DefConstructor('\frac{}{}',
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok meaning='divide' role='MULOP' style='#style'/>"
+	       . "<ltx:XMTok meaning='divide' role='MULOP' mathstyle='#mathstyle'/>"
 	       . "<ltx:XMArg>#1</ltx:XMArg><ltx:XMArg>#2</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 #	       beforeDigest=>\&beforeFrac, afterDigest =>\&afterFrac);
@@ -330,6 +329,8 @@ Let(T_CS('\endtopaligned'),T_CS('\endaligned'));
 DefMacro('\botaligned','\aligned[b]');
 Let(T_CS('\endbotaligned'),T_CS('\endaligned'));
 
+# close enough?
+DefMacro('\accentedsymbol{}{}','\def#1{#2}');
 
 # Tricky:
 #  \cfrac, \lcfrac, \endcfrac
@@ -341,12 +342,12 @@ DefMacro('\rcfrac', '\bgroup\@cfracstyle{r}\advance\cfraccount@ 1\let\\\@cfrac')
 
 DefConstructorI('\@cfrac',undef,
 	       "<ltx:XMApp>"
-	       . "<ltx:XMTok meaning='continued-fraction' style='#style' role='MULOP'/>"
+	       . "<ltx:XMTok meaning='continued-fraction' mathstyle='#mathstyle' role='MULOP'/>"
 	       . "<ltx:XMArg>#top</ltx:XMArg>"
 	       . "<ltx:XMArg>#bottom</ltx:XMArg>"
 	       ."</ltx:XMApp>",
 		afterDigest=>\&chooseArgHandler,
-		properties=>sub{ (style=>LookupValue('CFRACSTYLE')); },
+		properties=>sub{ (mathstyle=>LookupValue('CFRACSTYLE')); },
 	       reversion=>sub {
 		 my($whatsit)=@_;
 		 (T_CS('\cfrac'),

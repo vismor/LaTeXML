@@ -169,11 +169,11 @@ local @LaTeXML::Model::RelaxNG::PATHS=();
 sub scanExternal {
   my($self,$name,$inherit_ns)=@_;
   my $mod = $name; $mod =~ s/\.rn(g|c)$//;
-  if(my $path = findSchema($name)){
-    #  Hopefully, just a file, not a URL?
+  my $paths = [@LaTeXML::Model::RelaxNG::PATHS,@{$STATE->lookupValue('SEARCHPATHS')}];
+  if(my $schemadoc = LaTeXML::Common::XML::RelaxNG->new($name,searchpaths=>$paths)){
     local @LaTeXML::Model::RelaxNG::PATHS
-      = (pathname_directory($path),@LaTeXML::Model::RelaxNG::PATHS);
-    my $node = $XMLPARSER->parseFile($path)->documentElement;
+      = (pathname_directory($schemadoc->URI),@LaTeXML::Model::RelaxNG::PATHS);
+    my $node = $schemadoc->documentElement;
     # Fetch any additional namespaces
     foreach my $ns ($node->getNamespaces){
 	my($prefix,$uri)=($ns->getLocalName,$ns->getData);
@@ -181,7 +181,6 @@ sub scanExternal {
 	$$self{model}->registerDocumentNamespace($prefix,$uri); }
     (['module',$mod,$self->scanPattern($node,$inherit_ns)]); }
   else {
-    Error(":missing_file:$name Couldn't find RelaxNG schema $name"); 
     (); }}
 
 sub getRelaxOp {
@@ -190,13 +189,6 @@ sub getRelaxOp {
   my $ns = $node->namespaceURI;
   my $prefix = $ns && $RNGNSMAP{$ns};
   ($prefix ? $prefix : "{$ns}").":".$node->localname; }
-
-sub findSchema {
-  my($name)=@_;
-  pathname_find($name, paths=>[@LaTeXML::Model::RelaxNG::PATHS,
-			       @{$STATE->lookupValue('SEARCHPATHS')}],
-		types=>['rng'],	# Eventually, rnc?
-		installation_subdir=>'schema/RelaxNG'); }
 
 our $GRAMMAR=0;
 
@@ -260,7 +252,7 @@ sub scanPattern {
     elsif($relaxop =~ /^rnga:documentation$/){
       (['doc',undef,$node->textContent]); }
     else {
-      Warn(":model Didn't expect $relaxop in RelaxNG Schema (scanPattern)");
+      Warn('misdefined',$relaxop,undef,"Didn't expect '$relaxop' in RelaxNG Schema (scanPattern)");
       (); }}
   else {
     (); }}
@@ -281,12 +273,13 @@ sub scanGrammarContent {
       map($self->scanGrammarContent($_,$ns), @children); }
     elsif($relaxop eq 'rng:include'){
       my $name = $node->getAttribute('href');
-      if(my $path = findSchema($name)){
+      my $paths = [@LaTeXML::Model::RelaxNG::PATHS,@{$STATE->lookupValue('SEARCHPATHS')}];
+      if(my $schemadoc = LaTeXML::Common::XML::RelaxNG->new($name,searchpaths=>$paths)){
 	local @LaTeXML::Model::RelaxNG::PATHS
-	  = (pathname_directory($path),@LaTeXML::Model::RelaxNG::PATHS);
-	#  Hopefully, just a file, not a URL?
-	my $doc = $XMLPARSER->parseFile($path)->documentElement;
+	  = (pathname_directory($schemadoc->URI),@LaTeXML::Model::RelaxNG::PATHS);
 	my @patterns;
+	#  Hopefully, just a file, not a URL?
+	my $doc = $schemadoc->documentElement;
 	# Ignore the grammar level, if any, since we do NOT establish a binding with include
 	if(getRelaxOp($doc) eq 'rng:grammar'){
 	  my $ns = $doc->getAttribute('ns') || $inherit_ns; # Possibly bind new namespace
@@ -302,7 +295,6 @@ sub scanGrammarContent {
 	else {
 	  (['module',$mod,@patterns]); }}
       else {
-	Error(":missing_file:$name Couldn't find RelaxNG schema $name"); 
 	(); }}}
   else {
     (); }}
@@ -313,11 +305,13 @@ sub scanNameClass {
   if($relaxop eq 'rng:name'){
     ($$self{model}->encodeQName($ns,$node->textContent)); }
   elsif($relaxop eq 'rng:anyName'){
-    warn "RelaxNG: treating ".$node->toString." as ANY"
+    Warn('misdefined',$relaxop,undef,"Can't handle RelaxNG operation '$relaxop'",
+	 "Treating ".ToString($node)." as ANY")
       if $node->hasChildNodes;
     ('ANY'); }
   elsif($relaxop eq 'rng:nsName'){
-    warn "RelaxNG: treating ".$node->toString." as ANY";
+    Warn('misdefined',$relaxop,undef,"Can't handle RelaxNG operation '$relaxop'",
+	 "Treating ".ToString($node)." as ANY");
     # NOTE: We _could_ conceivably use a namespace predicate,
     # but Model has to be extended to support it!
     ('ANY'); }
@@ -327,8 +321,9 @@ sub scanNameClass {
       map($names{$_}=1, $self->scanNameClass($choice,$ns)); }
     ($names{ANY} ? ('ANY') : keys %names); }
   else {
-    die "Expected a name element (rng:name|rng:anyName|rng:nsName|rng:choice), got "
-      .$node->nodeName; }}
+    my $op = $node->nodeName;
+    Fatal('misdefined',$op,undef,
+	  "Expected a RelaxNG name element (rng:name|rng:anyName|rng:nsName|rng:choice), got '$op'"); }}
 
 #======================================================================
 # Simplify

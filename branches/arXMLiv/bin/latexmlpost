@@ -15,14 +15,14 @@ use LaTeXML::Util::ObjectDB;
 #======================================================================
 # Parse command line.
 #======================================================================
-my $identity = "latexmlpost (LaTeXML version $LaTeXML::VERSION)";
+my $identity = "$FindBin::Script (LaTeXML version $LaTeXML::VERSION)";
 
 # undef => unspecified; 0 = NO, 1 = YES
 my($help,$showversion,$verbosity,$validate,$omit_doctype)=(0,0,0,1,0);
 my($sourcedir,$destination)=(undef,undef);
 my($format,$is_html,$urlstyle) = (undef,undef,'server');
 my($numbersections)=(1);
-my($stylesheet,$defaultcss,$icon,@css)=(undef,1);
+my($stylesheet,$defaultcss,$icon,@css,@javascript)=(undef,1);
 my($mathimages,$mathimagemag)=(undef,1.75);
 my($linelength,$plane1,$hackplane1)=(undef,undef,undef);
 my($dographics,$svg,$picimages)=(undef,undef,undef);
@@ -33,6 +33,7 @@ my %navtocstyles=(context=>1,normal=>1,none=>1);
 my($prescan,$dbfile,$scan,$crossref,$sitedir)=(undef,undef,1,1,undef);
 my($index,$permutedindex,$splitindex)=(1,undef,undef);
 my($splitbibliography,@bibliographies)=(undef);
+my($timestamp)=(undef);
 my @math_formats =();
 my %removed_math_formats=();
 my $splitback= "//ltx:bibliography | //ltx:appendix | //ltx:index";
@@ -46,7 +47,8 @@ my %splitpaths =
 my $parallelmath;
 
 # Get the command line arguments.
-GetOptions("verbose+"              =>\$verbosity,
+GetOptions("quiet"     => sub { $verbosity--; },
+	   "verbose"   => sub { $verbosity++; },
 	   "VERSION"      =>\$showversion,
 	   "help|?"       =>\$help,
 	   # Source Options
@@ -64,8 +66,10 @@ GetOptions("verbose+"              =>\$verbosity,
 	   "numbersections!"       =>\$numbersections,
 	   # Some general XSLT/CSS options.
 	   "stylesheet=s"          =>\$stylesheet,
-	   "css=s"                 =>\@css,
+	   "timestamp=s"           =>\$timestamp,
 	   "defaultcss!"           =>\$defaultcss,
+	   "css=s"                 =>\@css,
+	   "javascript=s"          =>\@javascript,
 	   "icon=s"                 =>\$icon,
 	   # Options for broader document set processing
 	   "split!"                =>\$split,
@@ -133,9 +137,14 @@ if($xmlfile ne '-'){
 # Sanity check and Completion of options.
 #======================================================================
 
-$sourcedir   = $sourcedir   && pathname_canonical($sourcedir);
-$destination = $destination && pathname_canonical($destination);
-$sitedir     = $sitedir     && pathname_canonical($sitedir);
+#$sourcedir   = $sourcedir   && pathname_canonical($sourcedir);
+#$destination = $destination && pathname_canonical($destination);
+#$sitedir     = $sitedir     && pathname_canonical($sitedir);
+
+$sourcedir   = $sourcedir   && pathname_absolute($sourcedir,pathname_cwd());
+$destination = $destination && pathname_absolute($destination,pathname_cwd());
+$sitedir     = $sitedir     && pathname_absolute($sitedir,pathname_cwd());
+$dbfile      = $dbfile      && pathname_absolute($dbfile,pathname_cwd());
 
 if(defined $parallelmath){
   warn "The --parallelmath option is obsolete; Parallel markup will be generated"
@@ -223,11 +232,20 @@ if((!defined $destination) && ($mathimages || $dographics || $picimages)){
 
 binmode(STDERR,":utf8");
 #binmode(STDOUT,":utf8");
-print STDERR "$identity\n" if $verbosity > 0;
-our %OPTIONS = (verbosity=>$verbosity||0,
-	       siteDirectory=>(defined $sitedir ? $sitedir
-			       : (defined $dbfile ? pathname_directory($dbfile)
-				  : ".")));
+print STDERR "$identity\n" unless $verbosity < 0;
+print STDERR "processing started ".localtime()."\n" unless $verbosity < 0;
+
+# Default options/parameters for each post processor
+our %OPTIONS = (verbosity=>$verbosity||0);
+# Default options/parameters for document
+our %DOC_OPTIONS = (validate=>$validate,
+		    sourceDirectory=>$sourcedir,
+		    destination=>$destination,
+		    # Is this the right default?
+		    siteDirectory=>(defined $sitedir ? $sitedir
+				    : (defined $destination ? pathname_directory($destination)
+				       : (defined $dbfile ? pathname_directory($dbfile)
+					  : "."))) );
 
 if(defined $dbfile && !-f $dbfile){
   if(my $dbdir = pathname_directory($dbfile)){
@@ -236,13 +254,9 @@ my $DB = LaTeXML::Util::ObjectDB->new(dbfile=>$dbfile,%OPTIONS);
 
 # Create the Source Document
 my $DOCUMENT= ($xmlfile eq '-'
-	       ? LaTeXML::Post::Document->newFromSTDIN(validate=>$validate,
-						       sourceDirectory=>$sourcedir,
-						       destination=>$destination)
-	       : LaTeXML::Post::Document->newFromFile($xmlfile,
-						      validate=>$validate,
-						      sourceDirectory=>$sourcedir,
-						      destination=>$destination));
+	       ? LaTeXML::Post::Document->newFromSTDIN(%DOC_OPTIONS)
+	       : LaTeXML::Post::Document->newFromFile($xmlfile,%DOC_OPTIONS));
+
 # Create the processors:
 my @procs = ();
 if($split){
@@ -299,12 +313,12 @@ if(!$prescan){
 	if(defined $linelength){
 	  push(@mprocs,LaTeXML::Post::MathML::PresentationLineBreak->new(
                     linelength=>$linelength,
-                    ($plane1 ? (plane1=>1):()),
+		    (defined $plane1 ? (plane1=>$plane1):(plane1=>1)),
                     ($hackplane1 ? (hackplane1=>1):()),
                     %OPTIONS)); }
 	else {
 	  push(@mprocs,LaTeXML::Post::MathML::Presentation->new(
-                    ($plane1 ? (plane1=>1):()),
+		    (defined $plane1 ? (plane1=>$plane1):(plane1=>1)),
                     ($hackplane1 ? (hackplane1=>1):()),
                     %OPTIONS)); }}
       elsif($fmt eq 'cmml'){
@@ -325,11 +339,14 @@ if(!$prescan){
 
   if($stylesheet){
     require 'LaTeXML/Post/XSLT.pm'; 
-    # Copy various kinds of resources, css, icon (eventually javascript...)
-    my $parameters={};
-    my @searchpaths = $DOCUMENT->getSearchPaths;
+    # Copy various kinds of resources, css, javascript, icon (others?)
+    my $parameters={LATEXML_VERSION=>"'$LaTeXML::VERSION'"};
+    my @searchpaths = ('.',$DOCUMENT->getSearchPaths);
     foreach my $css (@css){
-      if(my $csssource = pathname_find($css, types=>['css'],paths=>[@searchpaths],
+      if(pathname_is_url($css)){ # external url ? no need to copy
+	print STDERR "Using CSS=$css\n" if $verbosity > 0;
+	push(@{$$parameters{CSS}}, $css); }
+      elsif(my $csssource = pathname_find($css, types=>['css'],paths=>[@searchpaths],
 				       installation_subdir=>'style')){
 	print STDERR "Using CSS=$csssource\n" if $verbosity > 0;
 	my $cssdest = pathname_absolute($css,pathname_directory($destination));
@@ -338,7 +355,23 @@ if(!$prescan){
 	pathname_copy($csssource,$cssdest);
 	push(@{$$parameters{CSS}}, $cssdest); }
       else {
-	warn "Couldn't find CSS $css in paths ".join(',',@searchpaths)."\n"; }}
+	warn "Couldn't find CSS file $css in paths ".join(',',@searchpaths)."\n";
+	push(@{$$parameters{CSS}}, $css); }} # but still put the link in!
+    foreach my $js (@javascript){
+      if(pathname_is_url($js)){ # external url ? no need to copy
+	print STDERR "Using JAVASCRIPT=$js\n" if $verbosity > 0;
+	push(@{$$parameters{JAVASCRIPT}}, $js); }
+      elsif(my $jssource = pathname_find($js, types=>['js'],paths=>[@searchpaths],
+				       installation_subdir=>'style')){
+	print STDERR "Using JAVASCRIPT=$jssource\n" if $verbosity > 0;
+	my $jsdest = pathname_absolute($js,pathname_directory($destination));
+	$jsdest .= '.js' unless $jsdest =~ /\.js$/;
+	warn "Javascript source $jssource is same as destination!" if $jssource eq $jsdest;
+	pathname_copy($jssource,$jsdest);
+	push(@{$$parameters{JAVASCRIPT}}, $jsdest); }
+      else {
+	warn "Couldn't find Javascript file $js in paths ".join(',',@searchpaths)."\n";
+	push(@{$$parameters{JAVASCRIPT}}, $js); }} # but still put the link in!
     if($icon){
       if(my $iconsrc = pathname_find($icon,paths=>[$DOCUMENT->getSearchPaths])){
 	print STDERR "Using icon=$iconsrc\n" if $verbosity > 0;
@@ -346,7 +379,12 @@ if(!$prescan){
 	pathname_copy($iconsrc,$icondest);
 	$$parameters{ICON}=$icondest;  }
       else {
-	warn "Couldn't find ICON $icon in paths ".join(',',@searchpaths)."\n"; }}
+	warn "Couldn't find ICON $icon in paths ".join(',',@searchpaths)."\n";
+	$$parameters{ICON}=$icon;  }}
+    if(! defined $timestamp){
+      $timestamp = localtime(); }
+    if($timestamp){
+      $$parameters{TIMESTAMP}="'".$timestamp."'"; }
     push(@procs,LaTeXML::Post::XSLT->new(stylesheet=>$stylesheet,parameters=>$parameters, %OPTIONS)); }
 
   push(@procs,LaTeXML::Post::Writer->new(format=>$format,omit_doctype=>$omit_doctype,is_html=>$is_html,%OPTIONS));
@@ -356,6 +394,8 @@ if(!$prescan){
 # that initialize the thing by reading several files (the rest of the command line).
 LaTeXML::Post::ProcessChain($DOCUMENT,@procs);
 $DB->finish;
+print STDERR "processing finished ".localtime()."\n" unless $verbosity < 0;
+
 #======================================================================
 # helpers
 #======================================================================
@@ -414,6 +454,8 @@ latexmlpost [options] I<xmlfile>
  --css=cssfile           adds a css stylesheet to html/html5/xhtml
                          (can be repeated)
  --nodefaultcss          disables the default css stylesheet
+ --javscript=jsfile      adds a link to a javascript file into
+                         html/html5/xhtml (can be repeated)
  --split                 requests splitting each document
  --nosplit               disables the above (default)
  --splitat               specifies level to split the document
@@ -554,8 +596,10 @@ format (html, html5 or xhtml) will be used.
 
 Adds I<cssfile> as a css stylesheet to be used in the transformed html/html5/xhtml.
 Multiple stylesheets can be used; they are included in the html in the
-order given, following the default C<core.css>
-(but see C<--nodefaultcss>). Some stylesheets included in the distribution are
+order given, following the default C<core.css> (unless C<--nodefaultcss>).
+The stylesheet is copied to the destination directory, unless it is an absolute url.
+
+Some stylesheets included in the distribution are
   --css=navbar-left   Puts a navigation bar on the left.
                       (default omits navbar)
   --css=navbar-right  Puts a navigation bar on the left.
@@ -566,10 +610,23 @@ order given, following the default C<core.css>
 
 Disables the inclusion of the default C<core.css> stylesheet.
 
+=item C<--javascript>=I<jsfile>
+
+Includes a link to the javascript file I<jsfile>, to be used in the transformed html/html5/xhtml.
+Multiple javascript files can be included; they are linked in the html in the order given.
+The javascript file is copied to the destination directory, unless it is an absolute url.
+
 =item C<--icon>=I<iconfile>
 
 Copies I<iconfile> to the destination directory and sets up the linkage in
 the transformed html/html5/xhtml to use that as the "favicon".
+
+=item C<--timestamp>=I<timestamp>
+
+Provides a timestamp (typically a time and date) to be embedded in
+the comments by the stock XSLT stylesheets.
+If you don't supply a timestamp, the current time and date will be used.
+(You can use C<--timestamp=0> to omit the timestamp).
 
 =back
 
@@ -731,7 +788,7 @@ MathML so that it is no longer than I<number> `characters'.
 
 Converts the content of Presentation MathML token elements to
 the appropriate Unicode Plane-1 codepoints according to the selected font,
-when applicable.
+when applicable (the default).
 
 =item C<--hackplane1>
 

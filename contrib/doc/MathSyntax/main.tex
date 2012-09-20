@@ -1,0 +1,164 @@
+\documentclass[a4paper,11pt]{memoir}
+\usepackage{etex}
+\usepackage{mathanno}
+\usepackage{graphicx}
+\usepackage[usenames,svgnames]{xcolor}
+\chapterstyle{bianchi}
+\usepackage{a4wide,amsfonts,amsthm,amsmath,appendix}
+\usepackage[show]{ed}
+\usepackage{url}
+%\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+\usepackage{xspace}
+
+% Less detailed TOC
+\setcounter{tocdepth}{1}
+\def\arxiv{\textsc{arXiv}\xspace}
+
+%DECLARATION SECTION
+% \theoremstyle{plain}
+% \newtheorem{thm}[equation]{Theorem}
+% \newtheorem{lem}[equation]{Lemma}
+% \newtheorem{cor}[equation]{Corollary}
+% \newtheorem{prop}[equation]{Proposition}
+
+% \theoremstyle{definition}
+% \newtheorem{defi}[equation]{Definition}
+% \newtheorem{rmk}[equation]{Remark}
+% \newtheorem{example}[equation]{Example}
+
+% \theoremstyle{remark}
+% \newtheorem{notation}{Notation}
+
+%COMMAND SECTION
+%\overfullrule=5pt
+% \renewcommand{\textwidth}{390pt}
+% \renewcommand{\baselinestretch}{1.5}
+% \numberwithin{equation}{section}
+
+\newcommand{\bib}{\bibitem}
+\newcommand{\ra}{\rightarrow}
+\newcommand{\lra}{\longrightarrow}
+\newcommand{\nin}{\noindent}
+\newcommand{\bsk}{\bigskip}
+\newcommand{\msk}{\medskip}
+\newcommand{\ssk}{\smallskip}
+
+\newcommand{\contrac}{\mathop{\raise.45ex\hbox{$\underline{\hskip7pt}$}\raise.5ex\hbox{$\mkern-2mu\scriptstyle|$}}\nolimits}
+
+%Greek letters
+\newcommand{\al}{\alpha}
+\newcommand{\be}{\beta}
+\newcommand{\ga}{\gamma}
+\newcommand{\Ga}{\Gamma}
+\newcommand{\de}{\delta}
+\newcommand{\De}{\Delta}
+\newcommand{\la}{\lambda}
+\newcommand{\La}{\Lambda}
+\newcommand{\Th}{\Theta}
+\newcommand{\si}{\sigma}
+\newcommand{\Si}{\Sigma}
+\newcommand{\om}{\omega}
+\newcommand{\Om}{\Omega}
+\newcommand{\ka}{\kappa}
+\newcommand{\ep}{\epsilon}
+\newcommand{\vep}{\varepsilon}
+\newcommand{\vphi}{\varphi}
+\newcommand{\na}{\nabla}
+
+
+%Caligraphic
+\newcommand{\CA}{\mathcal A}
+\newcommand{\CB}{\mathcal B}
+\newcommand{\CC}{\mathcal C}
+\newcommand{\CCD}{\mathcal D}
+\newcommand{\CE}{\mathcal E}
+\newcommand{\CF}{\mathcal F}
+\newcommand{\CG}{\mathcal G}
+\newcommand{\CH}{\mathcal H}
+\newcommand{\CI}{\mathcal I}
+\newcommand{\CJ}{\mathcal J}
+\newcommand{\CK}{\mathcal K}
+\newcommand{\CL}{\mathcal L}
+\newcommand{\CM}{\mathcal M}
+\newcommand{\CN}{\mathcal N}
+\newcommand{\CO}{\mathcal O}
+\newcommand{\CP}{\mathcal P}
+\newcommand{\CQ}{\mathcal Q}
+\newcommand{\CR}{\mathcal R}
+\newcommand{\CS}{\mathcal S}
+\newcommand{\CT}{\mathcal T}
+\newcommand{\CU}{\mathcal U}
+\newcommand{\CV}{\mathcal V}
+\newcommand{\CW}{\mathcal W}
+\newcommand{\CX}{\mathcal X}
+\newcommand{\CY}{\mathcal Y}
+\newcommand{\CZ}{\mathcal Z}
+
+%Blackboard bold
+\newcommand{\BP}{\mathbb P}
+\newcommand{\BT}{\mathbb T}
+\newcommand{\BR}{\mathbb R}
+\newcommand{\BZ}{\mathbb Z}
+\newcommand{\BC}{\mathbb C}
+\newcommand{\BV}{\mathbb V}
+\newcommand{\BQ}{\mathbb Q}
+
+%Text
+\newcommand{\te}{\text{e}}
+\newcommand{\ti}{\text{i}}
+
+%Bold letters
+\newcommand{\bq}{\mathbf{q}}
+\newcommand{\bl}{\mathbf{l}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\bw}{\mathbf{w}}
+\newcommand{\bm}{\mathbf{m}}
+\newcommand{\bM}{\mathbf{M}}
+\newcommand{\bA}{\mathbf{A}}
+
+\begin{document}
+\input{title}
+\pagestyle{plain}
+% Remove parskip for toc
+\setlength{\parskip}{0ex plus 0.5ex minus 0.2ex}
+\tableofcontents
+
+\chapter{Introduction}
+In this study, we survey the notational diversity of present-day mathematical expressions, in order to uncover their linguistic phenomena. A practical motivation for this study is to provide a foundation for determining the boundary between syntactic and semantic phenomena in said expressions, from the perspective of language modeling. The ultimate goal of this project is to construct a grammar of mathematical expressions, which captures all relevant syntactic properties established in this study, and allows for the semantic analysis necessary to model and observe the semantic relationships.
+
+\section{Motivation}
+We want to enable machine-reading of formulas, in order to provide a variety of user-assistance services, such as semantic search, text-to-speech synthesis, semantic interactions (definition lookup), as well as computer algebra support (``evaluate subexpressions on demand'') and ultimately computer verification (``does that proof step really hold?'').\ednote{expand}
+\section{Related Resources}
+Notation census, beginnings of study are in Deyan's thesis, Naproche and FMathL have examples, but no real systematic study.\ednote{expand}
+
+\input{setup}
+
+\chapter{A Study of Mathematical Syntax}
+\section{Basics}
+\input{basics}
+\section{Discrete math}
+\input{sets}
+\input{logic}
+\input{combinatorics}
+\input{numbertheory}
+\input{graphs}
+\input{algebra}
+\input{functions}
+
+\section{Continuous math}
+\input{calculus}
+\input{probability}
+\input{intervals}
+\input{topology}
+\input{diffgeometry}
+
+\section{Other fields}
+\input{quantum}
+\ednote{computer science, biology, chemistry...}
+$\vdots$
+
+\chapter{Discussion}
+
+\chapter{Conclusion}
+
+\end{document}

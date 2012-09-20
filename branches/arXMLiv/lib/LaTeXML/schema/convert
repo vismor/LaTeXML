@@ -5,7 +5,7 @@ cd RelaxNG
 
 for name in LaTeXML; do
   echo "Converting $name.rnc to $name.rng"
-  trang $name.rnc $name.rng
+  trang -C ../../LaTeXML.catalog $name.rnc $name.rng
 
   # Trang can't convert the schema to dtd mainly because we're gradually
   # combining the defines for models.
@@ -40,7 +40,7 @@ for name in LaTeXML; do
   echo "Precompiling $name.rng schema to $name.model"
 #  perl -I ~/latexml/lib/ -MLaTeXML \
   perl -I ../../.. -MLaTeXML \
-       -e 'LaTeXML->new()->withState(sub{ $_[0]->getModel->compileSchema; });' \
+       -e 'LaTeXML->new()->withState(sub{ $_[0]->getModel->compileSchema; print STDERR $_[0]->getStatusMessage;});' \
        > ../$name.model
 
 done

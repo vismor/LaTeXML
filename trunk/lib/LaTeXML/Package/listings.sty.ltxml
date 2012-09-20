@@ -24,6 +24,11 @@ use LaTeXML::Util::KeyVal;
 # Wouldn't you want to see the pretty print, but cut&paste the plain code?
 # This may eventually need some schema support...
 
+# NOTE: The MoreSelectCharTable parameter for languages styles is
+# NOT yet implemented; this has an impact on
+#  HTML, XML comments & CDATA sections not recognized.
+#  Perl, Visual Basic, Java, tcl; something (comments?) is not recognized, but what?
+
 #======================================================================
 # Note that listings.sty uses a couple of textcomp characters
 # (\textquotesingle, \textasciigrave)
@@ -78,7 +83,7 @@ sub lstProcessInline {
 	     lstProcess('inline',@_)); }
 
 DefConstructor('\@listings@inline Semiverbatim {}',
-	       "<ltx:text class='listing #1'>#2</ltx:text>",
+	       "<ltx:text class='#1'>#2</ltx:text>",
 	       reversion=>'\lstinline#1#2#3#2'); # ??????
 
 # Not a regular environment, since we're going to read the body verbatim!
@@ -105,7 +110,7 @@ DefMacro('\lstinputlisting OptionalKeyVals:LST Semiverbatim', sub {
       $text = <LST>;
       close(LST); }}
   else {
-    Error("unexpected:$filename Couldn't read listings file $filename: $!"); }
+    Error('I/O',$filename,$gullet,"Can't read listings file '$filename'",$!); }
   $STATE->getStomach->bgroup; 
   lstActivate($keyvals);
   AssignValue('LST@toctitle',$file); # so it shows up in list of..
@@ -195,10 +200,10 @@ DefConstructor('\@@listings@inblock Semiverbatim {}',
 # Because of the peculiar timing of the evaluation of keywords and body,
 # this is a bit hard to get at.
 sub listingsSemantics {
-  my @items = ();
+  my @items = ('ltx_lstlisting');
   if(my $lang = ToString(LookupValue('LST@language'))){
     $lang = "$2_$1" if $lang =~ /^\[([^\]]*)\](.*)$/;
-    push(@items, "language_$lang"); }
+    push(@items, "ltx_lst_language_$lang"); }
 
   Tokens( (@items ? Explode(join(' ',@items)) : ())); }
 
@@ -239,10 +244,8 @@ sub lstActivate {
 	$val = LookupValue('KEYVAL@LST@'.$key.'@default') unless $val;
 	# Done for effect.
 	Digest(Tokens($cs,($val ? $val->unlist : Tokens()) ,T_CS('\end'))); }
-#      else {
-	AssignValue('LST@'.$key=>$val); 
-#}
-}}}
+      AssignValue('LST@'.$key=>$val);
+    }}}
 
 #----------------------------------------------------------------------
 # Various helpers for dealing with the arguments to options.
@@ -272,7 +275,7 @@ sub lstDeslash {
 sub lstRegexp {
   my($chars)=@_;
   if(my $string = lstDeslash($_[0])){
-    $string =~ s/([\!\@\#\$\%\^\&\*\(\)\_\-\+\{\}\[\]\\\<\>\?\/])/\\$1/g;  # Put back for Perl.
+    $string =~ s/([\!\@\#\$\%\^\&\*\(\)\_\-\+\{\}\[\]\\\<\>\?\/\|])/\\$1/g;  # Put back for Perl.
     $string; }}
 
 #----------------------------------------------------------------------
@@ -465,22 +468,33 @@ DefMacro('\lst@@style Until:\end', sub {
     if(my $values = LookupValue('LST@STYLE@'.$style)){
       lstActivate($values); }
     else {
-      Warn("expected:$style No listings style $style found"); }}
+      Warn('unexpected',$style,$gullet,"No listings style '$style' found"); }}
   return; });
 
 sub lstActivateLanguage {
   my($language,$dialect)=@_;
   $language = uc(ToString($language)); $language =~ s/\s+//g;
+  my($values,$name);
   if($language){
-    $dialect = LookupValue('LSTDD@'.$language) unless $dialect && $dialect->unlist;
-    my $name = 'LST@LANGUAGE@'.$language;
-    if($dialect && $dialect->unlist){
-      $dialect  = uc(ToString($dialect)); $dialect =~ s/\s+//g;
-      $name .= '$'.$dialect; }
-    if(my $values = LookupValue($name)){
+    while(1){
+      # Construct the language$dialect that we're trying to find.
+      my $d = ($dialect && $dialect->unlist ? $dialect : LookupValue('LSTDD@'.$language));
+      $name = 'LST@LANGUAGE@'.$language;
+      if($d && $d->unlist){
+	$d  = uc(ToString($d)); $d =~ s/\s+//g;
+	$name .= '$'.$d; }
+      # language definition is loaded!
+      last if $values = LookupValue($name);
+      # try to load next configuration file; fail if no more configs.
+      if(my $file = ShiftValue('LST_LANGUAGE_FILES')){
+	InputDefinitions($file,noerror=>1); } # Note: OK if some definition files missing!
+      else { last; }}
+    # Found a definition, activate it.
+    if($values){
       lstActivate($values); }
+    # Else failed to find one.
     else {
-      Warn("expected:$name No listings language $language found"); }}}
+      Warn('unexpected',$name,$STATE->getStomach,"No listings language '$language' found"); }}}
 
 DefKeyVal('LST','language','');
 DefMacro('\lst@@language [] Until:\end', sub {
@@ -559,12 +573,12 @@ DefKeyVal('LST','delim','');
 DefMacro('\lst@@delim OptionalMatch:* OptionalMatch:* [] [] Until:\end', sub {
 	   # clear delimiters, first ???
   lstAddDelimiter('delimiter',$_[3],$_[4],$_[5],
-		  ($_[1] ? (recurse=>1):()),
+		  ($_[1] ? (recursive=>1):()),
 		  ($_[2] ? (cummulative=>1):())); });
 DefKeyVal('LST','moredelim','');
 DefMacro('\lst@@moredelim OptionalMatch:* OptionalMatch:* [] [] Until:\end', sub {
   lstAddDelimiter('delimiter',$_[3],$_[4],$_[5],
-		  ($_[1] ? (recurse=>1):()),
+		  ($_[1] ? (recursive=>1):()),
 		  ($_[2] ? (cummulative=>1):())); });
 
 #======================================================================
@@ -825,7 +839,8 @@ DefPrimitive('\@lstdefinelanguage []{}[]{} SkipSpaces RequiredKeyVals:LST []',su
     $dialect  = uc(ToString($dialect)); $dialect =~ s/\s+//g;
     $name .= '$'.$dialect; }
   AssignValue($name
-	      => LaTeXML::KeyVals->new('LST','[',']',(@base ? (language=>Tokens(@base)):()), $keyvals->getPairs)); });
+	      => LaTeXML::KeyVals->new('LST','[',']',(@base ? (language=>Tokens(@base)):()), $keyvals->getPairs),
+	     'global'); });
 
 # Seems to use <language>$<dialect> as the naming scheme.
 DefPrimitive('\lstalias []{} []{}',sub {
@@ -893,7 +908,7 @@ DefKeyVal('LST','otherkeywords',''); # NOTE: Not yet handled
 DefKeyVal('LST','tag','');
 DefMacro('\lst@@tag OptionalMatch:* OptionalMatch:* [] Until:\end', sub {
   lstAddDelimiter('delimiter',$_[3],'tagstyle',$_[4],
-		  ($_[1] ? (recurse=>1):()),
+		  ($_[1] ? (recursive=>1):()),
 		  ($_[2] ? (cummulative=>1):())); });
 
 # Strings
@@ -973,7 +988,7 @@ sub lstProcess {
 
   local $LaTeXML::DELIM_RE  = join('|',map($$delimiters{$_}{open}, sort keys %$delimiters));
   local $LaTeXML::ESCAPE_RE  = join('|',map($$delimiters{$_}{open},
-					    grep($$delimiters{$_}{escape}, sort keys %$delimiters)));
+					    grep($$delimiters{$_}{escape},sort keys %$delimiters)));
   local $LaTeXML::QUOTED_RE  = undef;
   local $LaTeXML::SPACE = (lstGetBoolean('showspaces') ? T_CS('\@lst@visible@space') : T_CS("~"));
   local $LaTeXML::CASE_SENSITIVE = lstGetBoolean('sensitive');
@@ -987,7 +1002,7 @@ sub lstProcess {
   # Better would be to treat the whole string.
   # then gobble lines etc, can probably work...
   local $LaTeXML::linenum = $line0;
-  local $LaTeXML::colnum = 0;
+  local $LaTeXML::colnum  = 0;
   local $LaTeXML::listing = $text;
   local $LaTeXML::mode    = $mode;
   local $LaTeXML::linestart=undef;
@@ -1020,8 +1035,8 @@ sub lstProcessPush {
 sub lstProcessStartLine {
   my $numpos =  ((lstGetNumber('stepnumber') == 0) ? 'none' : lstGetLiteral('numbers'));
   $LaTeXML::linestart = scalar(@LaTeXML::lsttokens); # Remember where line started, for potential truncation
-  lstProcessPush(Invocation(T_CS('\@lst@startline'),
-			    ($numpos eq 'left') && lstDoNumber($LaTeXML::listing=~/^\s*?\n/s))); 
+  lstProcessPush(T_CS('\@lst@startline'),
+		 T_BEGIN,($numpos eq 'left') ? lstDoNumber($LaTeXML::listing=~/^\s*?\n/s):(),T_END);
 }
 
 sub lstProcessEndLine {
@@ -1030,8 +1045,8 @@ sub lstProcessEndLine {
   else {
     $LaTeXML::emptyfrom = undef; }
   my $numpos =  ((lstGetNumber('stepnumber') == 0) ? 'none' : lstGetLiteral('numbers'));
-  lstProcessPush(Invocation(T_CS('\@lst@endline'),
-			    ($numpos eq 'right')&& lstDoNumber())); }
+  lstProcessPush(T_CS('\@lst@endline'),
+		 T_BEGIN,($numpos eq 'right') ? lstDoNumber() : (), T_END); }
 
 sub lstProcess_internal {
   my($end_re)=@_;
@@ -1130,7 +1145,10 @@ sub lstProcess_internal {
   }}
 
 DefConstructor('\@listingKeyword {}{}', 
-	       "?#1(<ltx:text class='lst#1'>#2</ltx:text>)(#2)");
+	       "?#class(<ltx:text class='ltx_lst_#class'>#2</ltx:text>)(#2)",
+	       properties=>{ class=>sub { my $c = ToString($_[1]);
+					  $c =~ s/s$//;
+					  $c; }});
 
 sub lstClassBegin {
   my($classname)=@_;
@@ -1151,23 +1169,23 @@ sub lstClassProperty {
   my $class = $classname && LookupValue('LST_CLASSES')->{$classname};
   ($class && ($$class{$property} ? $$class{$property} : lstClassProperty($$class{class},$property))); }
 
-DefConstructor('\@lst@startline[]',
-	       "<ltx:tr>?#1(<ltx:td class='linenumber'>#1</ltx:td>)<ltx:td><ltx:text class='lstline'>");
-DefConstructor('\@lst@endline[]',
-	       "</ltx:text></ltx:td>?#1(<ltx:td class='linenumber'>#1</ltx:td>)</ltx:tr>");
+DefConstructor('\@lst@startline{}',
+	       "<ltx:tr>#1<ltx:td><ltx:text class='ltx_lst_line'>");
+DefConstructor('\@lst@endline{}',
+	       "</ltx:text></ltx:td>#1</ltx:tr>");
 DefConstructor('\@lst@visible@space', "\x{2423}");
-
+DefConstructor('\@lst@linenumber{}',
+	       "<ltx:td class='ltx_lst_linenum'>#1</ltx:td>");
 sub lstDoNumber {
   my($isempty)=@_;
   if( (LookupValue('LISTINGS_NEEDS_NUMBER')
        || ((($LaTeXML::linenum-1) % lstGetNumber('stepnumber')) == 0))
       && (lstGetBoolean('numberblanklines') || !$isempty) ){
     AssignValue('LISTINGS_NEEDS_NUMBER'=>0);
-    # extra braces since optional args get one set stripped.
-    Tokens(T_BEGIN,T_BEGIN,lstGetTokens('numberstyle')->unlist,T_CS('\thelstnumber'),T_END,T_END); }
+    Invocation(T_CS('\@lst@linenumber'),
+	       Tokens(T_BEGIN,lstGetTokens('numberstyle')->unlist,T_CS('\thelstnumber'),T_END)); }
  else {
-   T_SPACE; }}
-#    (T_BEGIN,lstGetTokens('numberstyle')->unlist,T_CS("~"),T_END,T_CS("~")); }}
+   Invocation(T_CS('\@lst@linenumber'),Tokens()); }}
 
 #======================================================================
 # Initialize the various parameters...
@@ -1207,36 +1225,18 @@ RawTeX(<<'EoTeX');
 EoTeX
 
 #======================================================================
-# Something like this ought to be built in?
-sub readRawConfigFile {
-  my($file)=@_;
-  my $path = FindFile($file);
-  $path = `kpsewhich $file` unless $path;
-  chomp($path);
-  if($path){
-    my $stomach = $STATE->getStomach;
-    my $gullet = $stomach->getGullet;
-    my $cmts = LookupValue('INCLUDE_COMMENTS');
-    AssignValue('INCLUDE_COMMENTS'=>0);
-    $gullet->openMouth(LaTeXML::StyleMouth->new($path),1);
-    my $mouth = $gullet->getMouth;
-    my $token;
-    while($token = $gullet->readXToken(0)){
-      next if $token->equals(T_SPACE);
-      $stomach->invokeToken($token); }
-    $gullet->closeMouth if $mouth eq $gullet->getMouth; # may already close from \endinput!
-    AssignValue('INCLUDE_COMMENTS'=>$cmts); }
-  else {
-    Info("expected:$file Couldn't find config file $file"); }}
-
 # Finally, we want to load the definitions from the configurations...
 # Actually, we should just load .cfg
 # and the extra files should be loaded as needed, but...
 sub lstLoadConfiguration {
-  readRawConfigFile("listings.cfg");
-  # And NOW read in the language definitions.
-  foreach my $file (lstSplit(Digest(T_CS('\lstlanguagefiles')))){
-    readRawConfigFile($file); }}
+  InputDefinitions("listings",type=>'cfg');
+  AssignValue(LST_LANGUAGE_FILES=>[lstSplit(Digest(T_CS('\lstlanguagefiles')))],'global');
+  # Now, if you want to read in all definitions immediately, you could do this (Daemon?)
+  # otherwise, they'll be read in whenever missing languages are used.
+##  while(my $file = ShiftValue('LST_LANGUAGE_FILES')){
+##    InputDefinitions($file,noerror=>1); }
+}
+
 
 lstLoadConfiguration();
 

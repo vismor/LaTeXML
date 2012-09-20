@@ -99,7 +99,8 @@ sub digestFile {
      $self->initializeState('TeX.pool', @{$$self{preload} || []}) unless $options{noinitialize};
 
      my $pathname = pathname_find($file,types=>['tex','']);
-     Fatal(":missing_file:$file Cannot find TeX file $file") unless $pathname;
+     Fatal('missing_file',$file,undef,"Can't find TeX file $file",
+	   "SEARCHPATHS is ".join(', ',@{LookupValue('SEARCHPATHS')})) unless $pathname;
      my($dir,$name,$ext)=pathname_split($pathname);
      $state->assignValue(SOURCEFILE=>$pathname);
      $state->assignValue(SOURCEDIRECTORY=>$dir);
@@ -108,20 +109,16 @@ sub digestFile {
 
      $state->installDefinition(LaTeXML::Expandable->new(T_CS('\jobname'),undef,
 							Tokens(Explode($name))));
-     my $stomach=$state->getStomach;
-     my @stuff=();
-     push(@stuff,$self->loadPreamble($options{preamble})) if $options{preamble};
+     # Reverse order, since last opened is first read!
+     $self->loadPostamble($options{postamble}) if $options{postamble};
+     LaTeXML::Package::InputContent($pathname);
+     $self->loadPreamble($options{preamble}) if $options{preamble};
 
-     $stomach->getGullet->input($pathname);
-     while($stomach->getGullet->getMouth->hasMoreInput){
-       push(@stuff,$stomach->digestNextBody); }
-
-     push(@stuff,$self->loadPostamble($options{postamble})) if $options{postamble};
-#     my $list = $self->finishDigestion;
-     my $list = LaTeXML::List->new(@stuff);
+     my $list = $self->finishDigestion;
      NoteEnd("Digesting $file");
      $list; });
 }
+
 sub digestString {
   my($self,$string, %options)=@_;
   $self->withState(sub {
@@ -129,19 +126,12 @@ sub digestString {
      NoteBegin("Digesting string");
      $self->initializeState('TeX.pool', @{$$self{preload} || []})  unless $options{noinitialize};
 
-     my $stomach=$state->getStomach;
-     my @stuff=();
+     # Reverse order, since last opened is first read!
+     $self->loadPostamble($options{postamble}) if $options{postamble};
+     $state->getStomach->getGullet->openMouth(LaTeXML::Mouth->new($string),0);
+     $self->loadPreamble($options{preamble}) if $options{preamble};
 
-     push(@stuff,$self->loadPreamble($options{preamble})) if $options{preamble};
-
-     $stomach->getGullet->openMouth(LaTeXML::Mouth->new($string),0);
-     while($stomach->getGullet->getMouth->hasMoreInput){
-       push(@stuff,$stomach->digestNextBody); }
-
-     push(@stuff,$self->loadPostamble($options{postamble})) if $options{postamble};
-
-     # my $list = $self->finishDigestion;
-     my $list = LaTeXML::List->new(@stuff);
+     my $list = $self->finishDigestion;
      NoteEnd("Digesting string");
      $list; });
 }
@@ -158,7 +148,7 @@ sub digestBibTeXFile {
      $self->initializeState('TeX.pool','LaTeX.pool', 'BibTeX.pool', @{$$self{preload} || []})
        unless $options{noinitialize};
      my $pathname = pathname_find($file,types=>['bib','']);
-     Fatal(":missing_file:$file Cannot find TeX file $file") unless $pathname;
+     Fatal('missing_file',$file,undef,"Can't find BibTeX file $file") unless $pathname;
      my $bib = LaTeXML::Bib->newFromFile($file);
      my($dir,$name,$ext)=pathname_split($pathname);
      $state->unshiftValue(SEARCHPATHS=>$dir) unless grep($_ eq $dir, @{$state->lookupValue('SEARCHPATHS')});
@@ -168,18 +158,11 @@ sub digestBibTeXFile {
 							Tokens(Explode($name))));
      # This is handled by the gullet for TeX files, but we're doing a batch of string processing first.
      # Nevertheless, we'd like access to state & variables during that string processing.
-     $state->getStomach->getGullet->inputConfigfile($name); #  Load configuration for this source, if any.
-
+     if(my $conf = pathname_find("$name.latexml", paths=>LookupValue('SEARCHPATHS'))){
+       loadLTXML($conf); }
      my $tex = $bib->toTeX;
-
-     my $stomach=$state->getStomach;
-     my @stuff=();
      $state->getStomach->getGullet->openMouth(LaTeXML::Mouth->new($tex),0);
-     while($stomach->getGullet->getMouth->hasMoreInput){
-       push(@stuff,$stomach->digestNextBody); }
-     my $list = LaTeXML::List->new(@stuff);
-
-#     my $list = $self->finishDigestion;
+     my $list = $self->finishDigestion;
      NoteEnd("Digesting bibliography $file");
      $list; });
 }
@@ -187,38 +170,28 @@ sub digestBibTeXFile {
 sub finishDigestion {
   my($self)=@_;
   my $state = $$self{state};
-  my $stomach  = $state->getStomach; # The current Stomach;
-  my $list = LaTeXML::List->new($stomach->digestNextBody);
+  my $stomach = $state->getStomach;
+  my @stuff=();
+  while($stomach->getGullet->getMouth->hasMoreInput){
+      push(@stuff,$stomach->digestNextBody); }
   if(my $env = $state->lookupValue('current_environment')){
-    Error(":expected:\\end{$env} Input ended while environment $env was open"); } 
+    Error('expected',"\\end{$env}",$stomach,"Input ended while environment $env was open"); } 
   $stomach->getGullet->flush;
-  $list; }
+  LaTeXML::List->new(@stuff); }
 
 sub loadPreamble {
   my($self,$preamble)=@_;
-  my $state = $$self{state};
-  my $stomach  = $state->getStomach; # The current Stomach;
-  my @stuff = ();
+  my $gullet  = $$self{state}->getStomach->getGullet;
   if($preamble eq 'standard_preamble.tex'){
-     $stomach->getGullet->openMouth(LaTeXML::Mouth->new('\documentclass{article}\begin{document}'),0); }
-  else {
-     $stomach->getGullet->input($preamble); }
-  while($stomach->getGullet->getMouth->hasMoreInput){
-    push(@stuff,$stomach->digestNextBody); }
-  LaTeXML::List->new(@stuff); }
+    $preamble = 'literal:\documentclass{article}\begin{document}'; }
+  LaTeXML::Package::InputContent($preamble); }
 
 sub loadPostamble {
   my($self,$postamble)=@_;
-  my $state = $$self{state};
-  my $stomach  = $state->getStomach; # The current Stomach;
-  my @stuff = ();
+  my $gullet  = $$self{state}->getStomach->getGullet;
   if($postamble eq 'standard_postamble.tex'){
-     $stomach->getGullet->openMouth(LaTeXML::Mouth->new('\end{document}'),0); }
-  else {
-     $stomach->getGullet->input($postamble); }
-  while($stomach->getGullet->getMouth->hasMoreInput){
-    push(@stuff,$stomach->digestNextBody); }
-  LaTeXML::List->new(@stuff); }
+    $postamble = 'literal:\end{document}'; }
+  LaTeXML::Package::InputContent($postamble); }
 
 sub convertDocument {
   my($self,$digested)=@_;
@@ -226,6 +199,7 @@ sub convertDocument {
      my($state)=@_;
      my $model    = $state->getModel;   # The document model.
      my $document  = LaTeXML::Document->new($model);
+     local $LaTeXML::DOCUMENT = $document;
      NoteBegin("Building");
      $model->loadSchema(); # If needed?
      if(my $paths = $state->lookupValue('SEARCHPATHS')){
@@ -233,8 +207,7 @@ sub convertDocument {
 	 $document->insertPI('latexml',searchpaths=>join(',',@$paths)); }}
      foreach my $preload (@{$$self{preload}}){
        next if $preload=~/\.pool$/;
-       $preload =~ s/^\[([^\]]*)\]//;
-       my $options = $1;
+       my $options = ($preload =~ s/^\[([^\]]*)\]//) && $1;
        $preload =~ s/\.sty$//;
        $document->insertPI('latexml',package=>$preload,($options ? (options=>$options):())); }
      $document->absorb($digested);
@@ -254,9 +227,10 @@ sub withState {
   my($self,$closure)=@_;
   local $STATE    = $$self{state};
   # And, set fancy error handler for ANY die!
-  local $SIG{__DIE__}  = sub { LaTeXML::Error::Fatal(join('',":perl:die ",@_)); };
-  local $SIG{INT}      = sub { LaTeXML::Error::Fatal(join('',":perl:interrupt ",@_)); }; # ??
-  local $SIG{__WARN__} = sub { LaTeXML::Error::Warn(join('',":perl:warn ",@_)); };
+  # Could be useful to distill the more common messages so they provide useful build statistics?
+  local $SIG{__DIE__}  = sub { LaTeXML::Global::Fatal('perl','die',undef,"Perl died",@_); };
+  local $SIG{INT}      = sub { LaTeXML::Global::Fatal('perl','interrupt',undef,"LaTeXML was interrupted",@_); };
+  local $SIG{__WARN__} = sub { LaTeXML::Global::Warn('perl','warn',undef,"Perl warning",@_); };
   local $LaTeXML::DUAL_BRANCH= '';
 
   &$closure($STATE); }
@@ -276,26 +250,12 @@ sub initializeState {
       if($handleoptions){
 	$options = [split(/,/,$options)]; }
       else {
-	Warn(":unexpected:options Attempting to pass options [$options] to $preload.$type"
-	   ."which is not a style or class file"); }}
+	Warn('unexpected','options',
+	     "Attempting to pass options to $preload.$type (not style or class)",
+	     "The options were  [$options]"); }}
     LaTeXML::Package::InputDefinitions($preload,type=>$type,
-				       handleoptions=>$handleoptions, options=>$options)
-      || Fatal(":missing_file:$preload.$type Couldn't find $preload.$type to preload"); }
-
-  # NOTE: This is seemingly a result of a not-quite-right
-  # processing model.  Opening a new mouth to tokenize & digest
-  # the bibtex material lets the macros do the right-thing as far as
-  # catcodes, etc.
-  # HOWEVER, it goes in at the FRONT of the line; pending preloads
-  # may not get finished.
-  # Probably the right solution is to immediately process included, interpreted, style files?
-  my @pending = ();
-  while($gullet->getMouth->hasMoreInput){
-    push(@pending,$stomach->digestNextBody); }
-  @pending = map($_->unlist,@pending);
-  if(@pending){
-    Warn(":unexpected:<boxes> Got boxes from preloaded modules: ".join(Stringify($_),@pending));}
-}
+				       handleoptions=>$handleoptions, options=>$options); 
+  }}
 
 sub writeDOM {
   my($self,$dom,$name)=@_;

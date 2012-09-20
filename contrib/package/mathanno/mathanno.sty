@@ -1,0 +1,70 @@
+%%
+%% This is file `mathanno.sty',
+%% generated with the docstrip utility.
+%%
+%% The original source files were:
+%%
+%% mathanno.dtx  (with options: `package')
+%% 
+\NeedsTeXFormat{LaTeX2e}[1999/12/01]
+\ProvidesPackage{mathanno}[2012/03/28 v0.1 Annotation Macros for Math Expressions]
+\usepackage{color}
+\usepackage{qtree}
+
+\def\tooltiptarget{\phantom{\rule{1mm}{1mm}}}
+\newbox\tempboxa
+\setbox\tempboxa=\hbox{}
+\immediate\pdfxform\tempboxa
+\edef\emptyicon{\the\pdflastxform}
+
+\begingroup
+\lccode`\~=`\,%
+\lowercase{\endgroup%
+ \def~{\string\r}%
+}%
+
+\def\activatecomma{\begingroup\catcode`,=\active}
+\def\deactivatecomma{\endgroup}
+\def\MathTree{\Tree}
+
+\def\TreeOp#1#2{%
+\begingroup
+\edef\boxname{\csname #1box\endcsname}%
+\global\expandafter\newsavebox\boxname%
+\global\expandafter\setbox\boxname=\hbox{\frame{\scriptsize #2}}%
+
+\expandafter\xdef\csname #1\endcsname{\expandafter\usebox\csname #1box\endcsname}%
+\endgroup
+}
+
+\def\is{\activatecomma\annoi}
+\def\isa{\is}
+\newcommand\annoi[2]{%
+\pdfstartlink user{%
+  /Subtype /Text
+  /Contents  (#1)
+  /AP <<
+    /N \emptyicon\space 0 R
+  >>
+}%
+{\color{red}#2}%
+\pdfendlink%
+\deactivatecomma
+}
+
+\newcommand{\labelentry}{.}
+\newcounter{entryi}
+%%% ENTRIES for expression case study:
+\newenvironment{nextentries}[2]%
+{\begin{table}[hp]\def\capentries{#1}\def\labelentries{#2}%
+ \begin{tabular}{|llll|}\hline  & Expression & Denotation & Annotation \\}%
+{\hline\end{tabular}\caption{\capentries}\label{\labelentries}\end{table}}%
+
+\newenvironment{entries}[2]%
+{\setcounter{entryi}{1}\begin{nextentries}{#1}{#2}}
+{\end{nextentries}}
+
+\newcommand\entry[4]{\hline\\[-4mm] {\theentryi\labelentry}\stepcounter{entryi} & #1 & #2 & {\scriptsize#3} \\[1.5mm] & \multicolumn{3}{l|}{{\footnotesize\textbf{Discussion:} #4}}\\[1mm]}
+\endinput
+%%
+%% End of file `mathanno.sty'.

@@ -1,0 +1,7 @@
+comments = 
+noparse = 
+nopost = 
+timeout = 60
+format = xml
+xml = 
+preload = ids.sty

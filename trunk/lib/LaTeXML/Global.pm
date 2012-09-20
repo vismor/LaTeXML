@@ -139,7 +139,7 @@ sub StartSemiverbatim() {
   $LaTeXML::STATE->assignValue(MODE=>'text'); # only text mode makes sense here... BUT is this shorthand safe???
   $LaTeXML::STATE->assignValue(IN_MATH=>0);
   map($LaTeXML::STATE->assignCatcode($_=>CC_OTHER,'local'),@{$LaTeXML::STATE->lookupValue('SPECIALS')});
-  $LaTeXML::STATE->assignCatcode('math:\''=>0,'local');
+  $LaTeXML::STATE->assignMathcode('\''=>0x8000,'local');
   $LaTeXML::STATE->assignValue(font=>$LaTeXML::STATE->lookupValue('font')->merge(encoding=>'ASCII'), 'local'); # try to stay as ASCII as possible
   return; }
 
@@ -150,12 +150,7 @@ sub EndSemiverbatim() {  $LaTeXML::STATE->popFrame; }
 
 # Return a LaTeXML::Tokens made from the arguments (tokens)
 sub Tokens {
-  my(@tokens)=@_;
-  # Flatten any Tokens to Token's
-  @tokens = map( ( (((ref $_)||'') eq 'LaTeXML::Tokens') ? $_->unlist : $_), @tokens);
-  # And complain about any remaining Non-Token's
-  map( ((ref $_) && $_->isaToken)|| Fatal(":misdefined:<unknown> Expected Token, got ".Stringify($_)), @tokens);
-  LaTeXML::Tokens->new(@tokens); }
+  LaTeXML::Tokens->new(@_); }
 
 # Explode a string into a list of tokens w/catcode OTHER (except space).
 sub Explode {
@@ -210,8 +205,10 @@ sub Box {
   $font = $LaTeXML::Global::STATE->lookupValue('font') unless defined $font;
   $locator = $LaTeXML::Global::STATE->getStomach->getGullet->getLocator unless defined $locator;
   $tokens  = T_OTHER($string) if $string && !defined $tokens;
-  if($LaTeXML::Global::STATE->lookupValue('IN_MATH')){
-    LaTeXML::MathBox->new($string,$font->specialize($string),$locator,$tokens); }
+  my $state = $LaTeXML::Global::STATE;
+  if($state->lookupValue('IN_MATH')){
+    my $attr = (defined $string) && $state->lookupValue('math_token_attributes_'.$string);
+    LaTeXML::MathBox->new($string,$font->specialize($string),$locator,$tokens,$attr); }
   else {
     LaTeXML::Box->new($string, $font, $locator,$tokens); }}
 
@@ -244,16 +241,23 @@ sub NoteEnd {
     print STDERR sprintf(" %.2f sec)",$elapsed) if $LaTeXML::Global::STATE->lookupValue('VERBOSITY') >= 0; }}
 
 sub Fatal { 
-  my($message)=@_;
+  my($category,$object,$where,$message,@details)=@_;
   if(!$LaTeXML::Error::InHandler && defined($^S)){
     $LaTeXML::Global::STATE->noteStatus('fatal');
     $message
-      = LaTeXML::Error::generateMessage("Fatal",$message,1,
-		       ($LaTeXML::Global::STATE->lookupValue('VERBOSITY') > 0
-			? ("Stack Trace:",LaTeXML::Error::stacktrace()):()));
+      = LaTeXML::Error::generateMessage("Fatal:".$category.":".ToString($object),$where,$message,1,
+					# ?!?!?!?!?!
+					# or just verbosity code >>>1 ???
+					($LaTeXML::Global::STATE->lookupValue('VERBOSITY') > 0
+					 ? ("Stack Trace:",LaTeXML::Error::stacktrace()):()),
+					@details);
   }
+  else {			# If we ARE in a recursive call, the actual message is $details[0]
+    $message = $details[0] if $details[0]; }
   local $LaTeXML::Error::InHandler=1;
   die $message; 
+###  print STDERR "\n".$message;
+###  exit(1);
   return; }
 
 # Note that "100" is hardwired into TeX, The Program!!!
@@ -261,31 +265,37 @@ our $MAXERRORS=100;
 
 # Should be fatal if strict is set, else warn.
 sub Error {
+  my($category,$object,$where,$message,@details)=@_;
   my($msg)=@_;
   if($LaTeXML::Global::STATE->lookupValue('STRICT')){
-    Fatal($msg); }
+    Fatal($category,$object,$where,$message,@details); }
   else {
     $LaTeXML::Global::STATE->noteStatus('error');
-    print STDERR LaTeXML::Error::generateMessage("Error",$msg,1,"Continuing... Expect trouble.\n")
+    print STDERR LaTeXML::Error::generateMessage("Error:".$category.":".ToString($object),
+						 $where,$message,1,@details)
       unless $LaTeXML::Global::STATE->lookupValue('VERBOSITY') < -2; }
   if(($LaTeXML::Global::STATE->getStatus('error')||0) > $MAXERRORS){
-    Fatal(":too_many:$MAXERRORS Too many errors!"); }
+    Fatal('too_many_errors',$MAXERRORS,$where,"Too many errors (> $MAXERRORS)!"); }
   return; }
 
 # Warning message; results may be OK, but somewhat unlikely
 sub Warn {
+  my($category,$object,$where,$message,@details)=@_;
   my($msg)=@_;
   $LaTeXML::Global::STATE->noteStatus('warning');
-  print STDERR LaTeXML::Error::generateMessage("Warning",$msg,0)
+  print STDERR LaTeXML::Error::generateMessage("Warning:".$category.":".ToString($object),
+					       $where,$message,0, @details)
     unless $LaTeXML::Global::STATE->lookupValue('VERBOSITY') < -1; 
   return; }
 
 # Informational message; results likely unaffected
 # but the message may give clues about subsequent warnings or errors
 sub Info {
+  my($category,$object,$where,$message,@details)=@_;
   my($msg)=@_;
   $LaTeXML::Global::STATE->noteStatus('info');
-  print STDERR LaTeXML::Error::generateMessage("Info",$msg,0)
+  print STDERR LaTeXML::Error::generateMessage("Info:".$category.":".ToString($object),
+					       $where,$message,0, @details)
     unless $LaTeXML::Global::STATE->lookupValue('VERBOSITY') < 0;
   return; }
 
@@ -508,22 +518,48 @@ Not a part of TeX, but useful for graphical objects.
 
 =head2 Error Reporting
 
+The Error reporting functions all take a similar set of arguments,
+the differences are in the implied severity of the situation,
+and in the amount of detail that will be reported.
+
+The C<$category> is a string naming a broad category of errors,
+such as "undefined". The set is open-ended, but see the manual
+for a list of recognized categories.  C<$object> is the object
+whose presence or lack caused the problem.
+
+C<$where> indicates where the problem occurred; passs in
+the C<$gullet> or C<$stomach> if the problem occurred during
+expansion or digestion; pass in a document node if it occurred there.
+A string will be used as is; if an undefined value is used,
+the error handler will try to guess.
+
+The C<$message> should be a somewhat concise, but readable,
+explanation of the problem, but ought to not refer to the
+document or any "incident specific" information, so as to
+support indexing in build systems.  C<@details> provides
+additional lines of information that may be indident specific.
+
 =over 4
 
-=item C<< Fatal($message); >>
+=item C<< Fatal($category,$object,$where,$message,@details); >>
 
 Signals an fatal error, printing C<$message> along with some context.
 In verbose mode a stack trace is printed.
 
-=item C<< Error($message); >>
+=item C<< Error($category,$object,$where,$message,@details); >>
 
 Signals an error, printing C<$message> along with some context.
 If in strict mode, this is the same as Fatal().
 Otherwise, it attempts to continue processing..
 
-=item C<< Warn($message); >>
+=item C<< Warn($category,$object,$where,$message,@details); >>
 
 Prints a warning message along with a short indicator of
+the input context, unless verbosity is quiet.
+
+=item C<< Info($category,$object,$where,$message,@details); >>
+
+Prints an informational message along with a short indicator of
 the input context, unless verbosity is quiet.
 
 =item C<< NoteProgress($message); >>

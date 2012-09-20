@@ -1,0 +1,58 @@
+\chapter{Methods}
+\section{Training Corpus}
+The primary corpus on which we base this investigation is the Cornel pre-print archive ``\arxiv''\ednote{cite here}, consisting of over 700,000 articles in 37 scientific subfields.
+\subsection{\arxiv Sandbox}
+\ednote{Say that, on the \arxiv front, we first start with the train sandbox from Deyan's thesis}
+\begin{table}\begin{center}
+\begin{tabular}{|ll|}\hline
+Train1 & Differential Geometry \\ & \url{http://arxmliv.kwarc.info/files/9609/dg-ga.9609012} \\[2mm]
+Train2 & Quantum Physics \\  & \url{http://arxmliv.kwarc.info/files/0910/0910.5733/} \\[2mm]
+Train3 & High Energy Physics - Theory \\  & \url{http://arxmliv.kwarc.info/files/9407/hep-th.9407125/} \\[2mm]
+Train4 & Commutative Algebra \\  & \url{http://arxmliv.kwarc.info/files/0809/0809.4873/} \\[2mm]
+Train5 & Statistics Theory \\  & \url{http://arxmliv.kwarc.info/files/0905/0905.1486/} \\[2mm]
+Train6 & General Relativity and Quantum Cosmology \\  & \url{http://arxmliv.kwarc.info/files/0807/0807.2507/} \\[2mm]
+Train7 & Cosmology and Extragalactic Astrophysics \\  & \url{http://arxmliv.kwarc.info/files/0908/0908.2548} \\[2mm]
+Train8 & Exactly Solvable and Integrable Systems \\  & \url{http://arxmliv.kwarc.info/files/0905/0905.2033} \\[2mm]
+Train9 & Geometric Topology \\  & \url{http://arxmliv.kwarc.info/files/0809/0809.4477} \\[2mm]
+Train10 & Algebraic Geometry \\  & \url{http://arxmliv.kwarc.info/files/0704/0704.0537} \\ \hline
+\end{tabular}
+\caption{Sandbox of Ten Random \arxiv Papers from Diverse Scientific Subfields}
+\end{center}
+\end{table}
+
+As a secondary resource, we we will also consult entry-level literature on highschool mathematics, in order to exhibit basic phenomena, as well as to demonstrate phenomena apriori known to the authors.\ednote{Wikipedia? PEMDAS?}
+
+\section{Structural Annotation}
+
+As one of the goals of our study is to establish a first guess of an underspecified operator tree\ednote{make sure the concepts are introduced and/or rephrase}, any annotation must at its core mark up the applicative logical structure of the mathematical expression. This process will build up a formula tree, the collection of which can later be used as a gold standard for developing a grammatical model of the language of symbolic mathematics.
+
+\ednote{I'm currently thinking of rendering the annotations as trees (tikz,pstricks...custom tree drawing package?), so that the annotator can proofread the annotations in an intuitive manner.}
+\ednote{In the XHTML, I'm thinking of ContentMML+SVG rendering, all of this figured out by the binding, maybe a custom stylesheet?}
+
+\section{Annotation Vocabulary}
+
+Another core goal is to discover and describe interesting linguistic phenomena that occur naturally in our corpus. Examples of what we consider ``interesting'' are phenomena that induce ambiguity, or legitimize what would typically be ungrammatical fragments. Cases of ambiguity are well-known to follow from semantic overloading of symbols, implicit argument scopes of operations or eliding syntax, leaving the reader with the task of guessing the ``invisible'' dynamics.Use of custom shorthands, however, as well as custom notations in general, expands the grammar of symbolic mathematics, often in completely non-standard ways that can only be grasped through a deep understanding of the document at hand.
+
+As multiple interesting observations can be made for a single large mathematical formula, it is natural to annotate multiple relevant subexpressions. More concretely, for each phenomenon of interest, we annotate the greatest common subtree (GCT) of all participating subtrees. In case we find a long-range relationship in a large formula, the annotation would hence be placed on the formula root.
+
+The annotations can be utilized for different purposes - browsing by specific phenomena, syntactic feature or lemma, training a classifier, etc. Thus, we take a compositional, standardized approach to providing labels from a fixed vocabulary for the relevant ontological classes of structural properties.
+
+\begin{table}
+\begin{center}
+\begin{tabular}{|l|l|} 
+\hline \textbf{Property} & \textbf{Keywords} \\ \hline
+\textbf{Fixity} & over, under, prefix, infix, postfix, superfix, subfix, circumfix, transfix, nofix\footnote{``atom'' may also be known as ``nofix''} \\[1mm]
+\textbf{Role (Symbols)} & separator, modifier, relation,  operator, metarelation, binder \\[1mm]
+\textbf{Role (Objects)} & factor, term, statement, variable, constant, modified \\[1mm]
+\textbf{Role (Structure)} & tuple, sequence, expression, shorthand, template, language \\[1mm]
+\textbf{Composition} & invisible, atom, complex, chained\\[1mm]
+\textbf{Shallow Semantics} & type, function, constructor, other \\[1mm]
+\textbf{Linguistic} & ellipsis, metonymy, ambiguity, vagueness, anaphora\\[1mm]
+\textbf{Math Practices} & framing\\[1mm]
+\hline
+\end{tabular}
+\caption{Keyword Vocabulary for Syntactic Properties}
+\end{center}
+\end{table}
+
+\ednote{Additional tokens: super, sub, fenced}

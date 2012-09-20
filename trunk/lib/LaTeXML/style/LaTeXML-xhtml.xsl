@@ -17,10 +17,11 @@
     xmlns:xsl   = "http://www.w3.org/1999/XSL/Transform"
     xmlns:ltx   = "http://dlmf.nist.gov/LaTeXML"
     xmlns       = "http://www.w3.org/1999/xhtml"
+    exclude-result-prefixes = "ltx">
+<!--
     xmlns:m     = "http://www.w3.org/1998/Math/MathML"
     xmlns:svg   = "http://www.w3.org/2000/svg"
-    exclude-result-prefixes = "ltx">
-
+-->
   <xsl:output method="xml"
 		  omit-xml-declaration = "yes"
 	      doctype-public = "-//W3C//DTD XHTML 1.1 plus MathML 2.0//EN"
@@ -28,7 +29,7 @@
 	      media-type     = 'application/xhtml+xml'
 	      encoding       = 'utf-8'
 	      indent         = "yes"/>
-<!--	      doctype-system = "http://www.w3.org/TR/MathML2/dtd/xhtml-math11-f.dtd"  -->
+
   <xsl:template name="metatype">
 <!-- vismor -->
 <!--     <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=UTF-8"/> -->
@@ -63,16 +64,15 @@
     </html>
   </xsl:template>
 
-<xsl:include href="LaTeXML-common.xsl"/>
-<xsl:include href="LaTeXML-inline-xhtml.xsl"/>
-<xsl:include href="LaTeXML-block-xhtml.xsl"/>
-<xsl:include href="LaTeXML-para-xhtml.xsl"/>
-<xsl:include href="LaTeXML-math-mathml.xsl"/>
-<xsl:include href="LaTeXML-tabular-xhtml.xsl"/>
-<xsl:include href="LaTeXML-picture-svg.xsl"/>
-<xsl:include href="LaTeXML-structure-xhtml.xsl"/>
-<xsl:include href="LaTeXML-bib-xhtml.xsl"/>
-
-<xsl:include href="LaTeXML-webpage-xhtml.xsl"/>
+<xsl:include href="urn:x-LaTeXML:stylesheets:LaTeXML-common.xsl"/>
+<xsl:include href="urn:x-LaTeXML:stylesheets:LaTeXML-inline-xhtml.xsl"/>
+<xsl:include href="urn:x-LaTeXML:stylesheets:LaTeXML-block-xhtml.xsl"/>
+<xsl:include href="urn:x-LaTeXML:stylesheets:LaTeXML-para-xhtml.xsl"/>
+<xsl:include href="urn:x-LaTeXML:stylesheets:LaTeXML-math-mathml.xsl"/>
+<xsl:include href="urn:x-LaTeXML:stylesheets:LaTeXML-tabular-xhtml.xsl"/>
+<xsl:include href="urn:x-LaTeXML:stylesheets:LaTeXML-picture-svg.xsl"/>
+<xsl:include href="urn:x-LaTeXML:stylesheets:LaTeXML-structure-xhtml.xsl"/>
+<xsl:include href="urn:x-LaTeXML:stylesheets:LaTeXML-bib-xhtml.xsl"/>
+<xsl:include href="urn:x-LaTeXML:stylesheets:LaTeXML-webpage-xhtml.xsl"/>
 
 </xsl:stylesheet>

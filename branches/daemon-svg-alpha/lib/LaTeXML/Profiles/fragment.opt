@@ -1,0 +1,22 @@
+# Identical to fragment-xhtml
+comments =
+parse =
+post =
+timeout = 600
+format = xhtml
+whatsin = fragment
+whatsout = fragment
+pmml =
+cmml =
+includestyles = 
+local = 
+preload = LaTeX.pool
+preload = amsmath.sty
+preload = amsthm.sty
+preload = amstext.sty
+preload = amssymb.sty
+preload = eucal.sty
+preload = [dvipsnames]color.sty
+preload = url.sty
+preload = hyperref.sty
+preload = tikz.sty

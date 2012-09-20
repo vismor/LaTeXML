@@ -1,0 +1,141 @@
+%Commands specific for file "torus" 
+\newcommand{\CLh}{\hat{\mathcal L}}
+\newcommand{\CLP}{\mathcal{L}_{\mathcal{P}}}
+\newcommand{\CHP}{\mathcal{H}_{\mathcal{P}}}
+\newcommand{\deph}{ {\left| \text{Det} \,{\mathcal P} \right|}^{\frac{1}{2}} }
+\newcommand{\dephs}{ {\left| \text{Det} \,{\mathcal P}^{*} \right|}^{\frac{1}{2}} }
+\newcommand{\lag}{Lag (\mathcal V)}
+\newcommand{\tlag}{\widetilde{Lag}(\mathcal V)}
+\newcommand{\flag}{Lag_4 (\mathcal V)}
+
+%%% MOVE ME:
+\newcommand{\train}[1]{[Train#1]}
+
+\subsection{Differential Geometry}
+Some intro text?\\
+
+\begin{entries}{Differential Geometry Notations, Part 1}{study:diffgeometry1}
+\entry{$(\CV/ \CZ, k \om)$}{symplectic torus}{\MathTree[.Fenced [ [.$,$ [ .$/$ [$\CV$ $\CZ$ ] ] [.$\times$ [$k$ $\om$ ] ] ] ] ] }{\train1}
+\entry{$\CZ$}{self-dual lattice}{atom}{\train1}
+\entry{$(\CV, \om)$}{symplectic vector space}{circumfix constructor}{\train1}
+\entry{$\lag$}{Lagrangian Grassmannian}{circumfix constructor}{\train1}
+\entry{$\flag$}{4-fold covering space}{prefix constructor}{\train1}
+\entry{$\CM_{\Si}$}{moduli space}{subfix constructor}{\train1}
+\entry{$\Si$}{Riemann surface}{atom variable}{\train1}
+\entry{$H^1(\Si;\BR)$}{chomology space}{transfix constructor}{\train1}
+\entry{$H^1(\Si;\BR)/ H^1(\Si;\BZ)$}{torus}{infix operator}{\train1}
+\entry{$(M , \om)$}{symplectic manifold}{circumfix constructor}{\train1}
+\entry{$f \in \CC^{\infty} (M)$}{smooth function}{atom modified}{\train1}
+\entry{$ X_{f} $}{field}{subfix constructor}{\train1}
+\entry{$\contrac$}{interior product}{complex infix operator}{Formed via $\backslash$mathop in {\TeX}, \train1}
+\entry{$[ \om ] \in H^{2}(M; \BR)$}{cohomology class}{complex variable modified}{\train1}
+\entry{$( \cdot , \cdot )$ }{template, hermitian metric}{template tuple}{\train1}
+\end{entries}
+
+\begin{nextentries}{Differential Geometry Notations, Part 2}{study:diffgeometry2}
+\entry{$-2 \pi \ti \, \om$}{complex number}{invisible prefix infix operator expression}{\train1}
+\entry{$(\CL , \na)$}{prequantum line bundle}{circumfix constructor}{\train1}
+\entry{$U \subset M$}{open subset}{modified atom}{\train1}
+\entry{$\CL \bigr|_{U}$}{restricted line bundle}{modified atom}{postfix restriction via ``$\bigr|_{U}$'', \train1}
+\entry{$s \in \Ga(U ;\CL)$}{nonzero section}{modified atom}{\train1}
+\entry{$\na s = - 2 \pi \ti \, \theta \, s$}{equation}{relation}{\train1}
+\entry{$\om \bigr|_{U} = d \theta$}{equation}{relation}{\train1}
+\entry{$T_{x} M$}{bundle}{metonymy infix invisible constructor}{metonymy for tangent bundle, concat is a space-constructor, \train1}
+\entry{$\om \bigr|_{\CP_{x}} \equiv 0$}{equivalence}{relation}{\train1}
+\entry{$\dim \CP_{x} = \frac{1}{2} \, \dim T_{x} M$}{equality}{relation}{$\dim$ has lower precedence than invisible bundle-formation, \train1}
+\entry{$ [X,Y] \in \CX_{\CP}(M)$}{commutator is in set}{relation}{used as verb phrase in sentence, \train1}
+\entry{$\na^{\CP}$}{covariant differentiation}{scripted prefix op}{big op?, \train1}
+\entry{\parbox{3cm}{\scriptsize\begin{alignat*}{3}
+  \na^{\CP} :  \CX_{\CP}(M)  &\times \CX_{\CP}(M) & \lra &  \;   \CX_{\CP}(M) \\
+     ( X  & , Y ) & \longmapsto & \; \na^{\CP}_X \, Y  \, ,\notag
+\end{alignat*}}}{domain specification}{type modifier}{alignment splits type statement, trailing comma \train1}
+\entry{$(\na^{\CP}_X \, Y) \, \contrac \, \om = X \, \contrac \, d \, (Y \, \contrac \, \om) \, .$}%
+{definitional assignment}{infix relation}{trailing dot, \train1}
+\entry{$\Pi_{\CP} : M \ra M/ \CP$}{canonical projection map}{type modifier}{\train1}
+\end{nextentries}
+
+% % Extension template
+\begin{nextentries}{Differential Geometry Notations, Part 3}{study:diffgeometry3}
+\entry{$T^g$}{$g$-dimensional torus}{complex object}{script means dimensionality\train1}
+\entry{ $q_1, \dots ,q_g$}{coordinate functions}{enumerative sequence}{\train1}
+\entry{ $X_{q_1}, \dots ,X_{q_g}$}{Hamiltonian vector fields}{enumerative sequence}{\train1}
+\entry{$q_1 \circ \Pi_{\CP}, \dots, q_g \circ \Pi_{\CP}$}{functions}{enumerative sequence}{sequence elements are applicative objects, \train1}
+\entry{$\ga_1(\La) , \dots , \ga_g(\La)$}{basis for a homology group}{enumerative sequence}{\train1}
+\entry{$j_{i}(y) = \int\limits_{\ga_{i}(\La)} \theta, \text{ where } y = \Pi_{\CP}(\La) \, ,$}%
+{definitional assignment}{infix relation}{integral has no binder, nat. lang. modifier, punctuation, \train1}
+\entry{ $\text{Det} \, \BV = \overset{n}{\wedge} \BV$}{definitional assignment}{infix relation}{$n$-ary wedge?, hidden binder on $\BV$, \train1}
+\entry{$\ka \, (X_{j_{1}} \bigr|_{\La} , \dots , X_{j_{g}} \bigr|_{\La}) = 1 \, .$}{canonically defined density}{infix relation}{bars as postfix, within a sequence \train1}
+\entry{\footnotesize$(\na^{\CP}_W \, \nu) (X_1^* , \dots , X_g^*)  \, = \, W( \, \nu(X_1^* , \dots , X_g^*) \, )  \, ,$}%
+{definitional assignment\footnote{covariant derivative}}{infix relation}{applied function is fenced, \train1}
+\entry{\tiny $0 \lra  \Om^0_{\CP}(\CLP) \overset{\na^{\CP}}{\lra}  \Om^1_{\CP}(\CLP) \overset{\na^{\CP}}{\lra} \cdots \overset{\na^{\CP}}{\lra} \Om^g_{\CP}(\CLP) \lra 0$}{complex}{type?}{arrows as transitions, ellipsis, \train1}
+\entry{$\overset{k}{\wedge} \CP^* \otimes \CLP$}{line bundle}{applicative constructor?}{which operator binds first?,\train1}
+\entry{$c_{\La} = \int_{\La} f_{\La} \hat{\ka}$}{definitional assignment}{infix relation}{bound variable in integral subscript\train1}
+\entry{\footnotesize $ H^g (M;\CP,\CLP)\, \cong \, \underset{\La \subset
+\mathcal{BS}_{\CP}}{\oplus} \, S_{\La}$}{natural isomorphism}{infix relation}{$n$-ary $\oplus$, congruence, \train1}
+\entry{$(s, s')$}{function on $\La$}{circumfix constructor}{shorthand constructor for a function, \train1}
+\entry{$\int\limits_{\La} (s , s') \, \mu \ast \mu'$}{integral application}{prefix application}{binder in subscript, infix operator ``$\ast$'' binds stronger than invisible apply \train1}
+\end{nextentries}
+
+\begin{nextentries}{Differential Geometry Notations, Part 4}{study:diffgeometry4}
+\entry{$\langle \langle \cdot , \cdot \rangle \rangle : \CH_{\CP_2} \times \CH_{\CP_1} \ra \BC $}{sesquilinear pairing pattern}{type modifier}{operator pattern, along with operator type \train1}
+\entry{ $\om \, = \, \sum_{i = 1}^{g} d p^{i} \wedge d q^{i}$}{symplectic form}{infix relation}{sum over wedge applications, \train1}
+\entry{$p^{i} =$ constant}{}{}{bad text/math modality, RHS outside of math\train1}
+\entry{\footnotesize $W \cdot (X, \la) \, = \, (X+W, \ep(W) \: \te^{\pi i  k \om(W,X)}  \, \la ) , $}{$\CZ$-action definition}{infix relation}{defines operator $\cdot$, arguments quantified via NL following the math expression,\train1}
+\entry{$l \, (l \leq g)$}{dimension}{modified object}{invisible modifier, using fenced relation,\train1}
+\entry{$( W_{1} , \dots , W_{g} ; W_{1}^{\perp} , \dots , W_{g}^{\perp} )$}{symplectic basis}{circumfix constructor}{distinction between commas and semicolon, \train1}
+\entry{$i=1, \dots , g$}{definitional range}{infix relation}{defined to be a sequence? or modifying restriction over a range?, \train1}
+\entry{$X \in \CV, \,W \in \CP$}{conjunction of statements}{sequence of relations}{comma denotes NL ``and'' between two relational statements,\train1}
+\entry{$k \, \om(W_{i} , X) \in \BZ , \qquad i = 1, \dots , g \, ,$}{statement}{modified relation}{four scopes of commas, also hinted by spacing, \train1}
+\entry{$q_{i} \pmod{k}$}{modulo}{invisible modifier}{fenced modifier argument, prefix mod?,\train1}
+\entry{\scriptsize $\La_{\bq = (q_{1}, \dots ,q_{g})} : \, k \, \om(W_{i}, X) \, = \, q_{i} \pmod{k} , \, i=1, \dots ,g .$}{orbit description}{infix relation}{complex expression, rich in phenomena,\train1}
+\entry{\scriptsize $\hat{\La}_{\bq , \bl} \, = \, \{ X \in \CV \mid \, k \, \om(W_{i}, X) = q_{i} + k l_{i} , \; i=1, \dots ,g \} .$}{definitional assignment}{infix relation}{modified relation!,\train1}
+\entry{$\{ \si_{\bq} = s_{\bq} \otimes \de_{\bq} \}_{\bq \in  (\BZ/ k \BZ)^g}$}{standard unitary basis if $\CHP$}{set constructor}{relational modifier to set constructor argument, subscripted set range, \train1}
+\entry{$k  \om( W_i, T_j) \, = \, \de_{ij} \qquad i,j=h+1, \dots ,g \notag $}{statement}{infix relation}{spaces determine equality scopes, act as conjunctions; equality on sequence and range\train1}
+\entry{$[\bl ] = [(l_{1}, \dots , l_{g})] \in \BZ^{g} / \om(2,1) \BZ^{g}$}{equivalence class}{doubly modified object}{two relations modify $[\bl]$, chained modifying? or nested modifying?\train1}
+\end{nextentries}
+
+\begin{nextentries}{Differential Geometry Notations, Part 5}{study:diffgeometry5}
+\entry{${ ^t \bq_1}$}{?}{scripted atom}{prescript $t$, but what does it mean?, \train1}
+\entry{\footnotesize$\displaystyle\sum_{ \displaystyle\substack{\bq_2 \\ 0 \leq q_{2i} \leq k \left| \det \om(2,1) \right|-1 }} \:  \sum_{[\bl],[\bl']} \: \ldots $}{nested summation}{prefix operator apply}{stacked subscripts, and subscript sequence\train1}
+\entry{$\oplus_{i=1}^{g} \BZ W_{1i} \oplus \oplus_{i=1}^{g} \BZ W_{1i}^{\perp}$}{?}{infix apply}{mixing prefix $n$-ary $\oplus$ with infix binary $\oplus$.\train1}
+\entry{ $\tau : \lag \times \lag \times \lag \ra \BZ$}{function declaration}{typed modifier}{$\times$ is weaker than invisible application, when in a typing context?, \train1}
+\entry{$L_1, L_2, L_3, L_4 \in \lag$}{set membership}{infix relation}{multirelation? membership holds for each of the sequence entries on LHS, \train1}
+\entry{$r \equiv \pmod{q}$}{equivalence}{infix relation}{second-order relation, $r$ is used as a superscript notation for modulo apply, \train1}
+\entry{$U_{\CP}(b) = F_{\CP, b \CP} \circ b \, : \, \CHP \ra \CHP$}{unitary operator definition}{typed modifier}{modifier for assignment, followed by modifier for type, \train1}
+\entry{ $( W_i' = b W_i \, ; W_i^{'\perp} = b W_i^{\perp} )$ }{symplectic basis}{circumfix constructor}{two modified arguments to the main constructor, \train1}
+\entry{\scriptsize$(x,c) \in \CT \times Sp(2g,\BR) \overset{b}{\lra} (b(x), bc) \in \CT \times Sp(2g,\BR)$}{left action}{arrow transition}{$\times$ is not used in a typing sense, but in a cross-product sense, inducing a different arrow interplay \train1}
+\entry{}{}{}{\train1}
+\entry{}{}{}{\train1}
+\entry{}{}{}{\train1}
+\entry{}{}{}{\train1}
+\entry{}{}{}{\train1}
+\entry{}{}{}{\train1}
+\end{nextentries}
+
+\ednote{more on $\pmod{x}$ notations}
+
+% % Extension template
+% \begin{nextentries}{Differential Geometry Notations, Part 5}{study:diffgeometry5}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \entry{}{}{}{\train1}
+% \end{nextentries}
+
+
+\ednote{Complex named enttity: ``$U(⁢1)$ Chern-Simons gauge theory.''}
+\newpage
+
+\ednote{Scripts give you new names or new objects}
+\ednote{Prime scripts can be used for both naming and operating}

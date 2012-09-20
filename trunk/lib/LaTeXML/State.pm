@@ -101,6 +101,11 @@ sub new {
   $$self{table}{value}{SPECIALS}=[['^','_','@','~','&','$','#','%',"'"]];
   if($options{catcodes} eq 'style'){
     $$self{table}{catcode}{'@'} = [CC_LETTER]; }
+  $$self{table}{mathcode} = {};
+  $$self{table}{sfcode} = {};
+  $$self{table}{lccode} = {};
+  $$self{table}{uccode} = {};
+  $$self{table}{delcode}= {};
   $self; }
 
 sub assign_internal {
@@ -143,7 +148,9 @@ sub getModel   { $_[0]->{model}; }
 #======================================================================
 
 # Lookup & assign a general Value
-sub lookupValue { $_[0]->{table}{value}{$_[1]}[0]; }
+# [Note that the more direct $_[0]->{table}{value}{$_[1]}[0]; works, but creates entries
+# this could concievably cause space issues, but timing doesn't show improvements this way]
+sub lookupValue { my $e=$_[0]->{table}{value}{$_[1]}; $e && $$e[0]; }
 sub assignValue { assign_internal($_[0],'value',$_[1], $_[2],$_[3]); }
 
 sub pushValue {
@@ -183,13 +190,23 @@ sub isValueBound {
 
 #======================================================================
 # Lookup & assign a character's Catcode
-sub lookupCatcode { $_[0]->{table}{catcode}{$_[1]}[0]; }
+sub lookupCatcode { my $e=$_[0]->{table}{catcode}{$_[1]}; $e && $$e[0]; }
 sub assignCatcode { assign_internal($_[0],'catcode',$_[1], $_[2],$_[3]); }
+
+# The following rarely used.
+sub lookupMathcode { my $e=$_[0]->{table}{mathcode}{$_[1]}; $e && $$e[0]; }
+sub assignMathcode { assign_internal($_[0],'mathcode',$_[1], $_[2],$_[3]); }
+sub lookupSFcode   { my $e=$_[0]->{table}{sfcode}{$_[1]}; $e && $$e[0]; }
+sub assignSFcode   { assign_internal($_[0],'sfcode',$_[1], $_[2],$_[3]); }
+sub lookupLCcode   { my $e=$_[0]->{table}{lccode}{$_[1]}; $e && $$e[0]; }
+sub assignLCcode   { assign_internal($_[0],'lccode',$_[1], $_[2],$_[3]); }
+sub lookupUCcode   { my $e=$_[0]->{table}{uccode}{$_[1]}; $e && $$e[0]; }
+sub assignUCcode   { assign_internal($_[0],'uccode',$_[1], $_[2],$_[3]); }
+sub lookupDelcode  { my $e=$_[0]->{table}{delcode}{$_[1]}; $e && $$e[0]; }
+sub assignDelcode  { assign_internal($_[0],'delcode',$_[1], $_[2],$_[3]); }
 
 #======================================================================
 # Specialized versions of lookup & assign for dealing with definitions
-
-our @executable_cc= (0,1,1,1, 1,0,0,1, 1,0,0,0, 0,1,0,0, 1,0);
 
 # Get the `Meaning' of a token.  For a control sequence or otherwise active token,
 # this may give the definition object or a regular token (if it was \let), or undef.
@@ -197,15 +214,14 @@ our @executable_cc= (0,1,1,1, 1,0,0,1, 1,0,0,0, 0,1,0,0, 1,0);
 sub lookupMeaning {
   my($self,$token)=@_;
   # NOTE: Inlined token accessors!!!
-  my $cs = $$token[0];
-  my $cc = $$token[1];
-  my $table = $$self{table};
-  # Should there be a separate subtable for catcode:math ?
-  if($executable_cc[$cc]
-     || ($$table{value}{IN_MATH}[0] && $$table{catcode}{'math:'.$cs}[0])){
-    $$table{meaning}{$token->getCSName}[0]; }
-  else {
-    $token; }}
+  if($token->isExecutable){
+    my $e=$$self{table}{meaning}{$token->getCSName}; $e && $$e[0]; }
+  else { $token; }}
+
+sub lookupMeaning_internal {
+  my($self,$token)=@_;
+  my $e=$$self{table}{meaning}{$token->getCSName};
+  $e && $$e[0]; }
 
 sub assignMeaning {
   my($self,$token,$definition,$scope)=@_;
@@ -225,19 +241,8 @@ sub installDefinition {
   if($self->lookupValue("$cs:locked") && !$LaTeXML::State::UNLOCKED){
     if(my $s = $self->getStomach->getGullet->getSource){
       if(($s eq "Anonymous String") || ($s =~ /\.(tex|bib)$/)){
-	Info(":override:$cs Ignoring redefinition of $cs in $s\n");
+	Info('ignore',$cs,$self->getStomach,"Ignoring redefinition of $cs");
 	return; }}}
-  # Or if we're inhibitting all redefinitons, quietly ignore the redefinition
-###  if($self->lookupValue('INHIBIT_REDEFINITIONS') && $$self{table}{meaning}{$cs}[0]){
-  my $defn;
-  # # NOTE that this really isn't quite the right level of inhibit.
-  # # Some cs are intended to be modified; others are probably permmissible too ....
-  # if($self->lookupValue('INSIDE_STYLE') && ($self->lookupValue('INCLUDE_STYLES') eq 'tentative')
-  #    && ($defn=$self->{table}{meaning}{$cs}[0]) && $defn->isaDefinition){
-  #   if(! $self->lookupValue('INHIBIT_REDEFINITIONS_WARNED')){
-  #     $self->assignValue(INHIBIT_REDEFINITIONS_WARNED=>1,'global');
-  #     Info(":override:all Ignoring redefinitions $cs ..."); }
-  #   return; }
   assign_internal($self,'meaning',$cs => $definition, $scope); }
 
 #======================================================================
@@ -250,7 +255,8 @@ sub popFrame {
   my($self)=@_;
   my $table = $$self{table};
   if($$self{undo}[0]{_FRAME_LOCK_}){
-    Fatal(":unexpected Attempt to pop last locked stack frame"); }
+    Fatal('unexpected','<endgroup>',$self->getStomach,
+	  "Attempt to pop last locked stack frame"); }
   else {
     my $undo = shift(@{$$self{undo}});
     foreach my $subtable (keys %$undo){
@@ -281,7 +287,6 @@ sub pushDaemonFrame {
 sub daemon_copy {
   my($ob)=@_;
   if(ref $ob eq 'HASH'){
-###    { map( ($_ => daemon_copy($$ob{$_})), keys %$ob) }; }
     my %hash = map( ($_ => daemon_copy($$ob{$_})), keys %$ob);
     \%hash; }
   elsif(ref $ob eq 'ARRAY'){
@@ -297,7 +302,8 @@ sub popDaemonFrame {
     delete $$self{undo}[0]{_FRAME_LOCK_};
     $self->popFrame; }
   else {
-    Fatal(":unexpected Daemon Attempt to pop last stack frame"); }}
+    Fatal('unexpected','<endgroup>',$self->getStomach,
+	  "Daemon Attempt to pop last stack frame"); }}
 
 #======================================================================
 # Set one of the definition prefixes global, etc (only global matters!)
@@ -336,8 +342,9 @@ sub deactivateScope {
 	  shift(@{$$table{$subtable}{$key}});
 	  $$frame{$subtable}{$key}--; }
 	else {
-	  Warn(":internal Unassigning $subtable:$key from $value, but stack is "
-	       .join(', ',@{$$table{$subtable}{$key}})); }}}}}
+	  Warn('internal',$key,$self->getStomach,
+	       "Unassigning wrong value for $key from subtable $subtable in deactivateScope",
+	       "value is $value but stack is ".join(', ',@{$$table{$subtable}{$key}})); }}}}}
 
 sub getActiveScopes {
   my($self)=@_;
@@ -365,7 +372,7 @@ sub convertUnit {
   else{
     my $sp = $UNITS{$unit}; 
     if(!$sp){
-      Warn(":expected:<unit> Unknown unit \"$unit\"; assuming pt.");
+      Warn('expected','<unit>',undef,"Illegal unit of measure '$unit', assuming pt.");
       $sp = $UNITS{'pt'}; }
     $sp; }}
 

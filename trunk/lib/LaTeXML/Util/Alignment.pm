@@ -107,7 +107,7 @@ sub nextColumn {
   my($self)=@_;
   my $colspec = $$self{current_row}->column( ++$$self{current_column} );
   if(!$colspec){
-    Error(":unexpected:& Extra alignment tab");
+    Error('unexpected','&',$STATE->getStomach->getGullet,"Extra alignment tab '&'");
     $$self{current_row}->addColumn(align=>'center');
     $colspec = $$self{current_row}->column( $$self{current_column} ); }
   $colspec; }
@@ -279,7 +279,7 @@ sub ReadAlignmentTemplate {
     elsif($op->equals(T_BEGIN)){ # Wrong, but a safety valve
       $gullet->unread($gullet->readBalanced->unlist); }
     else {
-      Warn(":unexpected:".Stringify($op)." Unrecognized tabular template \"".Stringify($op)."\""); }
+      Warn('unexpected',$op,$gullet,"Unrecognized tabular template '".Stringify($op)."'"); }
     last unless $nopens; }
   push(@tokens,T_END);
   $LaTeXML::BUILD_TEMPLATE->setReversion(@tokens);
@@ -287,11 +287,8 @@ sub ReadAlignmentTemplate {
 
 sub parseAlignmentTemplate {
   my($spec)=@_;
-  my $gullet = $STATE->getStomach->getGullet;
-  $gullet->openMouth(LaTeXML::Mouth->new("{".$spec."}"),1);
-  my $template = ReadAlignmentTemplate($gullet);
-  $gullet->closeMouth(1);
-  $template; }
+  $STATE->getStomach->getGullet->readingFromMouth(LaTeXML::Mouth->new("{".$spec."}"), sub {
+     ReadAlignmentTemplate($_[0]); }); }
 
 sub MatrixTemplate {
   LaTeXML::AlignmentTemplate->new(repeated=>[{before=>Tokens(T_CS('\hfil')),

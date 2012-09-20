@@ -16,13 +16,37 @@
     version     = "1.0"
     xmlns:xsl   = "http://www.w3.org/1999/XSL/Transform"
     xmlns:ltx   = "http://dlmf.nist.gov/LaTeXML"
-    xmlns       = "http://www.w3.org/1999/xhtml"
     xmlns:m     = "http://www.w3.org/1998/Math/MathML"
-    xmlns:xlink = "http://www.w3.org/1999/xlink"
     exclude-result-prefixes = "ltx">
 
   <xsl:template match="ltx:Math">
-    <xsl:apply-templates select="m:math"/>
+    <xsl:choose>
+      <xsl:when test="m:math">
+	<xsl:apply-templates select="m:math"/>
+      </xsl:when>
+      <xsl:when test="@imagesrc">
+	<img src="{@imagesrc}" width="{@imagewidth}" height="{@imageheight}" alt="{@tex}">
+	  <xsl:call-template name="add_id"/>
+	  <xsl:call-template name="add_attributes">
+	    <xsl:with-param name="extra_classes" select="math"/>
+	    <xsl:with-param name="extra_style">
+	      <xsl:if test="@imagedepth">
+		<xsl:value-of select="concat('vertical-align:-',@imagedepth,'px')"/>
+	      </xsl:if>
+	    </xsl:with-param>
+	  </xsl:call-template>
+	</img>
+      </xsl:when>
+      <xsl:otherwise>
+	<span>
+	  <xsl:call-template name="add_id"/>
+	  <xsl:call-template name="add_attributes">
+	    <xsl:with-param name="extra_classes" select="math"/>
+	  </xsl:call-template>	
+	  <xsl:value-of select="@tex"/>
+	</span>
+      </xsl:otherwise>
+    </xsl:choose>
   </xsl:template>
 
     <!-- A note on namespaces: In <xlt:element name="{???}", use
@@ -34,7 +58,14 @@
   <xsl:template match="*[namespace-uri() = 'http://www.w3.org/1998/Math/MathML']">
     <xsl:element name="{local-name()}" namespace='http://www.w3.org/1998/Math/MathML'>
       <xsl:for-each select="@*">
-	<xsl:attribute name="{name()}"><xsl:value-of select="."/></xsl:attribute>
+	<xsl:choose>
+	  <xsl:when test="local-name() = 'id'">
+	    <xsl:attribute name="id"><xsl:value-of select="."/></xsl:attribute>
+	  </xsl:when>
+	  <xsl:otherwise>
+	    <xsl:attribute name="{name()}"><xsl:value-of select="."/></xsl:attribute>
+	  </xsl:otherwise>
+	</xsl:choose>
       </xsl:for-each>
       <xsl:choose>
 	<!-- If annotation-xml in a DIFFERENT namespace, do blind copy

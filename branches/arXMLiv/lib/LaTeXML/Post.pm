@@ -15,13 +15,13 @@ use strict;
 use Time::HiRes;
 use Encode;
 use LaTeXML::Util::Pathname;
+
 sub new {
   my($class,%options)=@_;
   my $self = bless {%options}, $class; 
   $$self{verbosity} = 0 unless defined $$self{verbosity};
   $$self{resourceDirectory} = $options{resourceDirectory};
   $$self{resourcePrefix}    = $options{resourcePrefix};
-  $$self{siteDirectory}     = $options{siteDirectory};
   $self; }
 
 sub getNamespace            { $_[0]->{namespace} || "http://dlmf.nist.gov/LaTeXML"; }
@@ -39,6 +39,7 @@ sub ProcessChain {
   my @docs = ($doc);
   foreach my $processor (@postprocessors){
     local $LaTeXML::Post::PROCESSOR = $processor;
+    $processor->ProgressDetailed($doc,"starting...");
     my $t0 = [Time::HiRes::gettimeofday];
     my @newdocs = ();
     foreach my $doc (@docs){
@@ -49,7 +50,7 @@ sub ProcessChain {
 ## not portable enough...
 ##    my $mem =  `ps -p $$ -o size=`; chomp($mem);
 ##    $processor->Progress($doc,sprintf(" %.2f sec; $mem KB",$elapsed));
-    $processor->Progress($doc,sprintf(" %.2f sec",$elapsed));
+    $processor->Progress($doc,"done ".sprintf(" %.2f sec",$elapsed));
   }
   @docs; }
 
@@ -75,14 +76,6 @@ sub ProgressDetailed {
   print STDERR "".(ref $self).($dest ? "[".$dest."]" : '').": $msg\n" if $$self{verbosity}>1; }
 
 #======================================================================
-# Return a pathname relative to the site base directory
-sub siteRelativePathname {
-  my($self,$pathname)=@_;
-  (defined $pathname ? pathname_relative($pathname, $$self{siteDirectory}) : undef); }
-
-sub getSiteDirectory { $_[0]->{siteDirectory}; }
-
-#======================================================================
 # Some postprocessors will want to create a bunch of "resource"s,
 # such as generated or transformed image files, or other data files.
 # These should return a pathname, relative to the document's destination,
@@ -101,6 +94,17 @@ sub generateResourcePathname {
   my $name = $prefix . ++$n;
   $doc->cacheStore($counter,$n); 
   pathname_make(dir=>$subdir, name=>$name, type=>$type); }
+
+#======================================================================
+# Given a base id, a counter (eg number of duplications of id) and a suffix,
+# create a (hopefully) unique id
+sub uniquifyID {
+  my($baseid,$counter,$suffix)=@_;
+  my $uniq='';
+  while($counter>0){
+    $uniq = chr(ord('a')+ (($counter-1) % 26)).$uniq;
+    $counter = int(($counter-1)/26); }
+  $baseid . $uniq . ($suffix||''); }
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 package LaTeXML::Post::MathProcessor;
@@ -126,20 +130,38 @@ sub process {
   my($self,$doc)=@_;
   if(my @maths = $self->find_math_nodes($doc)){
     $self->Progress($doc,"Converting ".scalar(@maths)." formulae");
-
-###    # Testing: Force IDs on all xmath nodes!
-###    map($self->forceID($doc,$_),@maths);
-
+    local $LaTeXML::Post::MATHPROCESSOR = $self;
     $self->preprocess($doc,@maths);
     if($$self{parallel}){
       foreach my $proc (@{$$self{secondary_processors}}){
+	local $LaTeXML::Post::MATHPROCESSOR = $proc;
 	$proc->preprocess($doc,@maths); }}
-    foreach my $math (@maths){
+    # Re-Fetch the math nodes, in case preprocessing has messed them up.
+    @maths = $self->find_math_nodes($doc);
+
+##    foreach my $math (@maths){
+    ## Do in reverse, since (in LaTeXML) we allow math nested within text within math.
+    ## So, we want to converted any nested expressions first, so they get carried along
+    ## with the outer ones.
+    foreach my $math (reverse(@maths)){
       # If parent is MathBranch, which branch number is it?
       # (note: the MathBranch will be in a ltx:MathFork, with a ltx:Math being 1st child)
       my @preceding = $doc->findnodes("parent::ltx:MathBranch/preceding-sibling::*",$math);
       local $LaTeXML::Post::MathProcessor::FORK = scalar(@preceding);
       $self->processNode($doc,$math); }}
+
+  # Experimentally, cross reference ??? (or clearer name?)
+  if($$self{parallel}){
+    # There could be various strategies when there are more than 2 parallel conversions,
+    # eg a cycle or something....
+    # Here, we simply take the first two processors that know how to addCrossref
+    # and connect their nodes to each other.
+    my ($proc1,$proc2,@ignore)
+      = grep($_->can('addCrossref'),  $self,@{$$self{secondary_processors}});
+    if($proc1 && $proc2){
+      $proc1->addCrossrefs($doc,$proc2);
+      $proc2->addCrossrefs($doc,$proc1); }}
+
   $doc; }
 
 # Make THIS MathProcessor the primary branch (of whatever parallel markup it supports),
@@ -149,30 +171,6 @@ sub setParallel {
   $$self{parallel}=1;
   map($$_{is_secondary}=1, @moreprocessors); # Mark the others as secondary
   $$self{secondary_processors} = [@moreprocessors]; }
-
-# sub forceID {
-#   my($self,$doc,$math)=@_;
-#   # Find the closest parent with an ID
-#   my ($node,$id) = ($math,undef);
-#   while($node && !( $id = $node->getAttribute('xml:id'))){
-#     $node = $node->parentNode; }
-#   # In case we've already been scanned, we should use the fragid as base, rather than id
-#   local $LaTeXML::Post::IDBASE = $id;
-#   local $LaTeXML::Post::FRAGIDBASE=$node->getAttribute('fragid');
-#   local $LaTeXML::Post::IDCTR=0;
-#   # Skip the XMath node!!!
-#   map(forceID_aux($doc,$_), element_nodes($math->firstChild)); }
-
-# sub forceID_aux {
-#   my($doc,$node)=@_;
-#   if(! $node->getAttribute('xml:id')){
-#     my $id;
-#     while($$doc{idcache}{$id = $LaTeXML::Post::IDBASE . '.xm'. (++$LaTeXML::Post::IDCTR)}){}
-#     $node->setAttribute('xml:id'=>$id);
-#     $node->setAttribute('fragid'=>$LaTeXML::Post::FRAGIDBASE . '.xm'.$LaTeXML::Post::IDCTR)
-#       if $LaTeXML::Post::FRAGIDBASE;
-#     $$doc{idcache}{$id}=$node; }
-#   map(forceID_aux($doc,$_), element_nodes($node)); }
 
 sub find_math_nodes {  $_[1]->findnodes('//ltx:Math'); }
 
@@ -188,42 +186,45 @@ sub processNode {
   my($self,$doc,$math)=@_;
   my $mode = $math->getAttribute('mode')||'inline';
   my $xmath = $doc->findnode('ltx:XMath',$math);
+  return unless $xmath;		# Nothing to convert if there's no XMath ... !
   my $style = ($mode eq 'display' ? 'display' : 'text');
   local $LaTeXML::Post::MATHPROCESSOR = $self;
-  my @markup=();
+  my @conversion;
   if($$self{parallel}){
     # THIS should probably should
     # 1. collect the conversions,
     # 2. apply outerWrapper (when namespaces differ from primary)
     # 3. invoke combineParallel
     my $primary = $self->convertNode($doc,$xmath,$style);
-    my $nsprefix = ( (ref $primary eq 'ARRAY') && ($$primary[0]=~/^(\w*):/) && $1) || 'ltx';
+    my $nsprefix = (($doc->getQName($primary) =~ /^(\w*):/) && $1)||'';
     my @secondaries = ();
     foreach my $proc (@{$$self{secondary_processors}}){
       local $LaTeXML::Post::MATHPROCESSOR = $proc;
       my $secondary = $proc->convertNode($doc,$xmath,$style);
-      if(! ( (ref $secondary eq 'ARRAY') && ($$secondary[0]=~/^(\w*):/) && ($1 eq $nsprefix) )){
-	$secondary = $proc->outerWrapper($doc,$math,$secondary); }
+      # Heuristic? If namespace of primary is diff from secondary, assume we need OuterWrapper
+      if( (($doc->getQName($secondary)||'')=~/^(\w*):/) && ($1 ne $nsprefix)){
+	($secondary) = $proc->outerWrapper($doc,$math,$xmath,$secondary); }
       push(@secondaries, [$proc,$secondary]); }
-    @markup = $self->combineParallel($doc,$math, $primary,@secondaries);
-  }
+    @conversion = $self->combineParallel($doc,$math,$xmath, $primary,@secondaries); }
   else {
-    @markup = ($self->convertNode($doc,$xmath,$style)); }
+    @conversion = ($self->convertNode($doc,$xmath,$style)); }
   # we now REMOVE the ltx:XMath from the ltx:Math
   # (if there's an XMath PostProcessing module, it will add it back, with appropriate id's
   $doc->removeNodes($xmath);
-  # Then, we add all the conversion results to ltx:Math
-  $doc->addNodes($math, $self->outerWrapper($doc,$math, @markup)); }
+  # Lastly, we can wrap up the conversion
+  @conversion = $self->outerWrapper($doc,$math,$xmath, @conversion);
+  # Finally, we add the conversion results to ltx:Math
+  $doc->addNodes($math,@conversion); }
 
 # NOTE: Sort out how parallel & outerWrapper should work.
 # It probably ought to be that if the conversion is being embedded in
 # something from another namespace, it needs the wrapper.
 # ie. when mixing parallel markups, NOT just at the top level, although certainly there too.
 #
-# This probably should be doing the m:math or om:OMA wrapper?
+# This should wrap the resulting conversion with m:math or om:OMA or whatever appropriate?
 sub outerWrapper {
-  my($self,$doc,$mathnode,@conversions)=@_;
-  @conversions; }
+  my($self,$doc,$math,$xmath,@conversion)=@_;
+  @conversion; }
 
 # This should proably be from the core of the current ->processNode
 # $style is either display or inline
@@ -234,7 +235,7 @@ sub convertNode {
 # This should be implemented by potential Primaries
 # Maybe the caller of this should check the namespaces, and call wrapper if needed?
 sub combineParallel {
-  my($self,$doc,$mathnode, $primary, @secondaries)=@_;
+  my($self,$doc,$math,$xmath, $primary, @secondaries)=@_;
   $self->Error("Combining Parallel markup has not been defined for this MathProcessor"); }
 
 # When converting an XMath node (with an id) to some other format,
@@ -250,27 +251,51 @@ sub IDSuffix {
   
 sub rawIDSuffix { ''; }
 
-# Something like this needs to be general purpose....
-#
-# Clone a node, BUT if $idmapper is supplied,
-# it is a function($node,$id) to generate an replacement id.
-# Special purpose cloning; to append $suffix to id and fragid
-sub clone_with_suffix {
-  my($self,$node,$idsuffix)=@_;
-  my $copy = $node->cloneNode(1);
-  my $context = XML::LibXML::XPathContext->new();
-  # Find all id's defined in the copy and change the id.
-  my %idmap=();
-  foreach my $n ($context->findnodes('.//*[@xml:id]',$copy)){
-    my $id = $n->getAttribute('xml:id');
-    $n->setAttribute('xml:id'=> ( $idmap{$id}=$id.$idsuffix ));
-    if(my $fragid = $n->getAttribute('fragid')){
-      $n->setAttribute(fragid=>$fragid.$idsuffix); }}
-  # Now, replace all REFERENCES to those modified ids.
-  foreach my $n ($context->findnodes('.//*[@idref]',$copy)){
-    if(my $id = $idmap{$n->getAttribute('idref')}){
-      $n->setAttribute(idref=>$id); }} # use id or fragid?
-  $copy; }
+# Given an array-represented XML $node, add an id attribute to the node
+# and all children w/o id's (stopping when id encountered).
+# The id will be derived from $sourceid using the appropriate IDSuffix,
+# and bumping the id counter to avoid conflicts with any other node derived
+# from that same source id.
+# Moreover, the new ids will be recorded as having been generated from $sourceid,
+# so that cross-referencing in parallel markup can be effected.
+sub associateID {
+  my($self,$node,$sourceid)=@_;
+  return $node unless $sourceid;
+  my $id = $sourceid.$self->IDSuffix;
+  if(my $previous_ids = $$self{convertedIDs}{$sourceid}){
+     $id = LaTeXML::Post::uniquifyID($sourceid,scalar(@$previous_ids),$self->IDSuffix); }
+  push(@{$$self{convertedIDs}{$sourceid}},$id);
+  if(ref $node eq 'ARRAY'){	# Array represented
+    $$node[1]{'xml:id'}=$id;
+    map($self->associateID_aux($_,$sourceid),@$node[2..$#$node]); }
+  else {			# LibXML node
+    $node->setAttribute('xml:id'=>$id);
+    map($self->associateID_aux($_,$sourceid), $node->childNodes); }
+  $node; }
+
+sub associateID_aux {
+  my($self,$node,$sourceid)=@_;
+  if(! ref $node){}
+  elsif(ref $node eq 'ARRAY'){	# Array represented
+    $self->associateID($node,$sourceid) unless $$node[1]{'xml:id'}; }
+  elsif($node->nodeType == XML_ELEMENT_NODE){
+    $self->associateID($node,$sourceid) unless $node->hasAttribute('xml:id'); }}
+
+# Add backref linkages (eg. xref) onto the nodes that $self created (converted from XMath)
+# to reference those that $otherprocessor created.
+# NOTE: Subclass MUST define addCrossref($node,$xref_id) to add the
+# id of the "Other Interesting Node" to the (array represented) xml $node
+# in whatever fashion the markup for that processor uses.
+sub addCrossrefs {
+  my($self,$doc,$otherprocessor)=@_;
+  my $selfs_map = $$self{convertedIDs};
+  my $others_map = $$otherprocessor{convertedIDs};
+  foreach my $xid (keys %$selfs_map){ # For each XMath id that $self converted
+    if(my $other_ids = $$others_map{$xid}){ # Did $other also convert those ids?
+      if(my $xref_id = $other_ids && $$other_ids[0]){ # get (first) id $other created from $xid.
+	foreach my $id (@{$$selfs_map{$xid}}){ # look at each node $self created from $xid
+	  if(my $node=$doc->findNodeByID($id)){ # If we find a node,
+	    $self->addCrossref($node,$xref_id); }}}}}} # add a crossref from it to $others's node
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -287,6 +312,7 @@ our $XPATH = LaTeXML::Common::XML::XPath->new(ltx=>$NSURI);
 # Useful options:
 #   destination = the ultimate destination file for this document to be written.
 #   destinationDirectory = the directory it will be stored in (derived from $destination)
+#   siteDirectory = the root directory of where the entire site will be contained
 #   namespaces = a hash of namespace prefix => namespace uri
 #   namespaceURIs = reverse hash of above.
 #   nocache = a boolean, disables storing of permanent LaTeXML.cache
@@ -302,6 +328,15 @@ sub new {
   if((defined $options{destination}) && (!defined $options{destinationDirectory})){
     my($vol,$dir,$name)=File::Spec->splitpath($data{destination});
     $data{destinationDirectory} = $dir || '.'; }
+  # Check consistency of siteDirectory (providing there's a destinationDirectory)
+  if($data{destinationDirectory}){
+    if($data{siteDirectory}){
+      (bless {},$class)->Error("The destination directory ($data{destinationDirectory})"
+		   ." must be within the siteDirectory ($data{siteDirectory})")
+	unless pathname_is_contained($data{destinationDirectory},$data{siteDirectory}); }
+    else {
+      $data{siteDirectory} = $data{destinationDirectory}; }}
+
   $data{document}=$xmldoc;
   $data{namespaces}={ltx=>$NSURI} unless $data{namespaces};
   $data{namespaceURIs}={$NSURI=>'ltx'} unless $data{namespaceURIs};
@@ -331,6 +366,7 @@ sub new {
   my $self = bless {%data}, $class; 
   $$self{idcache} = {};
   foreach my $node ($self->findnodes("//*[\@xml:id]")){
+###print STDERR "INIT $$self{destination} ID=".$node->getAttribute('xml:id')."\n";
     $$self{idcache}{$node->getAttribute('xml:id')} = $node; }
   # Possibly disable permanent cache?
   $$self{cache} = {} if $data{nocache};
@@ -362,7 +398,7 @@ sub newFromSTDIN {
   my $string;
   { local $/ = undef; $string = <>; }
   $options{sourceDirectory} = '.' unless $options{sourceDirectory};
-  my $doc = $class->new(LaTeXML::Common::XML::Parser()->parseString($string),%options);
+  my $doc = $class->new(LaTeXML::Common::XML::Parser->new()->parseString($string),%options);
   $doc->validate if $$doc{validate};
   $doc; }
 
@@ -373,6 +409,19 @@ sub getSourceDirectory      { $_[0]->{sourceDirectory} || '.'; }
 sub getSearchPaths          { @{$_[0]->{searchpaths}}; }
 sub getDestination          { $_[0]->{destination}; }
 sub getDestinationDirectory { $_[0]->{destinationDirectory}; }
+sub getSiteDirectory        { $_[0]->{siteDirectory}; }
+
+# Given an absolute pathname in the document destination directory,
+# return the corresponding pathname relative to the site directory (they maybe different!).
+sub siteRelativePathname {
+  my($self,$pathname)=@_;
+  (defined $pathname ? pathname_relative($pathname, $$self{siteDirectory}) : undef); }
+
+sub siteRelativeDestination {
+  my($self)=@_;
+  (defined $$self{destination}
+   ? pathname_relative($$self{destination},$$self{siteDirectory})
+   : undef); }
 
 sub getParentDocument { $_[0]->{parentDocument}; }
 sub getAncestorDocument { 
@@ -401,23 +450,13 @@ sub checkDestination {
 #======================================================================
 sub validate {
   my($self)=@_;
-  # First, load the LaTeXML catalog in case it's needed...
-  map(XML::LibXML->load_catalog($_),
-      pathname_findall('catalog',installation_subdir=>'schema'));
   # Check for a RelaxNGSchema PI
   my $schema;
   foreach my $pi (@{$$self{processingInstructions}}){
     if($pi =~ /^\s*RelaxNGSchema\s*=\s*([\"\'])(.*?)\1\s*$/){
       $schema = $2; }}
   if($schema){			# Validate using rng
-    $schema .= ".rng" unless $schema =~ /\.rng$/;
-#    print STDERR "Validating using schema $schema\n";
-    my $rng;
-    eval { $rng = XML::LibXML::RelaxNG->new(location=>$schema); };
-    if($@){			# Failed to load schema from catalog
-      my $schemapath = pathname_find($schema,paths=>[$self->getSearchPaths]);
-      eval { $rng = XML::LibXML::RelaxNG->new(location=>$schemapath); };
-    }
+    my $rng = LaTeXML::Common::XML::RelaxNG->new($schema,searchpaths=>[$self->getSearchPaths]);
     die "Failed to load RelaxNG schema $schema:\n$@" unless $rng;
     eval { $rng->validate($$self{document}); };
     if($@){
@@ -425,7 +464,6 @@ sub validate {
       die "Error during RelaxNG validation  (".$schema."):\n".$@
 	."\nEither fix the source document, or use the --novalidate option\n"; }}
   elsif(my $decldtd = $$self{document}->internalSubset){ # Else look for DTD Declaration
-#    print STDERR "Validating using DTD ".$decldtd->publicId." at ".$decldtd->systemId."\n";
     my $dtd = XML::LibXML::Dtd->new($decldtd->publicId,$decldtd->systemId);
     if(!$dtd){
       die "Failed to load DTD ".$decldtd->publicId." at ".$decldtd->systemId; }
@@ -436,6 +474,24 @@ sub validate {
   else {			# Nothing found to validate with
     warn "No Schema or DTD found for this document";  }
 }
+
+sub idcheck {
+  my($self)=@_;
+  my %idcache = ();
+  my %dups=();
+  my %missing=();
+  foreach my $node ($self->findnodes("//*[\@xml:id]")){
+    my $id = $node->getAttribute('xml:id');
+    $dups{$id}=1 if $idcache{$id};
+    $idcache{$id}=1; }
+  foreach my $id (keys %{$$self{idcache}}){
+    $missing{$id}=1 unless $idcache{$id}; }
+  if((keys %dups)||(keys %missing)){
+    print STDERR "IDCHECK ($$self{destination})"
+      ." duplicated: ".join(',',keys %dups)
+      ." missing: ".join(',',keys %missing)."\n";}
+  else {
+    print STDERR "IDCHECK ($$self{destination}) OK\n"; }}
 
 #======================================================================
 sub findnodes {
@@ -448,6 +504,10 @@ sub findnode {
   my($first)=$XPATH->findnodes($path,$node || $$self{document});
   $first; }
 
+sub findvalue {
+  my($self,$path,$node)=@_;
+  $XPATH->findvalue($path,$node || $$self{document}); }
+
 sub addNamespace{
   my($self,$nsuri,$prefix)=@_;
   if(!$$self{namespaces}{$prefix} || ($$self{namespaces}{$prefix} ne $nsuri)
@@ -459,17 +519,26 @@ sub addNamespace{
 
 sub getQName {
   my($self,$node)=@_;
-  my $nsuri = $node->namespaceURI;
-  if(!$nsuri){			# No namespace at all???
-    if($node->nodeType == XML_ELEMENT_NODE){
-      $node->localname; }
+  if(ref $node eq 'ARRAY'){
+    $$node[0]; }
+  elsif(ref $node){
+    my $nsuri = $node->namespaceURI;
+    if(!$nsuri){			# No namespace at all???
+      if($node->nodeType == XML_ELEMENT_NODE){
+	$node->localname; }
+      else {
+	undef; }}
+    elsif(my $prefix = $$self{namespaceURIs}{$nsuri}){
+      $prefix.":".$node->localname; }
     else {
-      undef; }}
-  elsif(my $prefix = $$self{namespaceURIs}{$nsuri}){
-    $prefix.":".$node->localname; }
-  else {
-    warn "Missing namespace prefix for $nsuri";
-    $node->localname; }}
+      # Hasn't got one; we'll create a prefix for internal use.
+      my $prefix = "_ns".(1+scalar(grep(/^_ns\d+$/,keys %{$$self{namespaces}})));
+      # Register it, but Don't add it to the document!!! (or xpath, for that matter)
+      $$self{namespaces}{$prefix}=$nsuri;
+      $$self{namespaceURIs}{$nsuri}=$prefix;
+      warn "Missing namespace prefix for $nsuri; using $prefix internally";
+      $prefix.":".$node->localname; }}}
+
 #======================================================================
 # ADD nodes to $node in the document $self.
 # This takes a convenient recursive reprsentation for xml:
@@ -500,16 +569,18 @@ sub addNodes {
 	  next unless defined $$attributes{$key};
 	  my($attrprefix,$attrname)= $key =~ /^(.*):(.*)$/;
 	  my $value = $$attributes{$key};
-	  if($key eq 'xml:id'){	# Ignore duplicated IDs!!!
-	    if(!defined $$self{idcache}{$value}){
-	      $$self{idcache}{$value} = $new;
-	      $new->setAttribute($key, $value); }}
+	  if($key eq 'xml:id'){
+	    if(defined $$self{idcache}{$value}){	# Duplicated ID ?!?!
+	      my $newid = LaTeXML::Post::uniquifyID($value,++$$self{idcache_clashes}{$value});
+	      print STDERR "Duplicated id=$value using $newid ".($$self{destination}||'')."\n";
+	      $value = $newid; }
+	    $$self{idcache}{$value} = $new;
+	    $new->setAttribute($key, $value); }
 	  elsif($attrprefix && ($attrprefix ne 'xml')){
 	    my $attrnsuri = $attrprefix && $$self{namespaces}{$attrprefix};
-	    $new->setAttributeNS($attrnsuri,$attrname, $$attributes{$key}); }
+	    $new->setAttributeNS($attrnsuri,$key, $$attributes{$key}); }
 	  else {
-	    $new->setAttribute($key, $$attributes{$key}); }
-	}}
+	    $new->setAttribute($key, $$attributes{$key}); }}}
       $self->addNodes($new,@children); }
     elsif((ref $child) =~ /^XML::LibXML::/){
       my $type = $child->nodeType;
@@ -521,11 +592,16 @@ sub addNodes {
 	    my $key = $attr->nodeName;
 	    if($key eq 'xml:id'){
 	      my $value = $attr->getValue;
-	      if(!defined $$self{idcache}{$value}){
-		$$self{idcache}{$value} = $new;
-		$new->setAttribute($key, $value); }}
+	      my $old;
+	      if((defined ($old=$$self{idcache}{$value})) # if xml:id was already used
+		 && !$old->isSameNode($child)){	# and the node was a different one
+		my $newid = LaTeXML::Post::uniquifyID($value,++$$self{idcache_clashes}{$value});
+		print STDERR "Duplicated id=$value using $newid ".($$self{destination}||'')."\n";
+		$value = $newid; }
+	      $$self{idcache}{$value} = $new;
+	      $new->setAttribute($key, $value); }
 	    elsif(my $ns = $attr->namespaceURI){
-	      $new->setAttributeNS($ns,$attr->localname,$attr->getValue); }
+	      $new->setAttributeNS($ns,$attr->name,$attr->getValue); }
 	    else {
 	      $new->setAttribute( $attr->localname,$attr->getValue); }}
 	}
@@ -544,9 +620,9 @@ sub addNodes {
 sub removeNodes {
   my($self,@nodes)=@_;
   foreach my $node (@nodes){
-    foreach my $idd ($self->findnodes("//*[\@xml:id]",$node)){
+    foreach my $idd ($self->findnodes("descendant-or-self::*[\@xml:id]",$node)){
       my $id = $idd->getAttribute('xml:id');
-      if(($$self{idcache}{$id}||'') eq $idd){
+      if($$self{idcache}{$id}){
 	delete $$self{idcache}{$id}; }}
     $node->unlinkNode; }}
 
@@ -572,9 +648,44 @@ sub prependNodes {
   $self->addNodes($node,@nodes);	 # Now, add the new nodes.
   map($node->appendChild($_),@save); } # Put these back.
 
-our @MonthNames=(qw( January February March April May June
-		     July August September October November December));
-sub newDocument {
+# Clone a node, but adjusting it so that it has unique id's.
+# $document->cloneNode($node) or ->cloneNode($node,$idsuffix)
+# This clones the node and adjusts any xml:id's within it to be unique.
+# Any idref's to those ids will be changed to the new id values.
+# If $idsuffix is supplied, the ids will have that suffix appended to the ids.
+# Then each $id is checked to see whether it is unique; If needed,
+# one or more letters are appended, until a new id is found.
+sub cloneNode {
+  my($self,$node,$idsuffix)=@_;
+  return $node unless ref $node;
+  my $copy = $node->cloneNode(1);
+  $idsuffix = '' unless defined $idsuffix;
+  # Find all id's defined in the copy and change the id.
+  my %idmap=();
+  foreach my $n ($self->findnodes('descendant-or-self::*[@xml:id]',$copy)){
+    my $id = $n->getAttribute('xml:id');
+    my $newid = $id.$idsuffix;
+    if(defined $$self{idcache}{$newid}){	# Duplicated ID ?!?!
+      $newid = LaTeXML::Post::uniquifyID($id,++$$self{idcache_clashes}{$id},$idsuffix); }
+    $idmap{$id}=$newid;
+    $$self{idcache}{$newid}=$n;
+    $n->setAttribute('xml:id'=>$newid);
+    if(my $fragid = $n->getAttribute('fragid')){ # GACK!!
+      $n->setAttribute(fragid=>substr($newid,length($id)-length($fragid))); }}
+
+  # Now, replace all REFERENCES to those modified ids.
+  foreach my $n ($self->findnodes('descendant-or-self::*[@idref]',$copy)){
+    if(my $id = $idmap{$n->getAttribute('idref')}){
+      $n->setAttribute(idref=>$id); }} # use id or fragid?
+  $copy; }
+
+sub cloneNodes {
+  my($self,@nodes)=@_;
+  map($self->cloneNode($_),@nodes); }
+
+#======================================================================
+
+sub XXXXnewDocument {
   my($self,$root,%options)=@_;
   my $xmldoc = XML::LibXML::Document->new("1.0","UTF-8");
   my($public_id,$system_id);
@@ -621,6 +732,64 @@ sub newDocument {
   # Finally, return the new document.
   $doc; }
 
+
+sub newDocument {
+  my($self,$root,%options)=@_;
+  my $xmldoc = XML::LibXML::Document->new("1.0","UTF-8");
+  my($public_id,$system_id);
+  if(my $dtd = $$self{document}->internalSubset){
+    if($dtd->toString
+       =~ /^<!DOCTYPE\s+(\w+)\s+PUBLIC\s+(\"|\')([^\2]*)\2\s+(\"|\')([^\4]*)\4>$/){
+      ($public_id,$system_id)=($3,$5); }}
+  my $parent_id;
+  # Build the document's XML
+  # BUT note that $self is the "parent" document, not the document that we're about to make!
+###  my $savecache = $$self{idcache};
+###  $$self{idcache}={};
+  if(ref $root eq 'ARRAY'){
+    my($tag,$attributes,@children)=@$root;
+    my($prefix,$localname)= $tag =~ /^(.*):(.*)$/;
+    $xmldoc->createInternalSubset($localname,$public_id,$system_id) if $public_id;
+
+    my $nsuri = $$self{namespaces}{$prefix};
+    my $node = $xmldoc->createElementNS($nsuri,$localname);
+    $xmldoc->setDocumentElement($node);
+    map( $node->setAttribute($_=>$$attributes{$_}),keys %$attributes) if $attributes;
+    $self->addNodes($node,@children); }
+  elsif(ref $root eq 'XML::LibXML::Element'){
+    $parent_id = $self->findnode('ancestor::*[@id]',$root);
+    $parent_id = $parent_id->getAttribute('id') if $parent_id;
+    my $localname = $root->localname;
+    $xmldoc->createInternalSubset($localname,$public_id,$system_id) if $public_id;
+    # Make a copy of $root be the new element node, carefully w.r.t. namespaces.
+    # Seems that only importNode (not adopt) works correctly,
+    # PROVIDED we also set the namespace.
+    my $node = $xmldoc->importNode($root);
+    $xmldoc->setDocumentElement($node); 
+    $xmldoc->documentElement->setNamespace($root->namespaceURI,$root->prefix,1); }
+  else {
+    die "Dont know how to use $root as document element"; }
+  # Restore the cache; $self->new will initialize cache for new document
+###  $$self{idcache} = $savecache;
+
+  my $root_id = $self->getDocumentElement->getAttribute('xml:id');
+  my $doc = $self->new($xmldoc,
+		       ($parent_id ? (parent_id=>$parent_id) : ()),
+		       ($root_id   ? (split_from_id=>$root_id) : ()),
+		       %options); 
+
+  # Copy any processing instructions.
+  foreach my $pi ($self->findnodes(".//processing-instruction('latexml')")){
+    $doc->getDocument->appendChild($pi->cloneNode); }
+
+  # If new document has no date, try to add one
+  $doc->addDate($self);
+
+  # Finally, return the new document.
+  $doc; }
+
+our @MonthNames=(qw( January February March April May June
+		     July August September October November December));
 sub addDate {
   my($self,$fromdoc)=@_;
   if(!$self->findnodes('ltx:date',$self->getDocumentElement)){
@@ -692,6 +861,7 @@ sub addNavigation {
 sub recordID {
   my($self,$id,$node)=@_;
   # make an issue if already there?
+###print STDERR "REGISTER $$self{destination} ID=".$id."\n";
   $$self{idcache}{$id}=$node; }
 
 sub findNodeByID {
@@ -701,10 +871,10 @@ sub findNodeByID {
 sub realizeXMNode {
   my($self,$node)=@_;
   if($self->getQName($node) eq 'ltx:XMRef'){
-    my $realnode = $self->findNodeByID($node->getAttribute('idref'));
-    return $self->Error("Cannot find a node with xml:id=".$node->getAttribute('idref'))
-      unless $realnode;
-    $realnode; }
+    if(my $realnode = $self->findNodeByID($node->getAttribute('idref'))){
+      $realnode; }
+    else {
+      $self->Error("Cannot find a node with xml:id=".$node->getAttribute('idref')); }}
   else {
     $node; }}
 

@@ -38,6 +38,12 @@ use base qw(LaTeXML::Post);
 #                         This is useful for getting the best antialiasing for postscript, eg.
 #          unit= (pixel|point) :  What unit the image size is given in.
 #          autocrop     : if the image should be cropped (trimmed) when loaded.
+#          desirability : a number indicating how good of a mapping this entry is.
+#                         This helps choose between two sources that can map to the
+#                         same destination type.
+#                         An entry whose source & destination types are the same
+#                         has desirability=10.
+
 sub new {
   my($class,%options)=@_;
   my $self = $class->SUPER::new(%options);
@@ -57,7 +63,7 @@ sub new {
 	       prescale=>1, ncolors=>'400%', quality=>90, unit=>'point'},
 	ps  =>{destination_type=>'png', transparent=>1, 
 	       prescale=>1, ncolors=>'400%', quality=>90,  unit=>'point'},
-	eps =>{destination_type=>'png', transparent=>1, 
+	eps =>{destination_type=>'png', transparent=>1,
 	       prescale=>1, ncolors=>'400%', quality=>90,  unit=>'point'},
 	jpg =>{destination_type=>'jpg',
 	       ncolors=>'400%', unit=>'pixel'},
@@ -96,9 +102,7 @@ sub findGraphicsPaths {
   my @paths = ();
   foreach my $pi ($doc->findnodes('.//processing-instruction("latexml")')){
     if($pi->textContent =~ /^\s*graphicspath\s*=\s*([\"\'])(.*?)\1\s*$/){
-      my $value=$2;
-      while($value=~ s/^\s*\{(.*?)\}//){
-	push(@paths,$1); }}}
+      push(@paths,$2); }}
   @paths; }
 
 # Return a list of ZML nodes which have graphics that need processing.
@@ -113,16 +117,22 @@ sub getGraphicsSourceTypes {
 # Return the pathname to an appropriate image.
 sub findGraphicFile {
   my($self,$doc,$node)=@_;
-  #DG: Support for candidates lookup (png, jpg, gif are ok)
-  my @candidates = split(/,/,($node->getAttribute('candidates')||()));
-  foreach (@candidates) {
-    return $_ if ($_ =~ /\.(png|jpg|gif)$/);
-  }
-  #DG: End for @candidates support
   if(my $name = $node->getAttribute('graphic')){
-    pathname_find($name,paths=>$LaTeXML::Post::Graphics::SEARCHPATHS,
-		  # accept empty type, incase bad type name, but actual file's content is known type.
-		  types=>['',$self->getGraphicsSourceTypes]); }
+    # Find all acceptable image files, in order of search paths
+    my @paths = pathname_findall($name,paths=>$LaTeXML::Post::Graphics::SEARCHPATHS,
+				 # accept empty type, incase bad type name, but actual file's content is known type.
+				 types=>['',$self->getGraphicsSourceTypes]);
+    my($best,$bestpath)=(-1,undef);
+    # Now, find the first image that is either the correct type,
+    # or has the most desirable type mapping
+    foreach my $path (@paths){
+      my $type = pathname_type($path);
+      my $props = $$self{typeProperties}{$type};
+      my $desirability = $$props{desirability} || ($type eq $$props{destination_type} ? 10 : 0);
+      if($desirability > $best){
+	$best = $desirability;
+	$bestpath = $path; }}
+    $bestpath; }
   else {
     undef; }}
 
@@ -160,16 +170,7 @@ sub processGraphic {
   my($self,$doc,$node)=@_;
   my $source = $self->findGraphicFile($doc,$node);
   if(!$source){
-    $self->Warn($doc,"Missing graphic for ".$node->toString."; skipping");
-    #DG: FIXME Temporary hack to get source attributes for online conversion jobs
-    my $srcattr = $node->getAttribute('graphic');
-    $self->setGraphicSrc($node,$srcattr) if $srcattr;
-    return; }
-  #DG: Don't transform if already web usable format:
-  if ($source =~ /\.(png|jpg|gif)$/) {
-    $self->setGraphicSrc($node,$source);
-    return;
-  }
+    $self->Warn($doc,"Missing graphic for ".$node->toString."; skipping"); return; }
   my $transform = $self->getTransform($node);
   my($image,$width,$height)=$self->transformGraphic($doc,$node,$source,$transform); 
   $self->setGraphicSrc($node,$image,$width,$height) if $image;
@@ -195,21 +196,35 @@ sub transformGraphic {
     my ($cached,$width,$height)=($1,$2,$3);
     if((!defined $reldest) || ($cached eq $reldest)){
       my $dest =  pathname_make(dir=>$doc->getDestinationDirectory,name=>$cached);
-#      if(-f $dest && (-M $source >= -M $dest)){
       if(pathname_timestamp($source) <= pathname_timestamp($dest)){
 	$self->ProgressDetailed($doc,">> Reuse $cached @ $width x $height");
 	return ($cached,$width,$height); }}}
-  $reldest = $self->generateResourcePathname($doc,$node,$source,$type) unless $reldest;
-  my $dest = $doc->checkDestination($reldest);
-  $self->ProgressDetailed($doc,"Destination $dest");
-  # Trivial scaling case: Use original image with different width & height.
+  # Trivial scaling case: Use original image with (at most) different width & height.
   my ($image,$width,$height);
   if($$self{trivial_scaling} && ($type eq $srctype) && !grep(!($_->[0]=~/^scale/),@$transform)){
+    # With a simple scaling transformation we can preserve path & file-names
+    # But only if we can mimic the relative path in the site directory.
+    # Get image source file relative to the document's source file
+    $reldest = pathname_relative($source, $doc->getSourceDirectory);
+    # and it's (eventual) absolute path in the destination directory
+    # assuming it had the same relative path from the destination file.
+    my $dest = pathname_absolute($reldest,$doc->getDestinationDirectory);
+    # Now IFF that is a valid relative path WITHIN the site directory, we'll use it.
+    # Otherwise, we'd better fall back to a generated name.
+    if(! pathname_is_contained($dest,$doc->getSiteDirectory)){
+      $reldest = $self->generateResourcePathname($doc,$node,$source,$type);
+      $dest = $doc->checkDestination($reldest); }
+
+    $self->ProgressDetailed($doc,"Destination $dest");
     ($width,$height)=$self->trivial_scaling($doc,$source,$transform);
     return unless $width && $height;
     pathname_copy($source, $dest) or warn("Couldn't copy $source to $dest: $!");
     $self->ProgressDetailed($doc,">> Copied to $reldest for $width x $height"); }
   else {
+    # With a complex transformation, we really needs a new name (well, don't we?)
+    $reldest = $self->generateResourcePathname($doc,$node,$source,$type) unless $reldest;
+    my $dest = $doc->checkDestination($reldest);
+    $self->ProgressDetailed($doc,"Destination $dest");
     ($image,$width,$height) =$self->complex_transform($doc,$source,$transform, %properties);
     return unless $image && $width && $height;
     $self->ProgressDetailed($doc,">> Writing to $dest ");

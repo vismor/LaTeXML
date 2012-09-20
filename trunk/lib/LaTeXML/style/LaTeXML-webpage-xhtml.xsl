@@ -22,8 +22,10 @@
     exclude-result-prefixes = "ltx f"
     extension-element-prefixes="string f">
 
-<xsl:param name="CSS"></xsl:param>
-<xsl:param name="ICON"></xsl:param>
+  <xsl:param name="CSS"></xsl:param>
+  <xsl:param name="JAVASCRIPT"></xsl:param>
+  <xsl:param name="ICON"></xsl:param>
+  <xsl:param name="TIMESTAMP"></xsl:param>
 
 <!--  ======================================================================
       The Page
@@ -36,19 +38,24 @@
   </xsl:text>
   <head><xsl:text>
     </xsl:text>
-    <xsl:if test="*/ltx:title">
-      <title>
-	<xsl:apply-templates select="*/ltx:title" mode="visible-text"/>
-	<xsl:for-each select="//ltx:navigation/ltx:ref[@class='up']"
-		      > &#x2023; <xsl:value-of select="@title"/></xsl:for-each>
-      </title>
-    </xsl:if>
-<!-- vismor -->
-<!--     <xsl:text> -->
-<!--     </xsl:text> -->
-<!-- <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/> -->
+    <xsl:choose>
+      <xsl:when test="*/ltx:title">
+	<title>
+	  <xsl:apply-templates select="*/ltx:title" mode="visible-text"/>
+	  <xsl:for-each select="//ltx:navigation/ltx:ref[@class='up']"
+			> &#x2023; <xsl:value-of select="@title"/></xsl:for-each>
+	</title>
+      </xsl:when>
+      <!-- must have a title for validity! -->
+      <xsl:otherwise>
+	<title></title>
+      </xsl:otherwise>
+    </xsl:choose>
+    <xsl:text>
+    </xsl:text>
+    <xsl:call-template name="LaTeXML_identifier"/>
     <xsl:call-template name="metatype"/>
-   <xsl:if test="/*/ltx:navigation/ltx:ref[@class='start']"><xsl:text>
+    <xsl:if test="/*/ltx:navigation/ltx:ref[@class='start']"><xsl:text>
     </xsl:text>
       <link rel="start" href="{/*/ltx:navigation/ltx:ref[@class='start']/@href}"
 	    title="{normalize-space(.//ltx:navigation/ltx:ref[@class='start']/@title)}"/>
@@ -70,6 +77,12 @@
       <xsl:for-each select="string:split($CSS,'|')"><xsl:text>
     </xsl:text>
 	<link rel='stylesheet' type="text/css" href="{text()}"/>
+      </xsl:for-each>
+    </xsl:if>
+    <xsl:if test='$JAVASCRIPT'>
+      <xsl:for-each select="string:split($JAVASCRIPT,'|')"><xsl:text>
+    </xsl:text>
+	<script src="{text()}" type="text/javascript"/>
       </xsl:for-each>
     </xsl:if>
     <xsl:if test="//ltx:indexphrase"><xsl:text>
@@ -109,16 +122,7 @@
   <xsl:text>
   </xsl:text>
   <body>
-  <!-- vismor -->
-  <xsl:text>
-    </xsl:text>
-    <xsl:processing-instruction name="php">
-        $menu = "documents";
-	    require_once( "doc_prefix.php" );
-    </xsl:processing-instruction>
-  <!-- vismor -->
-  
-<xsl:call-template name="navbar"/>
+    <xsl:call-template name="navbar"/>
     <xsl:text>
     </xsl:text>
     <div class='main'>
@@ -219,6 +223,11 @@
 
 <xsl:template match="ltx:navigation"/>
 
+  <xsl:template name="LaTeXML-logo">
+    <div class='LaTeXML-logo'>Generated
+    <xsl:if test="$TIMESTAMP"> on <xsl:value-of select="$TIMESTAMP"/></xsl:if>
+    by <a href="http://dlmf.nist.gov/LaTeXML/">LaTeXML <img src="{f:LaTeXML-icon()}" alt="[LOGO]"/></a></div>
+  </xsl:template>
 <!--  ======================================================================
       Tables of Contents.
       ====================================================================== -->
@@ -277,7 +286,11 @@
 <xsl:template match="ltx:tocentry">
   <xsl:text>
   </xsl:text>
-  <li class="{f:classes(.)}"><xsl:call-template name='add_id'/><xsl:apply-templates/></li>
+  <li>
+    <xsl:call-template name='add_id'/>
+    <xsl:call-template name='add_attributes'/>
+    <xsl:apply-templates/>
+  </li>
 </xsl:template>
 
 <xsl:template match="ltx:tocentry" mode="short">

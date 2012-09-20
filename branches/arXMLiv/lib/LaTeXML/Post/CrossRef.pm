@@ -46,10 +46,15 @@ sub process {
   $self->fill_in_refs($doc);
   $self->fill_in_bibrefs($doc);
   if(($$self{verbosity} >= 0) && (keys %LaTeXML::Post::CrossRef::MISSING)){
+    my $mentioned_tempid = 0;
     my @msgs=();
     foreach my $type (sort keys %LaTeXML::Post::CrossRef::MISSING){
-      push(@msgs,$type.": ".join(', ',sort keys %{$LaTeXML::Post::CrossRef::MISSING{$type}}));}
-    $self->Warn($doc,"Missing keys:\n  ".join(";\n  ",@msgs)); }
+      my @items = keys %{$LaTeXML::Post::CrossRef::MISSING{$type}};
+      $mentioned_tempid ||= grep($_ eq 'TEMPORARY_DOCUMENT_ID',@items);
+      push(@msgs,$type.": ".join(', ',@items));}
+    $self->Warn($doc,"Missing items:\n  ".join(";\n  ",@msgs)
+		.($mentioned_tempid ? "\n [Note TEMPORARY_DOCUMENT_ID is a stand-in ID for the main document.]":"")
+	       ); }
   $self->ProgressDetailed($doc,"done cross-references");
   $doc; }
 
@@ -95,7 +100,8 @@ sub gentoc {
   if(my $entry = $$self{db}->lookup("ID:$id")){
     my @kids = ();
     if((!defined $localto) || ( ($entry->getValue('location')||'') eq $localto) ){
-      @kids = map($self->gentoc($_,$types,$localto,$selfid), @{ $entry->getValue('children')||[]}); }
+      @kids = map($self->gentoc($_,$types,$localto,$selfid),
+		  @{ $entry->getValue('children')||[]}); }
     my $type = $entry->getValue('type');
     if($$types{$type}){
       (['ltx:tocentry',(defined $selfid && ($selfid eq $id) ? {class=>'self'} : {}),
@@ -166,7 +172,7 @@ sub fill_in_refs {
 	  $show =~ s/^type//; 	# Since author may have put explicit \S\ref... in! 
 	}
 	else {
-	  $self->note_missing('Label',$label);
+	  $self->note_missing('Target for Label',$label);
 	  if(!$ref->textContent){
 	    $doc->addNodes($ref,$label);  # Just to reassure (?) readers.
 	    $ref->setAttribute(broken=>1); }
@@ -210,7 +216,7 @@ sub make_bibcite {
   if($show && ($show eq 'none') && !@preformatted){
     $show = 'refnum'; }
   if(!$show){
-    $self->Warn($doc,"No show in bibref ".join(', ',@keys)); 
+    map($self->note_missing("bibref 'show' parameter",$_),@keys);
     $show = 'refnum'; }
 
   my $sep  = $bibref->getAttribute('separator') || ',';
@@ -248,7 +254,7 @@ sub make_bibcite {
 			     href=>$self->generateURL($doc,$id),
 			     ($title ? (title=>$title->textContent):())}}); }}}
     else {
-      $self->note_missing('Citation',$key); }}
+      $self->note_missing('Entry for citation',$key); }}
   my $checkdups = ($show =~ /author/i) && ($show =~ /(year|number)/i);
   my @refs=();
   my $saveshow = $show;
@@ -261,13 +267,13 @@ sub make_bibcite {
       @stuff = @preformatted; $show=''; }
     while($show){
       if($show =~ s/^authors?//i){
-	push(@stuff,@{$$datum{authors}}); }
+	push(@stuff,$doc->cloneNodes(@{$$datum{authors}})); }
       elsif($show =~ s/^fullauthors?//i){
-	push(@stuff,@{$$datum{fullauthors}}); }
+	push(@stuff,$doc->cloneNodes(@{$$datum{fullauthors}})); }
       elsif($show =~ s/^title//i){
-	push(@stuff,@{$$datum{title}}); }
+	push(@stuff,$doc->cloneNodes(@{$$datum{title}})); }
       elsif($show =~ s/^refnum//i){
-	push(@stuff,@{$$datum{refnum}}); }
+	push(@stuff,$doc->cloneNodes(@{$$datum{refnum}})); }
       elsif($show =~ s/^phrase(\d)//i){
 	push(@stuff,$phrases[$1-1]->childNodes) if $phrases[$1-1]; }
       elsif($show =~ s/^year//i){
@@ -299,7 +305,7 @@ sub generateURL {
   my($object,$location);
   if($object = $$self{db}->lookup("ID:".$id)){
     if($location = $object->getValue('location')){
-      my $doclocation = $self->siteRelativePathname($doc->getDestination);
+      my $doclocation = $doc->siteRelativeDestination;
       my $pathdir = pathname_directory($doclocation);
       my $url = pathname_relative(($location =~ m|^/| ? $location : '/'.$location),
 				  ($pathdir  =~ m|^/| ? $pathdir  : '/'.$pathdir));
@@ -319,9 +325,9 @@ sub generateURL {
 	$url = ''; }
       $url; }
     else {
-      $self->note_missing('Location for ID',$id); }}
+      $self->note_missing('File location for ID',$id); }}
   else {
-    $self->note_missing('ID',$id); }}
+    $self->note_missing('DB Entry for ID',$id); }}
 
 our $NBSP = pack('U',0xA0);
 # Generate the contents of a <ltx:ref> of the given id.
@@ -346,7 +352,7 @@ sub generateRef {
   if(@stuff){
     @stuff; }
   else {
-    $self->Warn($doc,"failed to generate good ref text for $reqid");
+    $self->note_missing('Usable title for ID',$reqid);
     ("?"); }}
 
 # Check if the proposed content of a <ltx:ref> is "Good Enough"
@@ -388,23 +394,25 @@ sub generateRef_aux {
       my @frefnum  = $doc->trimChildNodes($entry->getValue('frefnum') || $entry->getValue('refnum'));
       if(@frefnum){
 	$OK = 1;
-	push(@stuff, ['ltx:text',{class=>'reftag'},@frefnum]); }}
+	push(@stuff, ['ltx:text',{class=>'reftag'},$doc->cloneNodes(@frefnum)]); }}
     elsif($show =~ s/^refnum(\.?\s*)//){
       if(my @refnum = $doc->trimChildNodes($entry->getValue('refnum'))){
 	$OK = 1;
-	push(@stuff, ['ltx:text',{class=>'reftag'},@refnum]); }}
+	push(@stuff, ['ltx:text',{class=>'reftag'},$doc->cloneNodes(@refnum)]); }}
     elsif($show =~ s/^toctitle//){
       my $title = $self->fillInTitle($doc,$entry->getValue('toctitle')||$entry->getValue('title')
 				     || $entry->getValue('toccaption'));
       if($title){
 	$OK = 1;
-	push(@stuff, ['ltx:text',{class=>'reftitle'},$doc->trimChildNodes($title)]); }}
+	push(@stuff, ['ltx:text',{class=>'reftitle'},
+		      $doc->cloneNodes($doc->trimChildNodes($title))]); }}
 
     elsif($show =~ s/^title//){
       my $title= $self->fillInTitle($doc,$entry->getValue('title') || $entry->getValue('toccaption')); # !!!
       if($title){
 	$OK = 1;
-	push(@stuff, ['ltx:text',{class=>'reftitle'},$doc->trimChildNodes($title)]); }}
+	push(@stuff, ['ltx:text',{class=>'reftitle'},
+		      $doc->cloneNodes($doc->trimChildNodes($title))]); }}
     elsif($show =~ s/^(.)//){
       push(@stuff, $1); }}
   ($OK ? @stuff : ()); }
@@ -430,7 +438,6 @@ sub generateTitle {
 sub fillInTitle {
   my($self,$doc,$title)=@_;
   return unless $title;
-  $doc->getDocument->adoptNode($title);
   # Fill in any nested ref's!
   foreach my $ref ($doc->findnodes('descendant::ltx:ref[@idref or @labelref]',$title)){
     next if $ref->textContent;

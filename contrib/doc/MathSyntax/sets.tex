@@ -1,0 +1,45 @@
+\subsection{Set Theoretic Notations}
+\ednote{elementhood, inclusions, set constructors, overloaded arith ops}
+\ednote{also maps : domains -> codomains, xRy notations}
+
+\TreeOp{narycross}{\MathTree [.\isa{complex,prefix,type,operator}{super} \isa{over, variable}{$n$} \isa{superfix,modified,operator}{$\times$} ] }
+\TreeOp{spanbr}{\MathTree [.sub [ $\text{span}$ $\BR$ ] ] }
+\begin{entries}{Set Theory Notations, Part 1}{study:sets1}
+\entry{$ W \in \CP \cap \CZ $}{set membership}%
+{ \MathTree [.\is{infix,relation}{$\in$} W [.$\cap$ $\CP$ $\CZ$ ] ] }%
+{set operators precede set relations, [Train1]}
+
+\entry{$ \; \nu : \overset{n}{\times} \BV \ra \BR$}{a map}%
+{\MathTree [.$:$  $\nu$ [.$\ra$ [.$\narycross$ $\BV$ ] $\BR$ ] ] }%
+{$n$-ary cross-product, [Train1]}
+
+\entry{\footnotesize $\CZ^* = \{ X \in \CV \mid \om(X,W) \in \BZ, \text{ for all }  W \in \CZ \}$}{definition to set}%
+{\MathTree [.\isa{operator,modifier,infix}{$=$} [
+  [.super $\CZ$ \isa{superfix,operator}{$*$} ]
+  [.set [.\isa{infix,modifier}{$\in$} $X$ $\CV$ ] 
+        [.\isa{infix,modifier,separator}{$,$}
+              [.\isa{infix,relation}{$\in$} 
+                [.$\om$ $X$ $W$ ] $\BZ$ 
+              ]
+              [.\isa{prefix,operator,binder,language,other}{\text{for all}}
+                [.\isa{infix,relation}{$\in$} 
+                  $W$ $\CZ$ 
+                ]
+              ]
+        ]
+  ] ] ] }%
+{NL mixins, quantified relation, [Train1]}
+
+ \entry{$\text{span}_{\BR} \{ W_{1} , \dots ,W_{g} \} $}{span of a set}
+{\MathTree [ .{\spanbr} [.fenced [ $\{$ [.$,$ [.sub $W$ $1$ ] $\dots$ [.sub $W$ $g$ ] ] $\}$  ] ] ] }
+%{prefix operator modified}
+{set operators can take fenced yet not simply \textit{grouped} arguments, [Train1]}
+
+% \entry{$\mathcal{BS}_{\CP} = \underset{\bq \in (\BZ/ k \BZ)^g}{\cup} \, \La_{\bq}$}{definitional assignment}{infix relation}{$n$-ary union, ranges over subscript, [Train1]}
+
+% \entry{ $L_{12} = L_{\CP_1} \cap L_{\CP_2} \neq 0$}{non-transversal intersection}{modified chained}{acts as relation, is it modified or chained?, [Train1]}
+
+% \entry{ $\al \in GL(g,\BZ) \subset Sp(2g,\BZ)$}{statement}{infix relation}{membership comes after set inclusion, due to well-typedness!, [Train1]}
+\end{entries}
+
+%\Tree [.\is{infix,relation}{$\in$} [W .$\cap$ [$\CP$ $\CZ$] ] ]

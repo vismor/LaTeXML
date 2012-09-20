@@ -1,0 +1,37 @@
+# -*- CPERL -*-
+# /=======================================================\ #
+# |  pgf - Implementation for LaTeXML                     | #
+# |=======================================================| #
+# | Part of LaTeXML : http://dlmf.nist.gov/LaTeXML/       | #
+# | Copyright (c) 2011 arXMLiv group                      | #
+# | Released under the GNU Public License                 | #
+# |=======================================================| #
+# | Author: Silviu Vlad Oprea                             | #
+# | E-mail: s.oprea@jacobs-university.de                  | #
+# \=======================================================/ #
+
+package LaTeXML::Package::Pool;
+use strict;
+use LaTeXML::Package;
+DefMacro('\pgfsysdriver', 'pgfsys-latexml.def.ltxml');
+
+AssignValue('pgf.sty_loaded'=>undef,'global');
+AssignValue('keyval.sty_loaded'=>undef,'global');
+InputDefinitions('pgf',type=>'sty',noltxml=>1)
+  || Warn(":missing:pgf.sty Couldn't find pgf.sty");
+
+DefConditionalI('\ifpgf@relevantforpicturesize', undef, sub { 1; });
+DefMacroI('\pgf@relevantforpicturesizefalse', undef, '');
+DefMacroI('\pgf@relevantforpicturesizetrue', undef, '');
+
+RawTeX('\expandafter\def\expandafter\pgfpicture\expandafter{\expandafter\svgpicture\pgfpicture}');
+RawTeX('\expandafter\def\expandafter\endpgfpicture\expandafter{\endpgfpicture\endsvgpicture}');
+DefMacro('\pgfpathqmoveto{}{}', '\pgfpathmoveto{\pgfqpoint{#1}{#2}}');
+DefMacro('\pgfpathqlineto{}{}', '\pgfpathlineto{\pgfqpoint{#1}{#2}}');
+DefMacro('\pgfpathqcircle{}', '\pgfpathcircle{\pgfpointorigin}{#1}');
+DefMacro('\pgfpathqcurveto{}{}{}{}{}{}',
+  '\pgfpathcurveto{\pgfqpoint{#1}{#2}}{\pgfqpoint{#3}{#4}}{\pgfqpoint{#5}{#6}}');
+#RawTeX('\expandafter\def\expandafter\tikzpicture\expandafter{\expandafter\svgpicture\tikzpicture}');
+#RawTeX('\expandafter\def\expandafter\endtikzpicture\expandafter{\endtikzpicture\endsvgpicture}');
+
+1;
